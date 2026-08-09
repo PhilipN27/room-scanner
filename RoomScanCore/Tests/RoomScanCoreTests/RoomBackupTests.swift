@@ -91,7 +91,10 @@ final class RoomBackupTests: XCTestCase {
             materialization: materialization,
             archiveURL: workspace.appendingPathComponent("snapshot.zip")
         )
-        XCTAssertTrue(snapshot.manifest.entries.contains { $0.packageRelativePath == relativePhoto.value })
+        XCTAssertTrue(snapshot.manifest.entries.contains {
+            $0.packageRelativePath == mapped.packageRelativePath.value
+                && $0.archivePath == mapped.entryPath.value
+        })
     }
 
     func testBackupRejectsNoncanonicalIndexedArchivePath() async throws {
@@ -664,6 +667,10 @@ final class RoomBackupTests: XCTestCase {
             revisionIDs: []
         )
         let target = LocalRoomProjectStore(rootURL: targetRoot, idGenerator: targetGenerator)
+        try FileManager.default.createDirectory(
+            at: recoveryWorkspace,
+            withIntermediateDirectories: true
+        )
         let stage = recoveryWorkspace.appendingPathComponent("first", isDirectory: true)
         let preparation = try await target.prepareRecovery(
             archiveURL: snapshot.archiveURL,

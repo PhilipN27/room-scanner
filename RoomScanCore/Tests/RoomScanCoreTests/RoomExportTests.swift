@@ -101,6 +101,7 @@ final class RoomExportTests: XCTestCase {
     func testDeterministicZipUsesSortedStoreProfileAndStableBytes() async throws {
         let root = temporaryRoot("RoomDeterministicZIP")
         defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let alpha = root.appendingPathComponent("alpha.bin")
         let beta = root.appendingPathComponent("beta.txt")
         try Data("alpha".utf8).write(to: alpha)
@@ -128,6 +129,7 @@ final class RoomExportTests: XCTestCase {
     func testZipInspectorRejectsCentralDirectoryGap() async throws {
         let root = temporaryRoot("RoomZIPGap")
         defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let source = root.appendingPathComponent("source.txt")
         let archive = root.appendingPathComponent("head-export.zip")
         try Data("gap-control".utf8).write(to: source)
@@ -150,6 +152,7 @@ final class RoomExportTests: XCTestCase {
     func testZipPreflightUsesBoundedChunksAndRejectsSimulatedLimits() async throws {
         let root = temporaryRoot("RoomZIPLimits")
         defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let source = root.appendingPathComponent("source.bin")
         let archive = root.appendingPathComponent("head-export.zip")
         try Data(repeating: 0x61, count: 257).write(to: source)
@@ -186,6 +189,7 @@ final class RoomExportTests: XCTestCase {
     func testZipRejectsSimulatedArchiveOffsetLimitBeforeWriting() async throws {
         let root = temporaryRoot("RoomZIPArchiveLimit")
         defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let source = root.appendingPathComponent("source.bin")
         try Data(repeating: 0x62, count: 20).write(to: source)
         do {
@@ -207,6 +211,7 @@ final class RoomExportTests: XCTestCase {
     func testZipDetectsPostPreflightMutationAndCleansOnlyOwnedPartial() async throws {
         let root = temporaryRoot("RoomZIPMutation")
         defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let source = root.appendingPathComponent("source.txt")
         let archive = root.appendingPathComponent("export.zip")
         try Data("before".utf8).write(to: source)

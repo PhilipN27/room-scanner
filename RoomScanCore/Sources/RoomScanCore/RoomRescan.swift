@@ -224,7 +224,10 @@ public enum RoomRescanEngine {
         }
 
         let normalizedMatches = matches.sorted(by: matchOrder)
-        let baseElements = try layeredElements(in: normalizedBaseSnapshot)
+        let baseElements = try layeredElements(
+            in: normalizedBaseSnapshot,
+            isCandidate: false
+        )
         let candidateElements = try layeredElements(in: normalizedCandidateSnapshot)
         try validateExactBijection(
             matches: normalizedMatches,
