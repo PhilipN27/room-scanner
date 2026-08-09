@@ -370,14 +370,15 @@ final class RoomExportTests: XCTestCase {
         try thumbnailBytes.write(to: thumbnailSource)
         try photoBytes.write(to: photoSource)
 
-        let sharedReference = try RoomRelativePath("assets/shared.png")
+        let thumbnailReference = try RoomRelativePath("thumbnails/shared.png")
+        let photoReference = try RoomRelativePath("photos/shared.png")
         var draft = makeDraft()
-        draft.metadata.thumbnailRelativePath = sharedReference
+        draft.metadata.thumbnailRelativePath = thumbnailReference
         draft.revision.photos = [
             RoomPhoto(
                 id: "photo-shared-001",
                 createdAt: date,
-                assetRelativePath: sharedReference,
+                assetRelativePath: photoReference,
                 caption: "Revision-scoped photo"
             )
         ]
@@ -386,8 +387,8 @@ final class RoomExportTests: XCTestCase {
             draft,
             decision: .save,
             assets: [
-                RoomAssetInput(sourceURL: thumbnailSource, destination: sharedReference, scope: .project),
-                RoomAssetInput(sourceURL: photoSource, destination: sharedReference, scope: .revision),
+                RoomAssetInput(sourceURL: thumbnailSource, destination: thumbnailReference, scope: .project),
+                RoomAssetInput(sourceURL: photoSource, destination: photoReference, scope: .revision),
             ]
         )
         let saved = try XCTUnwrap(savedResult)
@@ -416,13 +417,13 @@ final class RoomExportTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: workspace.appendingPathComponent(exportedPhoto)), photoBytes)
         XCTAssertEqual(
             sourceMap.mappings.first {
-                $0.scope == .project && $0.sourceReference == sharedReference.value
+                $0.scope == .project && $0.sourceReference == thumbnailReference.value
             }?.archivePath,
             exportedThumbnail
         )
         XCTAssertEqual(
             sourceMap.mappings.first {
-                $0.scope == .revision && $0.sourceReference == sharedReference.value
+                $0.scope == .revision && $0.sourceReference == photoReference.value
             }?.archivePath,
             exportedPhoto
         )
