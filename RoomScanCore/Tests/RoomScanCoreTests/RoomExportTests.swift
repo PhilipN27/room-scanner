@@ -22,10 +22,10 @@ final class RoomExportTests: XCTestCase {
 
     func testExportEntryPathRejectsUnsafeAndCollidingNames() throws {
         XCTAssertNoThrow(try RoomExportEntryPath("revision/semantic-model.json"))
-        for unsafe in (
+        for unsafe in [
             "../escape.json", "/absolute.json", "back\\slash.json", "./dot.json",
             "folder/../escape.json", "contains space.json", "control\n.json", "caf\u{00e9}.json"
-        ) {
+        ] {
             XCTAssertThrowsError(try RoomExportEntryPath(unsafe), "Expected \(unsafe) to be rejected.")
         }
         XCTAssertThrowsError(
@@ -114,9 +114,10 @@ final class RoomExportTests: XCTestCase {
         ]
 
         let one = try await RoomDeterministicZIP.write(inputs: inputs, to: archiveOne)
-        let two = try await RoomDeterministicZIP.write(inputs: inputs.reversed(), to: archiveTwo)
+        let two = try await RoomDeterministicZIP.write(inputs: Array(inputs.reversed()), to: archiveTwo)
 
         XCTAssertEqual(one.profileVersion, RoomDeterministicZIP.profileVersion)
+        XCTAssertEqual(two.profileVersion, RoomDeterministicZIP.profileVersion)
         XCTAssertEqual(try Data(contentsOf: archiveOne), try Data(contentsOf: archiveTwo))
         let bytes = try Data(contentsOf: archiveOne)
         XCTAssertEqual(Array(bytes.prefix(4)), [0x50, 0x4b, 0x03, 0x04])
@@ -799,9 +800,17 @@ final class RoomExportTests: XCTestCase {
     }
 
     private func isHardLinked(source: URL, copy: URL) throws -> Bool {
-        let sourceIdentifier = try source.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-        let copyIdentifier = try copy.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
-        return sourceIdentifier != nil && sourceIdentifier == copyIdentifier
+        let sourceAttributes = try FileManager.default.attributesOfItem(atPath: source.path)
+        let copyAttributes = try FileManager.default.attributesOfItem(atPath: copy.path)
+        guard
+            let sourceFileNumber = sourceAttributes[.systemFileNumber] as? NSNumber,
+            let copyFileNumber = copyAttributes[.systemFileNumber] as? NSNumber,
+            let sourceSystemNumber = sourceAttributes[.systemNumber] as? NSNumber,
+            let copySystemNumber = copyAttributes[.systemNumber] as? NSNumber
+        else {
+            return false
+        }
+        return sourceFileNumber == copyFileNumber && sourceSystemNumber == copySystemNumber
     }
 }
 

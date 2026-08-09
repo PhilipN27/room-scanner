@@ -78,10 +78,11 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
         var collisionDraft = prepared.draft
         collisionDraft.revision.semanticSnapshot.movableElements[0].id =
             collisionDraft.revision.semanticSnapshot.structuralElements[0].id
+        let invalidCollisionDraft = collisionDraft
         let collisionStore = makeStore(root: root)
         await assertStoreError(.duplicateSemanticElementID("structure-floor-001")) {
             _ = try await collisionStore.saveDraft(
-                collisionDraft,
+                invalidCollisionDraft,
                 disposition: .save,
                 assets: prepared.assets
             )

@@ -256,8 +256,10 @@ final class RoomRescanTests: XCTestCase {
         }
 
         var duplicateSource = validCandidate
-        duplicateSource.structuralElements[1].provenance?.sourceIdentifier =
+        let duplicateSourceIdentifier =
             duplicateSource.structuralElements[0].provenance?.sourceIdentifier ?? "duplicate"
+        duplicateSource.structuralElements[1].provenance?.sourceIdentifier =
+            duplicateSourceIdentifier
         assertRescanError(.invalidCandidateGeometry) {
             _ = try RoomRescanEngine.makeFixtureProposal(
                 basePayload: base,
@@ -401,11 +403,12 @@ final class RoomRescanTests: XCTestCase {
 
         var tampered = proposal
         tampered.digest = "0" + proposal.digest.dropFirst()
+        let tamperedProposal = tampered
         await assertStoreError(.invalidRescanProposal("The rescan proposal digest does not match its deterministic inputs.")) {
             _ = try await store.acceptFixtureRescan(
                 projectID: summary.projectID,
                 expectedHeadRevisionID: "revision-001",
-                proposal: tampered,
+                proposal: tamperedProposal,
                 newRevisionID: "revision-002"
             )
         }
