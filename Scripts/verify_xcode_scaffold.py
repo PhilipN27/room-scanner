@@ -95,6 +95,7 @@ def verify_required_files(errors: list[str]) -> None:
         SIMULATOR_SELECTOR,
         APP_THEME,
         ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomScanCore.swift",
+        ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAtomicFileWriter.swift",
         ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomModels.swift",
         ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomProjectStore.swift",
         ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomCaptureReducer.swift",
@@ -780,6 +781,22 @@ def verify_package(errors: list[str]) -> None:
     for test_path in test_files:
         imports = re.findall(r"(?m)^\s*(?:@testable\s+)?import\s+([A-Za-z0-9_]+)", test_path.read_text(encoding="utf-8"))
         expect(set(imports).issubset({"Foundation", "XCTest", "RoomScanCore"}), f"non-portable core test imports in {test_path.relative_to(ROOT)}: {imports}", errors)
+    forbidden_write_options = re.compile(
+        r"\[\s*\.atomic\s*,\s*\.withoutOverwriting\s*\]"
+        r"|\[\s*\.withoutOverwriting\s*,\s*\.atomic\s*\]"
+    )
+    for swift_path in ROOT.rglob("*.swift"):
+        source = swift_path.read_text(encoding="utf-8")
+        expect(
+            forbidden_write_options.search(source) is None,
+            f"Foundation traps when atomic and withoutOverwriting are combined: {swift_path.relative_to(ROOT)}",
+            errors,
+        )
+    expect(
+        forbidden_write_options.search("try data.write(to: url, options: [.atomic, .withoutOverwriting])") is not None,
+        "verifier self-test did not detect the forbidden Foundation write-option pair",
+        errors,
+    )
 
 
 def class_declaration_errors(app_tests: str, ui_tests: str) -> list[str]:

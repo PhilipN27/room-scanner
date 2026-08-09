@@ -58,7 +58,7 @@ public enum RoomProjectBackupArchive {
         let manifestData: Data
         do {
             manifestData = try RoomJSONCoding.makeEncoder().encode(manifest)
-            try manifestData.write(to: manifestURL, options: [.atomic, .withoutOverwriting])
+            try RoomAtomicFileWriter.writeNewFile(manifestData, to: manifestURL)
         } catch {
             throw RoomBackupError.storageFailure("Unable to write backup-manifest.json.")
         }

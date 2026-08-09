@@ -395,6 +395,7 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
 
         let duplicate = try await store.duplicate(projectID: saved.projectID)
         let duplicatePackage = try await store.load(projectID: duplicate.projectID)
+        let duplicateRevisionID = duplicatePackage.manifest.headRevisionID
 
         XCTAssertEqual(
             duplicatePackage.metadata.thumbnailRelativePath,
@@ -409,13 +410,13 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
         )
         XCTAssertEqual(
             try Data(contentsOf: root.appendingPathComponent(
-                "\(duplicate.projectID)/revisions/revision-002/photos/reference-001.jpg"
+                "\(duplicate.projectID)/revisions/\(duplicateRevisionID)/photos/reference-001.jpg"
             )),
             prepared.photoBytes
         )
         XCTAssertEqual(
             try Data(contentsOf: root.appendingPathComponent(
-                "\(duplicate.projectID)/revisions/revision-002/attachments/native-room.usdz"
+                "\(duplicate.projectID)/revisions/\(duplicateRevisionID)/attachments/native-room.usdz"
             )),
             prepared.attachmentBytes
         )

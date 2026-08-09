@@ -109,7 +109,11 @@ final class RoomCloudBackupWorkspaceFactory {
             token: UUID().uuidString.lowercased()
         )
         let data = try RoomJSONCoding.makeEncoder().encode(marker)
-        try data.write(to: markerURL, options: [.atomic, .withoutOverwriting])
+        try RoomAtomicFileWriter.writeNewFile(
+            data,
+            to: markerURL,
+            fileManager: fileManager
+        )
     }
 
     private func validateOwnedLease(_ lease: URL) throws {

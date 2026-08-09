@@ -114,7 +114,11 @@ final class RoomExportWorkspaceFactory: RoomExportWorkspaceCleaning {
         )
         let data = try RoomJSONCoding.makeEncoder().encode(marker)
         do {
-            try data.write(to: markerURL, options: [.atomic, .withoutOverwriting])
+            try RoomAtomicFileWriter.writeNewFile(
+                data,
+                to: markerURL,
+                fileManager: fileManager
+            )
         } catch {
             throw RoomExportError.unsafeDestination(markerURL.path)
         }

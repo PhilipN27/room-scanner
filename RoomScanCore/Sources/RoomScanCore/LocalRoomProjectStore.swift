@@ -1666,7 +1666,11 @@ public actor LocalRoomProjectStore {
         do {
             let data = try RoomJSONCoding.makeEncoder().encode(value)
             try budget.reserve(UInt64(data.count), entryPath: entryPath)
-            try data.write(to: destinationURL, options: [.atomic, .withoutOverwriting])
+            try RoomAtomicFileWriter.writeNewFile(
+                data,
+                to: destinationURL,
+                fileManager: fileManager
+            )
             budget.commitReservedEntry()
         } catch let error as RoomExportError {
             throw error
@@ -3899,7 +3903,11 @@ public actor LocalRoomProjectStore {
         }
         do {
             let data = try RoomJSONCoding.makeEncoder().encode(marker)
-            try data.write(to: markerURL, options: [.atomic, .withoutOverwriting])
+            try RoomAtomicFileWriter.writeNewFile(
+                data,
+                to: markerURL,
+                fileManager: fileManager
+            )
         } catch {
             throw RoomBackupError.storageFailure("Unable to write backup workspace ownership marker.")
         }

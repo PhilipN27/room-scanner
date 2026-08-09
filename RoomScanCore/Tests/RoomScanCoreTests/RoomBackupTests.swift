@@ -159,7 +159,7 @@ final class RoomBackupTests: XCTestCase {
         )
         let manifestData = try RoomJSONCoding.makeEncoder().encode(manifest)
         let manifestURL = workspace.appendingPathComponent(RoomProjectBackupArchive.manifestEntryPath)
-        try manifestData.write(to: manifestURL, options: [.atomic, .withoutOverwriting])
+        try manifestData.write(to: manifestURL, options: [.withoutOverwriting])
         let manifestInput = RoomZIPInput(
             sourceURL: manifestURL,
             entryPath: try RoomExportEntryPath(RoomProjectBackupArchive.manifestEntryPath),
