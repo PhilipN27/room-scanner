@@ -1,0 +1,13 @@
+{
+  "projectID": "mock-room-v1",
+  "revisionID": "revision-001",
+  "photos": [
+    {
+      "id": "photo-reference-001",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "assetRelativePath": "photos/reference-001.png",
+      "caption": "Deterministic fixture reference marker",
+      "cameraTransform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.1, 1.55, 1.4, 1] }
+    }
+  ]
+}

@@ -1,0 +1,850 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {
+    };
+    objectVersion = 56;
+    objects = {
+
+/* Begin PBXBuildFile section */
+        A40000000000000000000001 /* RoomScanStudioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* RoomScanStudioApp.swift */; };
+        A40000000000000000000002 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppTheme.swift */; };
+        A40000000000000000000003 /* DeviceCapability.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* DeviceCapability.swift */; };
+        A40000000000000000000004 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* HomeView.swift */; };
+        A40000000000000000000005 /* ExistingRoomsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ExistingRoomsView.swift */; };
+        A40000000000000000000006 /* NewRoomScanCapabilityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* NewRoomScanCapabilityView.swift */; };
+        A40000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* Assets.xcassets */; };
+        A40000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* PrivacyInfo.xcprivacy */; };
+        A40000000000000000000009 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* manifest.json */; };
+        A4000000000000000000000A /* metadata.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* metadata.json */; };
+        A4000000000000000000000B /* revision.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* revision.json */; };
+        A4000000000000000000000C /* semantic-model.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* semantic-model.json */; };
+        A4000000000000000000000D /* annotations.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* annotations.json */; };
+        A4000000000000000000000E /* measurements.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* measurements.json */; };
+        A4000000000000000000000F /* RoomScanStudioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* RoomScanStudioTests.swift */; };
+        A40000000000000000000010 /* RoomScanStudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* RoomScanStudioUITests.swift */; };
+        A40000000000000000000011 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* XCTest.framework */; };
+        A40000000000000000000012 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* XCTest.framework */; };
+        A40000000000000000000013 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* manifest.json */; };
+        A40000000000000000000014 /* metadata.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* metadata.json */; };
+        A40000000000000000000015 /* revision.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* revision.json */; };
+        A40000000000000000000016 /* semantic-model.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* semantic-model.json */; };
+        A40000000000000000000017 /* annotations.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* annotations.json */; };
+        A40000000000000000000018 /* measurements.json in Resources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* measurements.json */; };
+        B40000000000000000000001 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* AppEnvironment.swift */; };
+        B40000000000000000000002 /* RoomProjectIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* RoomProjectIndex.swift */; };
+        B40000000000000000000003 /* RoomLibraryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* RoomLibraryController.swift */; };
+        B40000000000000000000004 /* MockRoomFixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* MockRoomFixtureLoader.swift */; };
+        B40000000000000000000005 /* RoomDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* RoomDetailView.swift */; };
+        B40000000000000000000006 /* RoomMetadataEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* RoomMetadataEditorView.swift */; };
+        B40000000000000000000007 /* RevisionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* RevisionHistoryView.swift */; };
+        B40000000000000000000008 /* MockRoomReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000008 /* MockRoomReviewView.swift */; };
+        B40000000000000000000009 /* photos.json in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000009 /* photos.json */; };
+        B4000000000000000000000A /* photos.json in Resources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000009 /* photos.json */; };
+        B4000000000000000000000B /* RoomScanCore in Frameworks */ = {isa = PBXBuildFile; productRef = B60000000000000000000001 /* RoomScanCore */; };
+        B4000000000000000000000C /* RoomScanCore in Frameworks */ = {isa = PBXBuildFile; productRef = B60000000000000000000002 /* RoomScanCore */; };
+        C40000000000000000000001 /* thumbnail.png in Resources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* thumbnail.png */; };
+        C40000000000000000000002 /* thumbnail.png in Resources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* thumbnail.png */; };
+        D40000000000000000000001 /* RoomCaptureDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001 /* RoomCaptureDependencies.swift */; };
+        D40000000000000000000002 /* SimulatedRoomCaptureDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000002 /* SimulatedRoomCaptureDriver.swift */; };
+        D40000000000000000000003 /* RoomCaptureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000003 /* RoomCaptureCoordinator.swift */; };
+        D40000000000000000000004 /* RoomCaptureFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000004 /* RoomCaptureFlowView.swift */; };
+        E40000000000000000000001 /* RoomCaptureCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */; };
+        F40000000000000000000001 /* AppleCaptureDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* AppleCaptureDependencies.swift */; };
+        F40000000000000000000002 /* AppleRoomCaptureDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* AppleRoomCaptureDriver.swift */; };
+        F40000000000000000000003 /* AppleCaptureDependencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AppleCaptureDependencyTests.swift */; };
+        B4000000000000000000000D /* RescanFixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000A /* RescanFixtureLoader.swift */; };
+        B4000000000000000000000E /* RoomRescanFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000000000000000000000B /* RoomRescanFlowView.swift */; };
+        C40000000000000000000003 /* rescan-fixture-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* rescan-fixture-v1.json */; };
+        C40000000000000000000004 /* rescan-fixture-v1.json in Resources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* rescan-fixture-v1.json */; };
+        DCBA00000000000000000001 /* RoomViewerRealityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000001 /* RoomViewerRealityView.swift */; };
+        DCBA00000000000000000002 /* RoomViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000002 /* RoomViewerView.swift */; };
+        DCBA00000000000000000003 /* RoomEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000003 /* RoomEditorView.swift */; };
+        DCBA00000000000000000004 /* RoomViewerEditorAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */; };
+        ED5000000000000000000001 /* RoomExportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2000000000000000000001 /* RoomExportCoordinator.swift */; };
+        ED5000000000000000000002 /* RoomExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2000000000000000000002 /* RoomExportService.swift */; };
+        ED5000000000000000000003 /* UIKitRoomExportDerivedProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2000000000000000000003 /* UIKitRoomExportDerivedProvider.swift */; };
+        ED5000000000000000000004 /* RoomExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2000000000000000000004 /* RoomExportView.swift */; };
+        ED5000000000000000000005 /* RoomExportAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2000000000000000000005 /* RoomExportAppTests.swift */; };
+        F60000000000000000000001 /* RoomCloudBackupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000001 /* RoomCloudBackupModels.swift */; };
+        F60000000000000000000002 /* RoomCloudBackupCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000002 /* RoomCloudBackupCoordinator.swift */; };
+        F60000000000000000000003 /* RoomCloudBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000003 /* RoomCloudBackupService.swift */; };
+        F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000004 /* AppleCloudBackupTransport.swift */; };
+        F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000005 /* RoomCloudBackupViews.swift */; };
+        F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000006 /* RoomCloudBackupAppTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+        AA00000000000000000000001 /* PBXContainerItemProxy */ = {
+            isa = PBXContainerItemProxy;
+            containerPortal = A10000000000000000000001 /* Project object */;
+            proxyType = 1;
+            remoteGlobalIDString = A70000000000000000000001;
+            remoteInfo = RoomScanStudio;
+        };
+        AA00000000000000000000002 /* PBXContainerItemProxy */ = {
+            isa = PBXContainerItemProxy;
+            containerPortal = A10000000000000000000001 /* Project object */;
+            proxyType = 1;
+            remoteGlobalIDString = A70000000000000000000001;
+            remoteInfo = RoomScanStudio;
+        };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+        A20000000000000000000001 /* RoomScanStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanStudioApp.swift; sourceTree = "<group>"; };
+        A20000000000000000000002 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+        A20000000000000000000003 /* DeviceCapability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCapability.swift; sourceTree = "<group>"; };
+        A20000000000000000000004 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+        A20000000000000000000005 /* ExistingRoomsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingRoomsView.swift; sourceTree = "<group>"; };
+        A20000000000000000000006 /* NewRoomScanCapabilityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewRoomScanCapabilityView.swift; sourceTree = "<group>"; };
+        A20000000000000000000007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+        A20000000000000000000008 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+        A20000000000000000000009 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+        A2000000000000000000000A /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+        A2000000000000000000000B /* metadata.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = metadata.json; sourceTree = "<group>"; };
+        A2000000000000000000000C /* revision.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = revision.json; sourceTree = "<group>"; };
+        A2000000000000000000000D /* semantic-model.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = semantic-model.json; sourceTree = "<group>"; };
+        A2000000000000000000000E /* annotations.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = annotations.json; sourceTree = "<group>"; };
+        A2000000000000000000000F /* measurements.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = measurements.json; sourceTree = "<group>"; };
+        A20000000000000000000010 /* RoomScanStudioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanStudioTests.swift; sourceTree = "<group>"; };
+        A20000000000000000000011 /* RoomScanStudioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanStudioUITests.swift; sourceTree = "<group>"; };
+        A20000000000000000000012 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
+        A20000000000000000000013 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = SOURCE_ROOT; };
+        A20000000000000000000014 /* RoomScanStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RoomScanStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        A20000000000000000000015 /* RoomScanStudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomScanStudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        A20000000000000000000016 /* RoomScanStudioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomScanStudioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        B20000000000000000000001 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+        B20000000000000000000002 /* RoomProjectIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomProjectIndex.swift; sourceTree = "<group>"; };
+        B20000000000000000000003 /* RoomLibraryController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryController.swift; sourceTree = "<group>"; };
+        B20000000000000000000004 /* MockRoomFixtureLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRoomFixtureLoader.swift; sourceTree = "<group>"; };
+        B20000000000000000000005 /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
+        B20000000000000000000006 /* RoomMetadataEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMetadataEditorView.swift; sourceTree = "<group>"; };
+        B20000000000000000000007 /* RevisionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevisionHistoryView.swift; sourceTree = "<group>"; };
+        B20000000000000000000008 /* MockRoomReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRoomReviewView.swift; sourceTree = "<group>"; };
+        B20000000000000000000009 /* photos.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = photos.json; sourceTree = "<group>"; };
+        C20000000000000000000001 /* thumbnail.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = thumbnail.png; sourceTree = "<group>"; };
+        D20000000000000000000001 /* RoomCaptureDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureDependencies.swift; sourceTree = "<group>"; };
+        D20000000000000000000002 /* SimulatedRoomCaptureDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatedRoomCaptureDriver.swift; sourceTree = "<group>"; };
+        D20000000000000000000003 /* RoomCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureCoordinator.swift; sourceTree = "<group>"; };
+        D20000000000000000000004 /* RoomCaptureFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureFlowView.swift; sourceTree = "<group>"; };
+        E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureCoordinatorTests.swift; sourceTree = "<group>"; };
+        F20000000000000000000001 /* AppleCaptureDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleCaptureDependencies.swift; sourceTree = "<group>"; };
+        F20000000000000000000002 /* AppleRoomCaptureDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleRoomCaptureDriver.swift; sourceTree = "<group>"; };
+        F20000000000000000000003 /* AppleCaptureDependencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleCaptureDependencyTests.swift; sourceTree = "<group>"; };
+        B2000000000000000000000A /* RescanFixtureLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RescanFixtureLoader.swift; sourceTree = "<group>"; };
+        B2000000000000000000000B /* RoomRescanFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomRescanFlowView.swift; sourceTree = "<group>"; };
+        C20000000000000000000002 /* rescan-fixture-v1.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rescan-fixture-v1.json"; sourceTree = "<group>"; };
+        ABCD00000000000000000001 /* RoomViewerRealityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomViewerRealityView.swift; sourceTree = "<group>"; };
+        ABCD00000000000000000002 /* RoomViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomViewerView.swift; sourceTree = "<group>"; };
+        ABCD00000000000000000003 /* RoomEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomEditorView.swift; sourceTree = "<group>"; };
+        ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomViewerEditorAppTests.swift; sourceTree = "<group>"; };
+        ED2000000000000000000001 /* RoomExportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomExportCoordinator.swift; sourceTree = "<group>"; };
+        ED2000000000000000000002 /* RoomExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomExportService.swift; sourceTree = "<group>"; };
+        ED2000000000000000000003 /* UIKitRoomExportDerivedProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIKitRoomExportDerivedProvider.swift; sourceTree = "<group>"; };
+        ED2000000000000000000004 /* RoomExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomExportView.swift; sourceTree = "<group>"; };
+        ED2000000000000000000005 /* RoomExportAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomExportAppTests.swift; sourceTree = "<group>"; };
+        F61000000000000000000001 /* RoomCloudBackupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupModels.swift; sourceTree = "<group>"; };
+        F61000000000000000000002 /* RoomCloudBackupCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupCoordinator.swift; sourceTree = "<group>"; };
+        F61000000000000000000003 /* RoomCloudBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupService.swift; sourceTree = "<group>"; };
+        F61000000000000000000004 /* AppleCloudBackupTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleCloudBackupTransport.swift; sourceTree = "<group>"; };
+        F61000000000000000000005 /* RoomCloudBackupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupViews.swift; sourceTree = "<group>"; };
+        F61000000000000000000006 /* RoomCloudBackupAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupAppTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+        A80000000000000000000003 /* Frameworks */ = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                B4000000000000000000000B /* RoomScanCore in Frameworks */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A80000000000000000000006 /* Frameworks */ = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000011 /* XCTest.framework in Frameworks */,
+                B4000000000000000000000C /* RoomScanCore in Frameworks */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A80000000000000000000008 /* Frameworks */ = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000012 /* XCTest.framework in Frameworks */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+        A10000000000000000000002 = {
+            isa = PBXGroup;
+            children = (
+                A30000000000000000000003 /* App */,
+                A30000000000000000000004 /* Features */,
+                B30000000000000000000001 /* Infrastructure */,
+                A30000000000000000000007 /* Fixtures */,
+                A30000000000000000000006 /* Resources */,
+                A3000000000000000000000B /* RoomScanStudioTests */,
+                A3000000000000000000000C /* RoomScanStudioUITests */,
+                A20000000000000000000013 /* Package.swift */,
+                A3000000000000000000000D /* Frameworks */,
+                A30000000000000000000002 /* Products */,
+            );
+            sourceTree = "<group>";
+        };
+        A30000000000000000000002 /* Products */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000014 /* RoomScanStudio.app */,
+                A20000000000000000000015 /* RoomScanStudioTests.xctest */,
+                A20000000000000000000016 /* RoomScanStudioUITests.xctest */,
+            );
+            name = Products;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000003 /* App */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000001 /* RoomScanStudioApp.swift */,
+                A20000000000000000000002 /* AppTheme.swift */,
+                B20000000000000000000001 /* AppEnvironment.swift */,
+            );
+            path = RoomScanStudio/App;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000004 /* Features */ = {
+            isa = PBXGroup;
+            children = (
+                A30000000000000000000005 /* Home */,
+                B30000000000000000000004 /* RoomLibrary */,
+                B30000000000000000000005 /* RoomCapture */,
+                ABCE00000000000000000001 /* RoomViewer */,
+                ABCE00000000000000000002 /* RoomEditor */,
+            );
+            path = RoomScanStudio/Features;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000005 /* Home */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000003 /* DeviceCapability.swift */,
+                A20000000000000000000004 /* HomeView.swift */,
+                A20000000000000000000005 /* ExistingRoomsView.swift */,
+                A20000000000000000000006 /* NewRoomScanCapabilityView.swift */,
+            );
+            path = Home;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000006 /* Resources */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000007 /* Info.plist */,
+                A20000000000000000000008 /* PrivacyInfo.xcprivacy */,
+                A20000000000000000000009 /* Assets.xcassets */,
+            );
+            path = RoomScanStudio/Resources;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000007 /* Fixtures */ = {
+            isa = PBXGroup;
+            children = (
+                A30000000000000000000008 /* MockRoom-v1 */,
+                C30000000000000000000002 /* RescanFixture-v1 */,
+            );
+            path = RoomScanStudio/Fixtures;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000008 /* MockRoom-v1 */ = {
+            isa = PBXGroup;
+            children = (
+                A2000000000000000000000A /* manifest.json */,
+                A2000000000000000000000B /* metadata.json */,
+                A30000000000000000000009 /* revisions */,
+                C30000000000000000000001 /* assets */,
+            );
+            path = MockRoom-v1;
+            sourceTree = "<group>";
+        };
+        A30000000000000000000009 /* revisions */ = {
+            isa = PBXGroup;
+            children = (
+                A3000000000000000000000A /* revision-001 */,
+            );
+            path = revisions;
+            sourceTree = "<group>";
+        };
+        A3000000000000000000000A /* revision-001 */ = {
+            isa = PBXGroup;
+            children = (
+                A2000000000000000000000C /* revision.json */,
+                A2000000000000000000000D /* semantic-model.json */,
+                A2000000000000000000000E /* annotations.json */,
+                A2000000000000000000000F /* measurements.json */,
+                B20000000000000000000009 /* photos.json */,
+            );
+            path = revision-001;
+            sourceTree = "<group>";
+        };
+        C30000000000000000000001 /* assets */ = {
+            isa = PBXGroup;
+            children = (
+                C20000000000000000000001 /* thumbnail.png */,
+            );
+            path = assets;
+            sourceTree = "<group>";
+        };
+        C30000000000000000000002 /* RescanFixture-v1 */ = {
+            isa = PBXGroup;
+            children = (
+                C20000000000000000000002 /* rescan-fixture-v1.json */,
+            );
+            path = "RescanFixture-v1";
+            sourceTree = "<group>";
+        };
+        A3000000000000000000000B /* RoomScanStudioTests */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000010 /* RoomScanStudioTests.swift */,
+                E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */,
+                F20000000000000000000003 /* AppleCaptureDependencyTests.swift */,
+                ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */,
+                ED2000000000000000000005 /* RoomExportAppTests.swift */,
+                F61000000000000000000006 /* RoomCloudBackupAppTests.swift */,
+            );
+            path = RoomScanStudio/RoomScanStudioTests;
+            sourceTree = "<group>";
+        };
+        A3000000000000000000000C /* RoomScanStudioUITests */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000011 /* RoomScanStudioUITests.swift */,
+            );
+            path = RoomScanStudio/RoomScanStudioUITests;
+            sourceTree = "<group>";
+        };
+        A3000000000000000000000D /* Frameworks */ = {
+            isa = PBXGroup;
+            children = (
+                A20000000000000000000012 /* XCTest.framework */,
+            );
+            name = Frameworks;
+            sourceTree = "<group>";
+        };
+        B30000000000000000000001 /* Infrastructure */ = {
+            isa = PBXGroup;
+            children = (
+                B30000000000000000000002 /* Persistence */,
+                B30000000000000000000003 /* FileStorage */,
+                D30000000000000000000001 /* Capture */,
+                ED3000000000000000000001 /* Export */,
+                F62000000000000000000001 /* CloudBackup */,
+            );
+            path = RoomScanStudio/Infrastructure;
+            sourceTree = "<group>";
+        };
+        B30000000000000000000002 /* Persistence */ = {
+            isa = PBXGroup;
+            children = (
+                B20000000000000000000002 /* RoomProjectIndex.swift */,
+                B20000000000000000000003 /* RoomLibraryController.swift */,
+            );
+            path = Persistence;
+            sourceTree = "<group>";
+        };
+        B30000000000000000000003 /* FileStorage */ = {
+            isa = PBXGroup;
+            children = (
+                B20000000000000000000004 /* MockRoomFixtureLoader.swift */,
+                B2000000000000000000000A /* RescanFixtureLoader.swift */,
+            );
+            path = FileStorage;
+            sourceTree = "<group>";
+        };
+        D30000000000000000000001 /* Capture */ = {
+            isa = PBXGroup;
+            children = (
+                D20000000000000000000001 /* RoomCaptureDependencies.swift */,
+                D20000000000000000000002 /* SimulatedRoomCaptureDriver.swift */,
+                F20000000000000000000001 /* AppleCaptureDependencies.swift */,
+                F20000000000000000000002 /* AppleRoomCaptureDriver.swift */,
+            );
+            path = Capture;
+            sourceTree = "<group>";
+        };
+        ED3000000000000000000001 /* Export */ = {
+            isa = PBXGroup;
+            children = (
+                ED2000000000000000000001 /* RoomExportCoordinator.swift */,
+                ED2000000000000000000002 /* RoomExportService.swift */,
+                ED2000000000000000000003 /* UIKitRoomExportDerivedProvider.swift */,
+            );
+            path = Export;
+            sourceTree = "<group>";
+        };
+        F62000000000000000000001 /* CloudBackup */ = {
+            isa = PBXGroup;
+            children = (
+                F61000000000000000000001 /* RoomCloudBackupModels.swift */,
+                F61000000000000000000002 /* RoomCloudBackupCoordinator.swift */,
+                F61000000000000000000003 /* RoomCloudBackupService.swift */,
+                F61000000000000000000004 /* AppleCloudBackupTransport.swift */,
+            );
+            path = CloudBackup;
+            sourceTree = "<group>";
+        };
+        B30000000000000000000004 /* RoomLibrary */ = {
+            isa = PBXGroup;
+            children = (
+                B20000000000000000000005 /* RoomDetailView.swift */,
+                B20000000000000000000006 /* RoomMetadataEditorView.swift */,
+                B20000000000000000000007 /* RevisionHistoryView.swift */,
+                B2000000000000000000000B /* RoomRescanFlowView.swift */,
+                ED2000000000000000000004 /* RoomExportView.swift */,
+                F61000000000000000000005 /* RoomCloudBackupViews.swift */,
+            );
+            path = RoomLibrary;
+            sourceTree = "<group>";
+        };
+        B30000000000000000000005 /* RoomCapture */ = {
+            isa = PBXGroup;
+            children = (
+                B20000000000000000000008 /* MockRoomReviewView.swift */,
+                D20000000000000000000003 /* RoomCaptureCoordinator.swift */,
+                D20000000000000000000004 /* RoomCaptureFlowView.swift */,
+            );
+            path = RoomCapture;
+            sourceTree = "<group>";
+        };
+        ABCE00000000000000000001 /* RoomViewer */ = {
+            isa = PBXGroup;
+            children = (
+                ABCD00000000000000000001 /* RoomViewerRealityView.swift */,
+                ABCD00000000000000000002 /* RoomViewerView.swift */,
+            );
+            path = RoomViewer;
+            sourceTree = "<group>";
+        };
+        ABCE00000000000000000002 /* RoomEditor */ = {
+            isa = PBXGroup;
+            children = (
+                ABCD00000000000000000003 /* RoomEditorView.swift */,
+            );
+            path = RoomEditor;
+            sourceTree = "<group>";
+        };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        A70000000000000000000001 /* RoomScanStudio */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A60000000000000000000002 /* Build configuration list for PBXNativeTarget "RoomScanStudio" */;
+            buildPhases = (
+                A80000000000000000000001 /* Sources */,
+                A80000000000000000000003 /* Frameworks */,
+                A80000000000000000000002 /* Resources */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+            );
+            name = RoomScanStudio;
+            packageProductDependencies = (
+                B60000000000000000000001 /* RoomScanCore */,
+            );
+            productName = RoomScanStudio;
+            productReference = A20000000000000000000014 /* RoomScanStudio.app */;
+            productType = "com.apple.product-type.application";
+        };
+        A70000000000000000000002 /* RoomScanStudioTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A60000000000000000000003 /* Build configuration list for PBXNativeTarget "RoomScanStudioTests" */;
+            buildPhases = (
+                A80000000000000000000004 /* Sources */,
+                A80000000000000000000006 /* Frameworks */,
+                A80000000000000000000005 /* Resources */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+                A90000000000000000000001 /* PBXTargetDependency */,
+            );
+            name = RoomScanStudioTests;
+            packageProductDependencies = (
+                B60000000000000000000002 /* RoomScanCore */,
+            );
+            productName = RoomScanStudioTests;
+            productReference = A20000000000000000000015 /* RoomScanStudioTests.xctest */;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
+        A70000000000000000000003 /* RoomScanStudioUITests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A60000000000000000000004 /* Build configuration list for PBXNativeTarget "RoomScanStudioUITests" */;
+            buildPhases = (
+                A80000000000000000000007 /* Sources */,
+                A80000000000000000000008 /* Frameworks */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+                A90000000000000000000002 /* PBXTargetDependency */,
+            );
+            name = RoomScanStudioUITests;
+            productName = RoomScanStudioUITests;
+            productReference = A20000000000000000000016 /* RoomScanStudioUITests.xctest */;
+            productType = "com.apple.product-type.bundle.ui-testing";
+        };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+        A10000000000000000000001 /* Project object */ = {
+            isa = PBXProject;
+            attributes = {
+                LastSwiftUpdateCheck = 1500;
+                LastUpgradeCheck = 1500;
+                TargetAttributes = {
+                    A70000000000000000000001 = {
+                        CreatedOnToolsVersion = 15.0;
+                    };
+                    A70000000000000000000002 = {
+                        CreatedOnToolsVersion = 15.0;
+                        TestTargetID = A70000000000000000000001;
+                    };
+                    A70000000000000000000003 = {
+                        CreatedOnToolsVersion = 15.0;
+                        TestTargetID = A70000000000000000000001;
+                    };
+                };
+            };
+            buildConfigurationList = A60000000000000000000001 /* Build configuration list for PBXProject "RoomScanStudio" */;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (
+                en,
+                Base,
+            );
+            mainGroup = A10000000000000000000002;
+            packageReferences = (
+                B50000000000000000000001 /* XCLocalSwiftPackageReference "." */,
+            );
+            productRefGroup = A30000000000000000000002 /* Products */;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (
+                A70000000000000000000001 /* RoomScanStudio */,
+                A70000000000000000000002 /* RoomScanStudioTests */,
+                A70000000000000000000003 /* RoomScanStudioUITests */,
+            );
+        };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+        A80000000000000000000002 /* Resources */ = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000007 /* Assets.xcassets in Resources */,
+                A40000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */,
+                A40000000000000000000009 /* manifest.json in Resources */,
+                A4000000000000000000000A /* metadata.json in Resources */,
+                A4000000000000000000000B /* revision.json in Resources */,
+                A4000000000000000000000C /* semantic-model.json in Resources */,
+                A4000000000000000000000D /* annotations.json in Resources */,
+                A4000000000000000000000E /* measurements.json in Resources */,
+                B40000000000000000000009 /* photos.json in Resources */,
+                C40000000000000000000001 /* thumbnail.png in Resources */,
+                C40000000000000000000003 /* rescan-fixture-v1.json in Resources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A80000000000000000000005 /* Resources */ = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000013 /* manifest.json in Resources */,
+                A40000000000000000000014 /* metadata.json in Resources */,
+                A40000000000000000000015 /* revision.json in Resources */,
+                A40000000000000000000016 /* semantic-model.json in Resources */,
+                A40000000000000000000017 /* annotations.json in Resources */,
+                A40000000000000000000018 /* measurements.json in Resources */,
+                B4000000000000000000000A /* photos.json in Resources */,
+                C40000000000000000000002 /* thumbnail.png in Resources */,
+                C40000000000000000000004 /* rescan-fixture-v1.json in Resources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+        A80000000000000000000001 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000001 /* RoomScanStudioApp.swift in Sources */,
+                A40000000000000000000002 /* AppTheme.swift in Sources */,
+                A40000000000000000000003 /* DeviceCapability.swift in Sources */,
+                A40000000000000000000004 /* HomeView.swift in Sources */,
+                A40000000000000000000005 /* ExistingRoomsView.swift in Sources */,
+                A40000000000000000000006 /* NewRoomScanCapabilityView.swift in Sources */,
+                B40000000000000000000001 /* AppEnvironment.swift in Sources */,
+                B40000000000000000000002 /* RoomProjectIndex.swift in Sources */,
+                B40000000000000000000003 /* RoomLibraryController.swift in Sources */,
+                B40000000000000000000004 /* MockRoomFixtureLoader.swift in Sources */,
+                B4000000000000000000000D /* RescanFixtureLoader.swift in Sources */,
+                B40000000000000000000005 /* RoomDetailView.swift in Sources */,
+                B40000000000000000000006 /* RoomMetadataEditorView.swift in Sources */,
+                B40000000000000000000007 /* RevisionHistoryView.swift in Sources */,
+                B4000000000000000000000E /* RoomRescanFlowView.swift in Sources */,
+                B40000000000000000000008 /* MockRoomReviewView.swift in Sources */,
+                D40000000000000000000001 /* RoomCaptureDependencies.swift in Sources */,
+                D40000000000000000000002 /* SimulatedRoomCaptureDriver.swift in Sources */,
+                D40000000000000000000003 /* RoomCaptureCoordinator.swift in Sources */,
+                D40000000000000000000004 /* RoomCaptureFlowView.swift in Sources */,
+                F40000000000000000000001 /* AppleCaptureDependencies.swift in Sources */,
+                F40000000000000000000002 /* AppleRoomCaptureDriver.swift in Sources */,
+                DCBA00000000000000000001 /* RoomViewerRealityView.swift in Sources */,
+                DCBA00000000000000000002 /* RoomViewerView.swift in Sources */,
+                DCBA00000000000000000003 /* RoomEditorView.swift in Sources */,
+                ED5000000000000000000001 /* RoomExportCoordinator.swift in Sources */,
+                ED5000000000000000000002 /* RoomExportService.swift in Sources */,
+                ED5000000000000000000003 /* UIKitRoomExportDerivedProvider.swift in Sources */,
+                ED5000000000000000000004 /* RoomExportView.swift in Sources */,
+                F60000000000000000000001 /* RoomCloudBackupModels.swift in Sources */,
+                F60000000000000000000002 /* RoomCloudBackupCoordinator.swift in Sources */,
+                F60000000000000000000003 /* RoomCloudBackupService.swift in Sources */,
+                F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */,
+                F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A80000000000000000000004 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A4000000000000000000000F /* RoomScanStudioTests.swift in Sources */,
+                E40000000000000000000001 /* RoomCaptureCoordinatorTests.swift in Sources */,
+                F40000000000000000000003 /* AppleCaptureDependencyTests.swift in Sources */,
+                DCBA00000000000000000004 /* RoomViewerEditorAppTests.swift in Sources */,
+                ED5000000000000000000005 /* RoomExportAppTests.swift in Sources */,
+                F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A80000000000000000000007 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                A40000000000000000000010 /* RoomScanStudioUITests.swift in Sources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCLocalSwiftPackageReference section */
+        B50000000000000000000001 /* XCLocalSwiftPackageReference "." */ = {
+            isa = XCLocalSwiftPackageReference;
+            relativePath = .;
+        };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+        B60000000000000000000001 /* RoomScanCore */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = B50000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+            productName = RoomScanCore;
+        };
+        B60000000000000000000002 /* RoomScanCore */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = B50000000000000000000001 /* XCLocalSwiftPackageReference "." */;
+            productName = RoomScanCore;
+        };
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXTargetDependency section */
+        A90000000000000000000001 /* PBXTargetDependency */ = {
+            isa = PBXTargetDependency;
+            target = A70000000000000000000001 /* RoomScanStudio */;
+            targetProxy = AA00000000000000000000001 /* PBXContainerItemProxy */;
+        };
+        A90000000000000000000002 /* PBXTargetDependency */ = {
+            isa = PBXTargetDependency;
+            target = A70000000000000000000001 /* RoomScanStudio */;
+            targetProxy = AA00000000000000000000002 /* PBXContainerItemProxy */;
+        };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+        A61000000000000000000001 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ALWAYS_SEARCH_USER_PATHS = NO;
+                CLANG_ENABLE_MODULES = YES;
+                CLANG_ENABLE_OBJC_ARC = YES;
+                CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+                COPY_PHASE_STRIP = NO;
+                DEBUG_INFORMATION_FORMAT = dwarf;
+                ENABLE_STRICT_OBJC_MSGSEND = YES;
+                ENABLE_TESTABILITY = YES;
+                GCC_C_LANGUAGE_STANDARD = gnu17;
+                GCC_NO_COMMON_BLOCKS = YES;
+                SDKROOT = iphoneos;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+                SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+                SWIFT_VERSION = 5.0;
+            };
+            name = Debug;
+        };
+        A61000000000000000000002 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ALWAYS_SEARCH_USER_PATHS = NO;
+                CLANG_ENABLE_MODULES = YES;
+                CLANG_ENABLE_OBJC_ARC = YES;
+                CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+                COPY_PHASE_STRIP = NO;
+                DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+                ENABLE_NS_ASSERTIONS = NO;
+                GCC_C_LANGUAGE_STANDARD = gnu17;
+                GCC_NO_COMMON_BLOCKS = YES;
+                SDKROOT = iphoneos;
+                SWIFT_COMPILATION_MODE = wholemodule;
+                SWIFT_VERSION = 5.0;
+            };
+            name = Release;
+        };
+        A62000000000000000000001 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = NO;
+                INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                MARKETING_VERSION = 1.0.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                SWIFT_EMIT_LOC_STRINGS = YES;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Debug;
+        };
+        A62000000000000000000002 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = NO;
+                INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                MARKETING_VERSION = 1.0.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+                SWIFT_EMIT_LOC_STRINGS = YES;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Release;
+        };
+        A63000000000000000000001 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RoomScanStudio.app/RoomScanStudio";
+            };
+            name = Debug;
+        };
+        A63000000000000000000002 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RoomScanStudio.app/RoomScanStudio";
+            };
+            name = Release;
+        };
+        A64000000000000000000001 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app.uitests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_TARGET_NAME = RoomScanStudio;
+            };
+            name = Debug;
+        };
+        A64000000000000000000002 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app.uitests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                TARGETED_DEVICE_FAMILY = "1,2";
+                TEST_TARGET_NAME = RoomScanStudio;
+            };
+            name = Release;
+        };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+        A60000000000000000000001 /* Build configuration list for PBXProject "RoomScanStudio" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                A61000000000000000000001 /* Debug */,
+                A61000000000000000000002 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A60000000000000000000002 /* Build configuration list for PBXNativeTarget "RoomScanStudio" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                A62000000000000000000001 /* Debug */,
+                A62000000000000000000002 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A60000000000000000000003 /* Build configuration list for PBXNativeTarget "RoomScanStudioTests" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                A63000000000000000000001 /* Debug */,
+                A63000000000000000000002 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A60000000000000000000004 /* Build configuration list for PBXNativeTarget "RoomScanStudioUITests" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                A64000000000000000000001 /* Debug */,
+                A64000000000000000000002 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+/* End XCConfigurationList section */
+    };
+    rootObject = A10000000000000000000001 /* Project object */;
+}

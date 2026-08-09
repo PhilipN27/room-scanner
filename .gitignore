@@ -1,0 +1,16 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.build/
+.swiftpm/
+Packages/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.xccheckout
+*.xcscmblueprint

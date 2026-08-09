@@ -1,0 +1,78 @@
+{
+  "projectID": "mock-room-v1",
+  "revisionID": "revision-001",
+  "units": "meters",
+  "accuracyDisclaimer": "Dimensions are illustrative estimates in a deterministic fixture and are not survey-grade measurements.",
+  "structuralElements": [
+    {
+      "id": "structure-floor-001",
+      "kind": "floor",
+      "label": "Main floor",
+      "dimensionsMeters": { "width": 5.4, "height": 0.05, "depth": 4.2 },
+      "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+      "polygonCorners": [
+        { "x": -2.7, "y": 0, "z": -2.1 },
+        { "x": 2.7, "y": 0, "z": -2.1 },
+        { "x": 2.7, "y": 0, "z": 2.1 },
+        { "x": -2.7, "y": 0, "z": 2.1 }
+      ],
+      "provenance": { "framework": "deterministic-fixture", "sourceIdentifier": "fixture-floor-001", "classificationConfidence": "unknown", "flattenedAttributeIdentifiers": ["fixture-floor"] },
+      "mobility": "structural",
+      "origin": "deterministicFixture"
+    },
+    {
+      "id": "structure-wall-north-001",
+      "kind": "wall",
+      "label": "North wall",
+      "dimensionsMeters": { "width": 5.4, "height": 2.7, "depth": 0.12 },
+      "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1.35, -2.1, 1] },
+      "polygonCorners": [
+        { "x": -2.7, "y": 0, "z": -2.1 },
+        { "x": 2.7, "y": 0, "z": -2.1 },
+        { "x": 2.7, "y": 2.7, "z": -2.1 },
+        { "x": -2.7, "y": 2.7, "z": -2.1 }
+      ],
+      "provenance": { "framework": "deterministic-fixture", "sourceIdentifier": "fixture-wall-north-001", "classificationConfidence": "unknown", "flattenedAttributeIdentifiers": ["fixture-wall"] },
+      "mobility": "structural",
+      "origin": "deterministicFixture"
+    },
+    {
+      "id": "structure-door-001",
+      "kind": "door",
+      "label": "Entry door",
+      "dimensionsMeters": { "width": 0.9, "height": 2.0, "depth": 0.08 },
+      "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1.4, 1, -2.0, 1] },
+      "polygonCorners": [
+        { "x": -1.85, "y": 0, "z": -2.0 },
+        { "x": -0.95, "y": 0, "z": -2.0 },
+        { "x": -0.95, "y": 2.0, "z": -2.0 },
+        { "x": -1.85, "y": 2.0, "z": -2.0 }
+      ],
+      "provenance": { "framework": "deterministic-fixture", "sourceIdentifier": "fixture-door-001", "classificationConfidence": "unknown", "flattenedAttributeIdentifiers": ["fixture-door"] },
+      "mobility": "fixed",
+      "origin": "deterministicFixture"
+    }
+  ],
+  "movableElements": [
+    {
+      "id": "movable-desk-001",
+      "kind": "desk",
+      "label": "Work desk",
+      "dimensionsMeters": { "width": 1.4, "height": 0.75, "depth": 0.7 },
+      "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.6, 0.375, 0.25, 1] },
+      "provenance": { "framework": "deterministic-fixture", "sourceIdentifier": "fixture-desk-001", "classificationConfidence": "unknown", "flattenedAttributeIdentifiers": ["fixture-desk"] },
+      "mobility": "fixed",
+      "origin": "deterministicFixture"
+    },
+    {
+      "id": "movable-chair-001",
+      "kind": "chair",
+      "label": "Task chair",
+      "dimensionsMeters": { "width": 0.55, "height": 0.9, "depth": 0.55 },
+      "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.8, 0.45, 0.7, 1] },
+      "provenance": { "framework": "deterministic-fixture", "sourceIdentifier": "fixture-chair-001", "classificationConfidence": "unknown", "flattenedAttributeIdentifiers": ["fixture-chair"] },
+      "mobility": "movable",
+      "origin": "deterministicFixture"
+    }
+  ]
+}

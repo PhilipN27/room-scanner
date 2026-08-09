@@ -1,0 +1,12 @@
+{
+  "revisionID": "revision-001",
+  "projectID": "mock-room-v1",
+  "parentRevisionID": null,
+  "createdAt": "2026-01-01T00:00:00Z",
+  "origin": "deterministic-fixture",
+  "immutable": true,
+  "registration": {
+    "kind": "fixture",
+    "eligibleForRescanMerge": false
+  }
+}

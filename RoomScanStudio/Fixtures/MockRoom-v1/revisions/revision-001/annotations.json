@@ -1,0 +1,13 @@
+{
+  "projectID": "mock-room-v1",
+  "revisionID": "revision-001",
+  "annotations": [
+    {
+      "id": "annotation-001",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "text": "Fixture annotation: verify structural and object elements remain separate.",
+      "point": { "x": 0.6, "y": 0.9, "z": 0.25 },
+      "attachedElementID": "movable-desk-001"
+    }
+  ]
+}

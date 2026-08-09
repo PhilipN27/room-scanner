@@ -1,0 +1,84 @@
+name: RoomScanStudio CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: roomscanstudio-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-test:
+    name: Static, package, build, and UI tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Capture Apple build environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcodebuild -showsdks
+          xcrun simctl list runtimes
+
+      - name: Run host structural verifier
+        run: python3 -B Scripts/verify_xcode_scaffold.py
+
+      - name: Exercise pure simulator selector policy
+        run: python3 -B Scripts/select_simulators.py --self-test
+
+      - name: Run portable RoomScanCore tests
+        run: swift test
+
+      - name: Resolve local Swift package dependencies
+        run: xcodebuild -resolvePackageDependencies -project RoomScanStudio.xcodeproj
+
+      - name: Build unsigned generic iOS application
+        run: >-
+          xcodebuild -project RoomScanStudio.xcodeproj
+          -scheme RoomScanStudio
+          -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          build
+
+      - name: Select available iPhone and iPad simulators
+        id: simulators
+        run: python3 -B Scripts/select_simulators.py --github-output "$GITHUB_OUTPUT"
+
+      - name: Run iPhone UI tests
+        run: >-
+          xcodebuild -project RoomScanStudio.xcodeproj
+          -scheme RoomScanStudio
+          -destination '${{ steps.simulators.outputs.iphone_destination }}'
+          -resultBundlePath "$RUNNER_TEMP/RoomScanStudio-iPhone.xcresult"
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          test
+
+      - name: Run iPad UI tests
+        run: >-
+          xcodebuild -project RoomScanStudio.xcodeproj
+          -scheme RoomScanStudio
+          -destination '${{ steps.simulators.outputs.ipad_destination }}'
+          -resultBundlePath "$RUNNER_TEMP/RoomScanStudio-iPad.xcresult"
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          test
+
+      - name: Upload XCTest results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: RoomScanStudio-xcresults
+          path: |
+            ${{ runner.temp }}/RoomScanStudio-iPhone.xcresult
+            ${{ runner.temp }}/RoomScanStudio-iPad.xcresult
+          if-no-files-found: warn
+          retention-days: 7

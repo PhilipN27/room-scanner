@@ -1,0 +1,15 @@
+{
+  "projectID": "mock-room-v1",
+  "roomName": "Mock Studio Room",
+  "captureDate": "2026-01-01T00:00:00Z",
+  "lastRevisedDate": "2026-01-01T00:00:00Z",
+  "manualLocation": "Fixture Lab",
+  "optionalGPS": null,
+  "notes": "Deterministic Phase-0 fixture; no real-world measurement claim.",
+  "tags": [
+    "fixture",
+    "phase-0"
+  ],
+  "thumbnailRelativePath": "thumbnails/thumbnail.png",
+  "archived": false
+}

@@ -1,0 +1,21 @@
+{
+  "projectID": "mock-room-v1",
+  "revisionID": "revision-001",
+  "accuracyDisclaimer": "Measurements are illustrative estimates in a deterministic fixture and are not survey-grade measurements.",
+  "measurements": [
+    {
+      "id": "measurement-room-width-001",
+      "label": "Room width",
+      "valueMeters": 5.4,
+      "startPoint": { "x": -2.7, "y": 0, "z": -2.1 },
+      "endPoint": { "x": 2.7, "y": 0, "z": -2.1 }
+    },
+    {
+      "id": "measurement-room-depth-001",
+      "label": "Room depth",
+      "valueMeters": 4.2,
+      "startPoint": { "x": -2.7, "y": 0, "z": -2.1 },
+      "endPoint": { "x": -2.7, "y": 0, "z": 2.1 }
+    }
+  ]
+}

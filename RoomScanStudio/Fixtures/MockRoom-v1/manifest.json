@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "room-scan-project-v1",
+  "projectID": "mock-room-v1",
+  "headRevisionID": "revision-001",
+  "revisionIDs": [
+    "revision-001"
+  ],
+  "createdAt": "2026-01-01T00:00:00Z"
+}

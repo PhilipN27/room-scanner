@@ -1,0 +1,123 @@
+{
+  "fixtureID": "rescan-fixture-v1",
+  "simulated": true,
+  "sourceFixtureProjectID": "mock-room-v1",
+  "sourceFixtureBaseRevisionID": "revision-001",
+  "registrationProof": {
+    "fixtureID": "rescan-fixture-v1",
+    "projectID": "mock-room-v1",
+    "baseRevisionID": "revision-001",
+    "coordinateFrameID": "mock-room-v1-frame",
+    "proofToken": "deterministic-rescan-registration-v1"
+  },
+  "candidateSnapshot": {
+    "projectID": "mock-room-v1",
+    "revisionID": "candidate-revision-v1",
+    "units": "meters",
+    "accuracyDisclaimer": "This deterministic fixture candidate is illustrative only; dimensions are estimates and are not survey-grade measurements.",
+    "structuralElements": [
+      {
+        "id": "candidate-floor-001",
+        "kind": "floor",
+        "label": "Main floor, recaptured",
+        "dimensionsMeters": { "width": 5.45, "height": 0.05, "depth": 4.2 },
+        "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.02, 0, 0, 1] },
+        "polygonCorners": [
+          { "x": 0, "y": 0, "z": 0 },
+          { "x": 5.45, "y": 0, "z": 0 },
+          { "x": 5.45, "y": 0, "z": 4.2 },
+          { "x": 0, "y": 0, "z": 4.2 }
+        ],
+        "provenance": {
+          "framework": "deterministic-rescan-fixture",
+          "sourceIdentifier": "candidate-surface-floor-001",
+          "classificationConfidence": "medium",
+          "flattenedAttributeIdentifiers": ["fixture-floor"]
+        },
+        "mobility": "structural",
+        "origin": "deterministicFixture"
+      },
+      {
+        "id": "candidate-wall-north-001",
+        "kind": "wall",
+        "label": "North wall, recaptured",
+        "dimensionsMeters": { "width": 5.45, "height": 2.7, "depth": 0.12 },
+        "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0.01, 0, 1] },
+        "polygonCorners": [
+          { "x": 0, "y": 0, "z": 0 },
+          { "x": 5.45, "y": 0, "z": 0 },
+          { "x": 5.45, "y": 2.7, "z": 0 },
+          { "x": 0, "y": 2.7, "z": 0 }
+        ],
+        "provenance": {
+          "framework": "deterministic-rescan-fixture",
+          "sourceIdentifier": "candidate-surface-wall-north-001",
+          "classificationConfidence": "high",
+          "flattenedAttributeIdentifiers": ["fixture-wall"]
+        },
+        "mobility": "structural",
+        "origin": "deterministicFixture"
+      },
+      {
+        "id": "candidate-door-001",
+        "kind": "door",
+        "label": "Entry door, recaptured",
+        "dimensionsMeters": { "width": 0.9, "height": 2.0, "depth": 0.08 },
+        "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.02, 0, 0, 1] },
+        "polygonCorners": [
+          { "x": 0, "y": 0, "z": 0 },
+          { "x": 0.9, "y": 0, "z": 0 },
+          { "x": 0.9, "y": 2.0, "z": 0 },
+          { "x": 0, "y": 2.0, "z": 0 }
+        ],
+        "provenance": {
+          "framework": "deterministic-rescan-fixture",
+          "sourceIdentifier": "candidate-surface-door-001",
+          "classificationConfidence": "medium",
+          "flattenedAttributeIdentifiers": ["fixture-door"]
+        },
+        "mobility": "fixed",
+        "origin": "deterministicFixture"
+      }
+    ],
+    "objectElements": [
+      {
+        "id": "candidate-desk-001",
+        "kind": "desk",
+        "label": "Work desk, recaptured",
+        "dimensionsMeters": { "width": 1.45, "height": 0.75, "depth": 0.7 },
+        "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1.15, 0, 0.6, 1] },
+        "provenance": {
+          "framework": "deterministic-rescan-fixture",
+          "sourceIdentifier": "candidate-object-desk-001",
+          "classificationConfidence": "low",
+          "flattenedAttributeIdentifiers": ["fixture-desk"]
+        },
+        "mobility": "fixed",
+        "origin": "deterministicFixture"
+      },
+      {
+        "id": "candidate-chair-001",
+        "kind": "chair",
+        "label": "Task chair, recaptured",
+        "dimensionsMeters": { "width": 0.55, "height": 0.9, "depth": 0.55 },
+        "transform": { "columnMajorValues": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2.1, 0, 1.1, 1] },
+        "provenance": {
+          "framework": "deterministic-rescan-fixture",
+          "sourceIdentifier": "candidate-object-chair-001",
+          "classificationConfidence": "medium",
+          "flattenedAttributeIdentifiers": ["fixture-chair"]
+        },
+        "mobility": "movable",
+        "origin": "deterministicFixture"
+      }
+    ]
+  },
+  "matches": [
+    { "baseElementID": "structure-floor-001", "candidateElementID": "candidate-floor-001", "baseLayer": "structural", "candidateLayer": "structural", "baseKind": "floor", "candidateKind": "floor" },
+    { "baseElementID": "structure-wall-north-001", "candidateElementID": "candidate-wall-north-001", "baseLayer": "structural", "candidateLayer": "structural", "baseKind": "wall", "candidateKind": "wall" },
+    { "baseElementID": "structure-door-001", "candidateElementID": "candidate-door-001", "baseLayer": "structural", "candidateLayer": "structural", "baseKind": "door", "candidateKind": "door" },
+    { "baseElementID": "movable-desk-001", "candidateElementID": "candidate-desk-001", "baseLayer": "object", "candidateLayer": "object", "baseKind": "desk", "candidateKind": "desk" },
+    { "baseElementID": "movable-chair-001", "candidateElementID": "candidate-chair-001", "baseLayer": "object", "candidateLayer": "object", "baseKind": "chair", "candidateKind": "chair" }
+  ]
+}
