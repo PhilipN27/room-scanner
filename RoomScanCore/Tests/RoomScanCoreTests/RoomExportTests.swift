@@ -349,21 +349,20 @@ final class RoomExportTests: XCTestCase {
     }
 
     func testMaterializationRewritesScopedReferencesWithoutCrossScopeAlias() async throws {
-        let root = temporaryRoot("RoomExportScopedReferences")
-        let source = root.deletingLastPathComponent().appendingPathComponent(
-            "RoomExportScopedReferenceSource-\(UUID().uuidString)",
+        let container = temporaryRoot("RoomExportScopedReferences")
+        let root = container.appendingPathComponent("Projects", isDirectory: true)
+        let source = container.appendingPathComponent(
+            "Sources",
             isDirectory: true
         )
-        let workspace = root.deletingLastPathComponent().appendingPathComponent(
-            "RoomExportScopedReferenceWorkspace-\(UUID().uuidString)",
+        let lease = container.appendingPathComponent("ExportLease", isDirectory: true)
+        let workspace = lease.appendingPathComponent(
+            "head",
             isDirectory: true
         )
-        defer {
-            try? FileManager.default.removeItem(at: root)
-            try? FileManager.default.removeItem(at: source)
-            try? FileManager.default.removeItem(at: workspace)
-        }
+        defer { try? FileManager.default.removeItem(at: container) }
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: lease, withIntermediateDirectories: true)
         let thumbnailSource = source.appendingPathComponent("project-thumbnail.png")
         let photoSource = source.appendingPathComponent("revision-photo.png")
         let thumbnailBytes = Data("project-thumbnail".utf8)
