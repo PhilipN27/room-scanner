@@ -388,6 +388,12 @@ def verify_project(pbx: str, errors: list[str]) -> None:
         expect("IPHONEOS_DEPLOYMENT_TARGET = 17.0;" in body, f"test deployment target missing in {config_id}", errors)
         expect('TARGETED_DEVICE_FAMILY = "1,2";' in body, f"test device families missing in {config_id}", errors)
 
+    project_debug = object_body(pbx, "A61000000000000000000001") or ""
+    expect(
+        "ONLY_ACTIVE_ARCH = YES;" in project_debug,
+        "project Debug configuration must build only the active architecture",
+        errors,
+    )
     expect(pbx.count("SWIFT_VERSION = 5.0;") == 2, "project Swift language version is not 5.0 in both project configurations", errors)
     forbidden_settings = (
         "DEVELOPMENT_TEAM", "PROVISIONING_PROFILE", "PROVISIONING_PROFILE_SPECIFIER", "CODE_SIGN_ENTITLEMENTS", "com.apple.developer.icloud", "SystemCapabilities",
@@ -1489,6 +1495,7 @@ def phase7_release_contract_errors(
     for setting in (
         "MARKETING_VERSION = 1.0.0;",
         "CURRENT_PROJECT_VERSION = 1;",
+        "ONLY_ACTIVE_ARCH = YES;",
         "SWIFT_VERSION = 5.0;",
     ):
         if setting not in pbx:
@@ -2215,6 +2222,20 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
                 pbx, theme, unpinned_workflow, selector, ui_tests, app_sources, context_sources
             )
             expect(bool(workflow_errors), "verifier self-test did not detect an unpinned CI action", errors)
+
+            multi_arch_debug_pbx = pbx.replace(
+                "ONLY_ACTIVE_ARCH = YES;",
+                "ONLY_ACTIVE_ARCH = NO;",
+                1,
+            )
+            architecture_errors = phase7_release_contract_errors(
+                multi_arch_debug_pbx, theme, workflow, selector, ui_tests, app_sources, context_sources
+            )
+            expect(
+                bool(architecture_errors),
+                "verifier self-test did not detect a multi-architecture Debug configuration",
+                errors,
+            )
 
             unsafe_contexts = dict(context_sources)
             unsafe_contexts["capture"] = unsafe_contexts["capture"].replace(
