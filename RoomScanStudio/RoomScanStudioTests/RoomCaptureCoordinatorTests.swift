@@ -537,7 +537,7 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(
         driver: any RoomCaptureDriving,
-        cameraPermissionProvider: any RoomCameraPermissionProviding = StaticCameraPermissionProvider(permission: .authorized),
+        cameraPermissionProvider: (any RoomCameraPermissionProviding)? = nil,
         locationProvider: any RoomLocationProviding
     ) -> (coordinator: RoomCaptureCoordinator, store: LocalRoomProjectStore, root: URL) {
         let root = temporaryRoot()
@@ -551,7 +551,8 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
         let controller = RoomLibraryController(store: store, modelContainer: nil)
         let coordinator = RoomCaptureCoordinator(
             controller: controller,
-            cameraPermissionProvider: cameraPermissionProvider,
+            cameraPermissionProvider: cameraPermissionProvider
+                ?? StaticCameraPermissionProvider(permission: .authorized),
             locationProvider: locationProvider,
             workspaceFactory: RoomCaptureScratchWorkspaceFactory(
                 rootURL: root.appendingPathComponent("scratch", isDirectory: true)

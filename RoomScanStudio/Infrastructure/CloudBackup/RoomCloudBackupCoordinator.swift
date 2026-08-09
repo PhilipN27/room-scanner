@@ -39,12 +39,12 @@ final class RoomCloudBackupCoordinator: ObservableObject {
 
     init(
         provider: any RoomCloudBackupProviding,
-        preferences: RoomCloudBackupPreferences = RoomCloudBackupPreferences(),
-        sleeper: any RoomCloudBackupSleeping = SystemRoomCloudBackupSleeper()
+        preferences: RoomCloudBackupPreferences? = nil,
+        sleeper: (any RoomCloudBackupSleeping)? = nil
     ) {
         self.provider = provider
-        self.preferences = preferences
-        self.sleeper = sleeper
+        self.preferences = preferences ?? RoomCloudBackupPreferences()
+        self.sleeper = sleeper ?? SystemRoomCloudBackupSleeper()
     }
 
     var availability: RoomCloudBackupAvailability {

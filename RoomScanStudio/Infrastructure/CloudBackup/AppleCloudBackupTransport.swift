@@ -223,8 +223,19 @@ final class AppleCloudBackupTransport: RoomCloudBackupTransport {
 
     private func fetchRecord(
         id: CKRecord.ID,
+        database: CKDatabase
+    ) async throws -> CKRecord? {
+        try await fetchRecord(
+            id: id,
+            database: database,
+            desiredKeys: Self.descriptorDesiredKeys
+        )
+    }
+
+    private func fetchRecord(
+        id: CKRecord.ID,
         database: CKDatabase,
-        desiredKeys: [CKRecord.FieldKey]? = Self.descriptorDesiredKeys
+        desiredKeys: [CKRecord.FieldKey]?
     ) async throws -> CKRecord? {
         do {
             let results = try await database.records(for: [id], desiredKeys: desiredKeys)

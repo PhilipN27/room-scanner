@@ -148,7 +148,7 @@ struct RoomViewerView: View {
         })
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Saved room semantic viewer")
-        .accessibilityValue("\(scenePlan.structuralElements.count) structural elements and \(scenePlan.objectElements.count) objects in \(camera.mode == .orbit ? \"orbit\" : \"first-person no-clip\") mode")
+        .accessibilityValue("\(scenePlan.structuralElements.count) structural elements and \(scenePlan.objectElements.count) objects in \(camera.mode == .orbit ? "orbit" : "first-person no-clip") mode")
         .accessibilityHint("Shows semantic bounding boxes only. Measurements are estimates, not survey geometry.")
         .accessibilityIdentifier("viewer.canvas")
     }
