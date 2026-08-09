@@ -1104,7 +1104,12 @@ public actor LocalRoomProjectStore {
             captureEvidence: captureEvidence,
             evidenceCompatibility: .strict
         )
-        let revisionID = newRevisionID ?? await idGenerator.nextRevisionID()
+        let revisionID: String
+        if let newRevisionID {
+            revisionID = newRevisionID
+        } else {
+            revisionID = await idGenerator.nextRevisionID()
+        }
         let root = try canonicalRootURL()
         return try withRootLock(root) {
             let package = try loadLocked(root: root, projectID: projectID)
@@ -1139,7 +1144,12 @@ public actor LocalRoomProjectStore {
     ) async throws -> RoomRevisionManifest {
         try validateIdentifier(projectID)
         try validateIdentifier(expectedHeadRevisionID)
-        let revisionID = newRevisionID ?? await idGenerator.nextRevisionID()
+        let revisionID: String
+        if let newRevisionID {
+            revisionID = newRevisionID
+        } else {
+            revisionID = await idGenerator.nextRevisionID()
+        }
         try validateIdentifier(revisionID)
         let root = try canonicalRootURL()
 
@@ -1204,7 +1214,12 @@ public actor LocalRoomProjectStore {
     ) async throws -> RoomRevisionManifest {
         try validateIdentifier(projectID)
         try validateIdentifier(expectedHeadRevisionID)
-        let revisionID = newRevisionID ?? await idGenerator.nextRevisionID()
+        let revisionID: String
+        if let newRevisionID {
+            revisionID = newRevisionID
+        } else {
+            revisionID = await idGenerator.nextRevisionID()
+        }
         try validateIdentifier(revisionID)
         let root = try canonicalRootURL()
 
@@ -1274,7 +1289,12 @@ public actor LocalRoomProjectStore {
         newRevisionID: String? = nil
     ) async throws -> RoomRevisionManifest {
         try validateIdentifier(sourceRevisionID)
-        let revisionID = newRevisionID ?? await idGenerator.nextRevisionID()
+        let revisionID: String
+        if let newRevisionID {
+            revisionID = newRevisionID
+        } else {
+            revisionID = await idGenerator.nextRevisionID()
+        }
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {

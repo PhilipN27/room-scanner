@@ -422,7 +422,9 @@ public enum RoomRescanEngine {
         var result: [LayeredElement] = []
         for element in snapshot.structuralElements {
             guard seenIDs.insert(element.id).inserted else {
-                throw isCandidate ? .invalidCandidateGeometry : .incompleteBijection
+                throw isCandidate
+                    ? RoomRescanError.invalidCandidateGeometry
+                    : RoomRescanError.incompleteBijection
             }
             try validate(element: element, layer: .structural, isCandidate: isCandidate)
             if isCandidate,
@@ -434,7 +436,9 @@ public enum RoomRescanEngine {
         }
         for element in snapshot.objectElements {
             guard seenIDs.insert(element.id).inserted else {
-                throw isCandidate ? .invalidCandidateGeometry : .incompleteBijection
+                throw isCandidate
+                    ? RoomRescanError.invalidCandidateGeometry
+                    : RoomRescanError.incompleteBijection
             }
             try validate(element: element, layer: .object, isCandidate: isCandidate)
             if isCandidate,
@@ -457,7 +461,9 @@ public enum RoomRescanEngine {
             !element.kind.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !element.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
-            throw isCandidate ? .invalidCandidateGeometry : .incompleteBijection
+            throw isCandidate
+                ? RoomRescanError.invalidCandidateGeometry
+                : RoomRescanError.incompleteBijection
         }
         let dimensions = [
             element.dimensionsMeters.width,

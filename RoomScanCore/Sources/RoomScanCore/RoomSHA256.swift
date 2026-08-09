@@ -194,3 +194,4 @@ public enum RoomSHA256 {
         (value >> count) | (value << (32 - count))
     }
 }
+}
