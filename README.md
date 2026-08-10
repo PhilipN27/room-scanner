@@ -139,10 +139,10 @@ The repository now contains:
   bounded retry/cancellation, and settings UI are source-authored only;
 - authoring-time XCTest/XCUITest contracts and a static host verifier.
 
-The recommended app deployment floor remains iOS/iPadOS 17.0, pending a clean
-build with the selected macOS/Xcode SDK. `RoomScanCore` also declares macOS 13
-because it is Foundation-only and its portable test suite is intended to run
-there.
+The app deployment floor is iOS/iPadOS 17.0. The complete hosted Xcode 16.4
+build and Simulator matrix passes at that deployment target; physical RoomPlan
+behavior still requires supported LiDAR hardware. `RoomScanCore` also declares
+macOS 13 because it is Foundation-only and its portable test suite runs there.
 
 ## Storage model
 
@@ -300,10 +300,14 @@ backup leases, bounded listing with malformed-descriptor isolation, and
 CloudKit isolation to the one transport file. These are static checks, not a
 CloudKit development-container result.
 
-## macOS proof still required
+## macOS CI evidence and remaining proof
 
-On a Mac with Xcode and an iOS 17-or-later SDK, first resolve the local package
-and then run all targets:
+Hosted macOS CI [run 31359458769](https://github.com/PhilipN27/room-scanner/actions/runs/31359458769)
+passed on commit `aa18d6bbedfc4525208653a330dfe216636f5b01`. Xcode 16.4
+resolved the local package, all 122 `RoomScanCore` tests passed, the unsigned
+generic iOS application built, and dynamically selected iPhone and iPad
+Simulators each passed 62 app tests plus 25 UI tests. To reproduce the proved
+build path on a Mac with an iOS 17-or-later SDK, run:
 
     xcodebuild -resolvePackageDependencies -project RoomScanStudio.xcodeproj -scheme RoomScanStudio
     swift test
@@ -313,18 +317,21 @@ iPhone and iPad destinations, or let `Scripts/select_simulators.py` write CI
 outputs. The repository intentionally does not hardcode a simulator model or
 runtime.
 
-The source-authored UI tests require a Simulator run. Follow that with physical
-LiDAR iPhone and iPad checks for runtime capability gating, actual capture,
-permissions, black scanning UI feasibility, raw mesh gating, save/discard,
-and rescan registration. Confirm the exact SDK spelling/availability of the isolated
-`ARSession.captureHighResolutionFrame()` call before relying on reference-photo
-capture. Also compile and render the isolated RealityKit viewer APIs on that
-SDK, then exercise viewer/editor Save/Cancel and stale-conflict behavior.
+Follow the passing Simulator suite with physical LiDAR iPhone and iPad checks
+for runtime capability gating, actual capture,
+permissions, black scanning UI feasibility, raw mesh gating, and save/discard.
+Production rescan is intentionally unavailable; verify that hard gate on the
+device and use the explicit deterministic-fixture launch mode only for the
+fixture rescan flow. The isolated `ARSession.captureHighResolutionFrame()` and
+RealityKit viewer APIs compile in the hosted Xcode 16.4 build; their camera,
+rendering, Save/Cancel, and stale-conflict behavior still needs physical-device
+observation before release.
 Run the authored export tests, inspect a generated archive with Apple
 Files/Archive Utility and a separate ZIP reader, verify manifest closure/
 digests and native USDZ byte identity when present, render the PNG/PDF, and
 exercise iPhone/iPad share completion/cancellation and marker-lease recovery.
-No command above has run on this Windows host.
+The build commands above have run in hosted macOS CI; the physical-device,
+CloudKit, export-consumer, and system-share checks have not.
 
 ## Data and privacy posture
 
@@ -357,12 +364,13 @@ palette contrast literals, adaptive-action source contracts, dynamic-type UI
 test source, and the pinned CI workflow/selector self-test. This is static
 evidence only.
 
-**Pending macOS CI:** local package resolution, `swift test`, unsigned generic
-iOS build, and the iPhone/iPad Simulator XCTest/XCUITest jobs in
-[.github/workflows/ci.yml](.github/workflows/ci.yml). **Pending external
-evidence:** real-device capture/permission behavior, CloudKit development
-container backup/recovery, native export inspection, PNG/PDF rendering, and
-system share handoff.
+**Verified on macOS CI:** package resolution, all 122 `RoomScanCore` tests, the
+unsigned generic iOS build, and 62 app tests plus 25 UI tests on each dynamically
+selected iPhone and iPad Simulator. See
+[run 31359458769](https://github.com/PhilipN27/room-scanner/actions/runs/31359458769).
+**Pending external evidence:** real-device capture/permission behavior,
+CloudKit development-container backup/recovery, signing/archive validation,
+native export inspection, PNG/PDF rendering, and system share handoff.
 
 Release operating material lives in [Docs/setup.md](Docs/setup.md),
 [Docs/real-device-test-plan.md](Docs/real-device-test-plan.md),

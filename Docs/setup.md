@@ -3,7 +3,7 @@
 ## Evidence status
 
 - Verified on Windows: repository structure, JSON/plist/XML parsing, icon header, and source contracts only.
-- Pending macOS CI: package resolution, Swift tests, unsigned iOS build, and iPhone/iPad UI tests.
+- Verified on macOS CI: package resolution, 122/122 `RoomScanCore` tests, the unsigned generic iOS build, and 62 app plus 25 UI tests on each selected iPhone/iPad Simulator in run 31359458769.
 - Pending external evidence: physical-device capture, CloudKit development-container operations, share handoff, and archive inspection.
 
 ## macOS prerequisites
@@ -24,7 +24,8 @@ the CI helper does this without a model/runtime assumption:
     xcrun simctl list devices available -j
 
 Then run the Xcode test scheme separately on one discovered iPhone UUID and
-one discovered iPad UUID. Those commands have not run on this Windows host.
+one discovered iPad UUID. The hosted workflow runs this sequence dynamically;
+physical-device checks still require the release operator's Mac and devices.
 
 ## Optional private backup configuration
 

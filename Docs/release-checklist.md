@@ -1,7 +1,8 @@
 # Release checklist
 
-Status: **Verified on Windows** items below are static only. **Pending macOS CI**
-and external/device items remain unchecked until observed.
+Status: **Verified on Windows** items below are static only. The checked
+**macOS CI** items are runtime/build evidence; remaining external and device
+items stay unchecked until observed.
 
 - [x] Windows static: `MARKETING_VERSION=1.0.0`, `CURRENT_PROJECT_VERSION=1`,
   app language mode Swift 5.0, package tools 5.9, 1024px opaque RGB AppIcon
@@ -11,14 +12,16 @@ and external/device items remain unchecked until observed.
 - [x] Windows static: Dynamic Type source/test contracts, semantic contrast
   calculations, fixed-dark surface roles, and no fixed user-facing font sizes
   passed the structural oracle.
-- [ ] macOS CI: resolve the package, run `swift test`, build unsigned generic
-  iOS, then run app/UI tests on dynamically selected iPhone and iPad simulators.
+- [x] macOS CI: resolved the local package, passed 122/122 `RoomScanCore`
+  tests, and built the unsigned generic iOS application with Xcode 16.4.
+- [x] macOS CI: passed 62 app tests plus 25 UI tests on each dynamically
+  selected iPhone and iPad Simulator in run 31359458769.
 - [ ] Release owner: inspect AppIcon rendering, privacy report, App Store
   Connect data-use answers, permission copy, backup-container setup, and any
   required signing/capability configuration outside this repository.
-- [ ] macOS/Xcode: compile the asset catalog, visually inspect the icon, archive
-  the Release configuration, and validate signing/capabilities supplied by the
-  release operator. No team/profile is committed here.
+- [ ] macOS/Xcode: visually inspect the compiled icon, archive the Release
+  configuration, and validate signing/capabilities supplied by the release
+  operator. No team/profile is committed here.
 - [ ] Release owner: supply an approved absolute HTTPS Privacy Policy URL via
   `ROOMSCANSTUDIO_PRIVACY_POLICY_URL`, verify its in-app Privacy Policy link and
   App Store metadata URL, then validate the generated privacy report and App

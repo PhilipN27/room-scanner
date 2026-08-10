@@ -3,14 +3,15 @@
 Status: Phase-2A Core, Phase-2B deterministic/production capture, Phase-3
 V1-A fixture-only rescan, Phase-4 saved-room viewer/editor, Phase-5
 head-revision export, and Phase-6 optional full-project backup/recovery source
-are host-statically checked on 2026-08-09. This document is a design decision
-record, not Apple-platform validation.
+are host-statically checked. The complete hosted Xcode 16.4 build and
+iPhone/iPad Simulator matrix passed on 2026-08-10. This document remains a
+design decision record; Simulator evidence is not physical-device validation.
 
 ## Decision summary
 
 | Topic | Decision | Status |
 | --- | --- | --- |
-| Deployment floor | Recommend iOS and iPadOS 17.0 because SwiftData is the current limiting framework. Confirm against the target macOS Xcode SDK before release. | Unverified on this Windows host |
+| Deployment floor | Use iOS and iPadOS 17.0 because SwiftData is the limiting framework. | Hosted Xcode 16.4 build and Simulator matrix passed; physical-device behavior remains unverified |
 | Devices | Support iPhone and iPad. RoomCaptureSession.isSupported alone gates live capture; ARWorldTrackingConfiguration scene reconstruction support gates only optional raw-mesh evidence. Never use a device-model allowlist. | API and hardware behavior unverified |
 | Capture ownership | The iOS adapter source creates one app-owned ARSession per driver and passes it to RoomCaptureSession(arSession:). It neither runs/delegates the ARSession nor creates a competing camera session; final cleanup retains ownership until RoomPlan reports didEndWith or exposes a retryable timeout. | Source-authored; SDK/API behavior unverified |
 | Capture UI | A deterministic black semantic Canvas, explicit reducer route, and compile-intended live RoomPlan adapter are source-authored. A custom live presentation remains a physical-device gate/hypothesis. | Host-static only; device behavior unverified |
@@ -317,14 +318,15 @@ license external reference material.
 | Tier | Required evidence | Current state |
 | --- | --- | --- |
 | Host static | Parse Xcode metadata, plist, JSON, XML, eight fixture documents plus PNG signature and the RescanFixture sidecar, local-package/PBX wiring, source/resource memberships, Phase-2 through Phase-6 contracts, and security settings. | Passed on 2026-08-09; static only |
-| macOS Xcode | Clean Xcode build, unit tests, and Simulator test run against the selected SDK. | Not available |
-| Physical LiDAR iPhone and iPad | Capability gates, permission paths, capture, tracking loss, save/discard, and rescan registration evidence on both classes. | Not available |
+| macOS Xcode | Clean Xcode build, unit tests, and Simulator test run against the selected SDK. | Passed in hosted run 31359458769: package resolution, 122/122 Core tests, unsigned generic iOS build, and 62 app plus 25 UI tests on each selected iPhone/iPad Simulator |
+| Physical LiDAR iPhone and iPad | Capability gates, permission paths, capture, tracking loss, save/discard, and verification that production rescan remains unavailable on both classes. | Not available |
 | CloudKit development container | Explicit opt-in behavior, private snapshot/CKAsset persistence, cancellation lookup, recovery, and local-only regression check. | Phase-6 source/static contracts only; not performed |
 | Export inspection | Inspect a produced ZIP with independent readers, verify manifest closure/digests, source-package immutability, native USDZ identity when present, PNG/PDF rendering, and share completion/cancel cleanup. | Phase-5 source/static contracts only; not performed |
 
 ## Unknowns that require later proof
 
-1. Exact SDK availability and signatures for every RoomPlan/ARKit call.
+1. Physical-device behavior of the RoomPlan/ARKit calls that compile in the
+   hosted Xcode 16.4 build.
 2. Whether RoomPlan preserves scene reconstruction on the app-owned ARSession.
 3. Whether an app-owned session and a custom black scan surface work together.
 4. CapturedRoomData persistence, CapturedRoom export metadata, world-map
@@ -371,12 +373,12 @@ pairs, Dynamic Type test source, and the full-SHA-pinned CI workflow plus its
 synthetic simulator-selector policy. These checks do not compile or render the
 app.
 
-**Pending macOS CI:** Xcode package resolution, Swift/XCTest execution,
-unsigned generic iOS build, and UI tests on dynamically selected iPhone and
-iPad simulators. **Pending external evidence:** asset-compiler icon output,
-Accessibility Inspector/VoiceOver review, physical capture/permissions,
-CloudKit private backup/recovery, export artifact inspection, and system-share
-completion.
+**Verified on macOS CI:** Xcode package resolution, 122/122 portable tests,
+unsigned generic iOS build, and 62 app plus 25 UI tests on each dynamically
+selected iPhone and iPad Simulator passed in run 31359458769. **Pending
+external evidence:** release archive/signing, Accessibility Inspector/VoiceOver
+review, physical capture/permissions, CloudKit private backup/recovery, export
+artifact inspection, and system-share completion.
 
 The privacy manifest remains tracking false with no tracking domains or
 declared collected data. It records required-reason File Timestamp `C617.1` and

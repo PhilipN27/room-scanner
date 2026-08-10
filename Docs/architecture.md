@@ -3,10 +3,11 @@
 Status: Phase-2A Core/storage, Phase-2B deterministic/production capture,
 Phase-3 V1-A fixture-only rescan, Phase-4 saved-room viewer/editor, Phase-5
 head-revision export, and Phase-6 opt-in full-project backup/recovery source
-are authored and host-statically checked on 2026-08-09. Apple SDK, Simulator,
-RealityKit/UIKit render, ZIP inspection, CloudKit development-container, and
-physical-device proof remain pending. The implementation is local-first and
-one-room only.
+are authored and host-statically checked. On 2026-08-10 the complete hosted
+Xcode 16.4 build and iPhone/iPad Simulator matrix passed. Physical RoomPlan
+capture, independent ZIP/render inspection, CloudKit development-container,
+signing, and physical-device proof remain pending. The implementation is
+local-first and one-room only.
 
 ## Architectural boundaries
 
@@ -223,9 +224,10 @@ claim coordinate continuity for a future rescan. It writes required raw
 CapturedRoomData JSON, processed CapturedRoom JSON, and native USDZ evidence
 plus a thumbnail before review, while raw mesh/world map/provenance remain
 explicit omissions until physical proof. Even when scene mesh capability is
-available, V1 states honestly that it does not collect raw mesh. The required dark or black scanning
-canvas, actual RoomPlan interaction, and high-resolution photo API signature
-are still physical-device/Xcode gates. A capture-termination callback is
+available, V1 states honestly that it does not collect raw mesh. The required
+dark or black scanning canvas, actual RoomPlan interaction, and high-resolution
+photo behavior are still physical-device gates; the photo API signature itself
+compiled in hosted Xcode 16.4. A capture-termination callback is
 accepted only during starting, scanning, or stopping; a late callback after
 review is ignored even when its attempt token matches.
 
@@ -268,9 +270,9 @@ measurements, and a photo pose marker while retaining its stable IDs and seven
 JSON documents. Its bundled deterministic PNG is staged to the declared
 revision photo path only after explicit fixture Save.
 
-RealityKit compile/render behavior remains a macOS/Xcode gate. Host evidence
-checks source/PBX contracts only; it does not establish that the narrow
-RealityKit API surface compiles or renders on the selected SDK.
+The narrow RealityKit API surface compiled in hosted Xcode 16.4. Physical-device
+rendering and visual inspection remain open gates; host-static evidence alone
+does not establish either behavior.
 
 ## Phase-5 head-revision export
 
@@ -432,7 +434,7 @@ Artifact inspection remains a macOS/device gate.
 The package intentionally uses only Foundation and declares macOS 13 plus iOS
 17 so it can later be tested with Swift on macOS. The app and its unit-test
 target refer to the repository-root local package product; source/PBX wiring is
-host-statically checked but not Xcode-resolved on this Windows host.
+host-statically checked and was resolved by the hosted Xcode 16.4 matrix.
 
 ## Planned proof sequence
 
@@ -441,15 +443,17 @@ host-statically checked but not Xcode-resolved on this Windows host.
    resource memberships, portable package imports,
    accessibility/test contracts, and absence of active signing/cloud configuration.
 2. On macOS, resolve package/Xcode compatibility; build all three targets; run
-   package XCTest, app XCTest, and UI tests on a Simulator.
+   package XCTest, app XCTest, and UI tests on iPhone and iPad Simulators.
+   Completed by hosted run 31359458769 on 2026-08-10.
 3. On LiDAR iPhone and iPad, prove runtime support checks, scanning UI, RoomPlan
-   capture, save/discard, raw-mesh gate, and rescan registration.
+   capture, save/discard, raw-mesh gate, and the production-rescan unavailable
+   safety boundary. Fixture-only rescan is a separate deterministic test path.
 4. In a CloudKit development container, prove opt-in snapshots and ensure
    local-only behavior remains operational.
 5. Inspect native and optional export artifacts and manifests.
 
-No Phase-1 documentation or source text implies that steps 2 through 5 have
-already passed.
+Step 2 has passed in hosted CI. Steps 3 through 5 remain external gates and are
+not implied complete by source or Simulator evidence.
 
 ## Apple API references
 
@@ -493,5 +497,8 @@ pairs. This is a source/value check, not a visual Accessibility Inspector run.
 
 The pinned macOS CI design validates the host oracle, package, unsigned generic
 iOS build, dynamically discovered iPhone/iPad Simulator tests, and xcresult
-retention. It has not run yet. No Phase 7 change adds a team, entitlement,
-container, background network behavior, or source-of-truth migration.
+retention. Run 31359458769 passed that complete matrix on Xcode 16.4 at commit
+`aa18d6bbedfc4525208653a330dfe216636f5b01`: 122 Core tests, then 62 app tests
+and 25 UI tests on each selected simulator. No Phase 7 change adds a team,
+entitlement, container, background network behavior, or source-of-truth
+migration.

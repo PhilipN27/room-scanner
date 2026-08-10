@@ -959,7 +959,42 @@ HTTP, credential-bearing, fragmented, and malformed values; valid HTTPS
 acceptance; and the Home settings absence state. Swift/XCTest/XCUITest has not
 run on this host.
 
-The Phase 7 CI workflow is authored but has not run. No Swift/Xcode/Simulator/
-device/CloudKit/export/share test has run on this Windows host. macOS CI,
+At this checkpoint the Phase 7 CI workflow was authored but had not run. No
+Swift/Xcode/Simulator/device/CloudKit/export/share test had run on this Windows
+host. macOS CI,
 private development-container, App Store privacy report/answers, asset catalog,
 Accessibility Inspector, and physical iPhone/iPad validation remain open gates.
+
+## 2026-08-10 - Complete hosted Xcode and Simulator matrix
+
+Scope: the complete pinned GitHub Actions workflow at commit
+`aa18d6bbedfc4525208653a330dfe216636f5b01` after the final capture, library,
+cloud-settings, accessibility-selector, and asynchronous UI-test reliability
+repairs.
+
+Authoritative run:
+
+- https://github.com/PhilipN27/room-scanner/actions/runs/31359458769
+- Job: `Static, package, build, and UI tests` (`93365277913`)
+- Result: `success`
+- Runner: macOS 15.7.7, Xcode 16.4 (`16F6`), iOS SDK 18.5
+- Dynamically selected destinations: iPhone 16 and iPad (10th generation),
+  each using the installed iOS 26.2 Simulator runtime
+
+Observed green steps:
+
+1. Host structural verifier and pure simulator-selector self-test.
+2. Portable `RoomScanCore`: 122 tests, 0 failures.
+3. Local Swift package resolution and unsigned generic iOS application build.
+4. iPhone: 62 app tests and 25 UI tests, 0 failures; `TEST SUCCEEDED`.
+5. iPad: 62 app tests and 25 UI tests, 0 failures; `TEST SUCCEEDED`.
+6. XCTest result artifact upload.
+
+This supersedes the preceding Phase-7 statement that the workflow had not run.
+It is real macOS/Xcode/Simulator evidence, but it is not physical RoomPlan or
+LiDAR evidence. Still open: Apple signing/archive validation; an owner-approved
+privacy-policy URL and App Store Connect decisions; physical LiDAR iPhone/iPad
+capture and permission paths; Accessibility Inspector/VoiceOver review;
+CloudKit development-container account, upload, listing, recovery, cancellation,
+and service-limit checks; independent ZIP/USDZ/PNG/PDF inspection; and system
+share completion/cancellation.
