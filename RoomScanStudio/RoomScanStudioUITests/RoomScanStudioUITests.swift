@@ -490,7 +490,12 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5))
         prepare.tap()
         let recoverCopy = app.buttons["cloudBackup.recoverCopy"]
-        XCTAssertTrue(waitForHittable(recoverCopy, in: settingsScroll, direction: .backward))
+        XCTAssertTrue(waitForHittable(
+            recoverCopy,
+            in: settingsScroll,
+            direction: .backward,
+            searchBothDirections: true
+        ))
         XCTAssertTrue(recoverCopy.waitForExistence(timeout: 5))
         recoverCopy.tap()
         let outcome = identifiedElement("cloudBackup.recoveryOutcome", in: app)
@@ -624,17 +629,29 @@ final class RoomScanStudioUITests: XCTestCase {
         _ element: XCUIElement,
         in scrollView: XCUIElement,
         direction: ScrollDirection = .forward,
+        searchBothDirections: Bool = false,
         timeout: TimeInterval = 30
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
+        var scanDirection = direction
+        var swipesBeforeTurn = 2
         while Date() < deadline {
-            if element.isHittable {
-                return true
+            for _ in 0..<swipesBeforeTurn {
+                if element.isHittable {
+                    return true
+                }
+                guard scrollView.exists else { return false }
+                swipe(scrollView, direction: scanDirection)
+                if Date() >= deadline {
+                    break
+                }
             }
-            guard scrollView.exists else { return false }
-            // Keep the caller's layout direction. Reversing at a form-sheet
-            // edge can turn a scroll probe into an interactive iPad dismissal.
-            swipe(scrollView, direction: direction)
+            if searchBothDirections {
+                // Recovery preparation blocks interactive dismissal while its
+                // asynchronously inserted controls can shift either way.
+                scanDirection = opposite(scanDirection)
+                swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)
+            }
         }
         return element.isHittable
     }

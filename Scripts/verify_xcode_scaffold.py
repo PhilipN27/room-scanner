@@ -2122,14 +2122,16 @@ def verify_source_contract(errors: list[str]) -> None:
         'private func waitForHittable(' in ui_tests
         and 'timeout: TimeInterval = 30' in ui_tests
         and 'let deadline = Date().addingTimeInterval(timeout)' in ui_tests
+        and 'searchBothDirections: Bool = false' in ui_tests
         and 'if element.isHittable {' in ui_tests
         and 'guard scrollView.exists else { return false }' in ui_tests
-        and 'swipe(scrollView, direction: direction)' in ui_tests
-        and 'scanDirection = opposite(scanDirection)' not in ui_tests
+        and 'if searchBothDirections {' in ui_tests
+        and 'scanDirection = opposite(scanDirection)' in ui_tests
+        and 'swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)' in ui_tests
         and 'XCTAssertTrue(waitForHittable(prepare, in: settingsScroll))' in ui_tests
-        and 'XCTAssertTrue(waitForHittable(recoverCopy, in: settingsScroll, direction: .backward))' in ui_tests
+        and 'direction: .backward,\n            searchBothDirections: true' in ui_tests
         and 'XCTAssertTrue(waitForHittable(outcome, in: settingsScroll))' in ui_tests,
-        "Phase-6 UI tests do not use a bounded direction-aware scan for asynchronous controls",
+        "Phase-6 UI tests do not confine bidirectional scanning to protected asynchronous recovery",
         errors,
     )
     expect(
