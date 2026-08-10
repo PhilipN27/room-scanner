@@ -40,6 +40,7 @@ struct RoomDetailView: View {
             .frame(maxWidth: 800, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+        .accessibilityIdentifier("detail.scroll")
         .background(AppPalette.paper.ignoresSafeArea())
         .navigationTitle("Room profile")
         .navigationBarTitleDisplayMode(.inline)

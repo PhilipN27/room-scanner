@@ -98,6 +98,7 @@ struct RevisionInspectView: View {
             .frame(maxWidth: 680, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+        .accessibilityIdentifier("revision.inspect.scroll")
         .background(AppPalette.paper.ignoresSafeArea())
         .navigationTitle("Revision")
         .navigationBarTitleDisplayMode(.inline)

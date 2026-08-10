@@ -120,17 +120,28 @@ final class RoomScanStudioUITests: XCTestCase {
         saveMockRoom(in: app)
 
         app.buttons["library.project.ui-project-001"].tap()
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 5))
+        let detailScroll = app.scrollViews["detail.scroll"]
+        XCTAssertTrue(detailScroll.waitForExistence(timeout: 5))
         let revisionOne = app.buttons["revision.revision-001"]
-        scrollIntoView(revisionOne, in: app)
+        scrollIntoView(revisionOne, in: detailScroll)
         XCTAssertTrue(revisionOne.isHittable)
         revisionOne.tap()
-        XCTAssertTrue(app.staticTexts["revision.inspect.revision-001"].waitForExistence(timeout: 2))
-        app.buttons["revision.restore.revision-001"].tap()
+        let revisionInspection = app.staticTexts["revision.inspect.revision-001"]
+        XCTAssertTrue(revisionInspection.waitForExistence(timeout: 2))
+        let inspectionScroll = app.scrollViews["revision.inspect.scroll"]
+        XCTAssertTrue(inspectionScroll.waitForExistence(timeout: 5))
+        let restore = app.buttons["revision.restore.revision-001"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        scrollIntoView(restore, in: inspectionScroll)
+        XCTAssertTrue(restore.isHittable)
+        restore.tap()
+        XCTAssertTrue(revisionInspection.waitForNonExistence(timeout: 5))
         let headRevision = app.staticTexts["detail.headRevision"]
         XCTAssertTrue(waitForLabel(headRevision, equals: "revision-002", timeout: 5))
         XCTAssertEqual(headRevision.label, "revision-002")
         let revisionTwo = app.buttons["revision.revision-002"]
-        scrollIntoView(revisionTwo, in: app)
+        scrollIntoView(revisionTwo, in: detailScroll, direction: .backward)
         XCTAssertTrue(app.buttons["revision.revision-002"].waitForExistence(timeout: 5))
         XCTAssertTrue(revisionTwo.isHittable)
     }
@@ -151,6 +162,9 @@ final class RoomScanStudioUITests: XCTestCase {
         saveMockRoom(in: app)
 
         app.buttons["library.project.ui-project-001"].tap()
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 5))
+        let detailScroll = app.scrollViews["detail.scroll"]
+        XCTAssertTrue(detailScroll.waitForExistence(timeout: 5))
         app.buttons["detail.rescan"].tap()
         XCTAssertTrue(app.staticTexts["rescan.preview"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["rescan.status"].waitForExistence(timeout: 5))
@@ -162,22 +176,32 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["rescan.accept"].waitForExistence(timeout: 5))
         app.buttons["rescan.accept"].tap()
         XCTAssertTrue(app.staticTexts["rescan.accepted"].waitForExistence(timeout: 5))
-        app.buttons["rescan.done"].tap()
+        let done = app.buttons["rescan.done"]
+        done.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5))
         let headRevision = app.staticTexts["detail.headRevision"]
         XCTAssertTrue(waitForLabel(headRevision, equals: "revision-002", timeout: 5))
         let revisionTwo = app.buttons["revision.revision-002"]
-        scrollIntoView(revisionTwo, in: app)
+        scrollIntoView(revisionTwo, in: detailScroll)
         XCTAssertTrue(revisionTwo.isHittable)
 
         let revisionOne = app.buttons["revision.revision-001"]
-        scrollIntoView(revisionOne, in: app)
+        scrollIntoView(revisionOne, in: detailScroll)
         XCTAssertTrue(revisionOne.isHittable)
         revisionOne.tap()
-        XCTAssertTrue(app.buttons["revision.restore.revision-001"].waitForExistence(timeout: 5))
-        app.buttons["revision.restore.revision-001"].tap()
+        let revisionInspection = app.staticTexts["revision.inspect.revision-001"]
+        XCTAssertTrue(revisionInspection.waitForExistence(timeout: 5))
+        let inspectionScroll = app.scrollViews["revision.inspect.scroll"]
+        XCTAssertTrue(inspectionScroll.waitForExistence(timeout: 5))
+        let restore = app.buttons["revision.restore.revision-001"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        scrollIntoView(restore, in: inspectionScroll)
+        XCTAssertTrue(restore.isHittable)
+        restore.tap()
+        XCTAssertTrue(revisionInspection.waitForNonExistence(timeout: 5))
         XCTAssertTrue(waitForLabel(headRevision, equals: "revision-003", timeout: 5))
         let revisionThree = app.buttons["revision.revision-003"]
-        scrollIntoView(revisionThree, in: app, direction: .backward)
+        scrollIntoView(revisionThree, in: detailScroll, direction: .backward)
         XCTAssertTrue(revisionThree.isHittable)
     }
 
@@ -594,12 +618,26 @@ final class RoomScanStudioUITests: XCTestCase {
         direction: ScrollDirection = .forward
     ) {
         for _ in 0..<6 where !element.isHittable {
-            switch direction {
-            case .forward:
-                scrollView.swipeUp()
-            case .backward:
-                scrollView.swipeDown()
-            }
+            swipe(scrollView, direction: direction)
+        }
+        let fallbackDirection: ScrollDirection
+        switch direction {
+        case .forward:
+            fallbackDirection = .backward
+        case .backward:
+            fallbackDirection = .forward
+        }
+        for _ in 0..<12 where !element.isHittable {
+            swipe(scrollView, direction: fallbackDirection)
+        }
+    }
+
+    private func swipe(_ scrollView: XCUIElement, direction: ScrollDirection) {
+        switch direction {
+        case .forward:
+            scrollView.swipeUp()
+        case .backward:
+            scrollView.swipeDown()
         }
     }
 
