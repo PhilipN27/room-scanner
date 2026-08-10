@@ -341,7 +341,7 @@ final class RoomCloudBackupAppTests: XCTestCase {
             customName: "Recovered Copy",
             captureDate: Date(timeIntervalSince1970: 1_704_067_200),
             lastRevisedDate: Date(timeIntervalSince1970: 1_704_067_200),
-            manualLocation: nil,
+            manualLocation: "",
             tags: [],
             thumbnailRelativePath: nil,
             archived: false,
