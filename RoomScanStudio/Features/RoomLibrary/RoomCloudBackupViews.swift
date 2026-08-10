@@ -108,7 +108,6 @@ struct RoomCloudBackupSettingsView: View {
         }
         .padding(16)
         .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .accessibilityIdentifier("settings.privacyPolicy")
     }
 
     private var configuration: some View {

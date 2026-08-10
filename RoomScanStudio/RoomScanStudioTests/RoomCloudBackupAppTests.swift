@@ -8,6 +8,58 @@ import RoomScanCore
 /// and the Core archive contracts separately.
 @MainActor
 final class RoomCloudBackupAppTests: XCTestCase {
+    func testFakeCloudBackupUsesFixtureContainerWhenBuildValueIsBlankOrUnresolved() {
+        for buildContainerIdentifier in [
+            "",
+            "   ",
+            "$(ROOMSCANSTUDIO_CLOUD_BACKUP_CONTAINER_IDENTIFIER)",
+        ] {
+            let resolved = CloudBackupContainerArgument.resolve(
+                arguments: ["--ui-testing", "--use-fake-cloud-backup"],
+                buildContainerIdentifier: buildContainerIdentifier
+            )
+
+            XCTAssertEqual(resolved, "iCloud.org.roomscanstudio.ui-test")
+            XCTAssertEqual(
+                RoomCloudBackupPreferences(
+                    isEnabled: true,
+                    containerIdentifier: resolved,
+                    defaults: nil
+                ).resolvedContainerIdentifier(),
+                "iCloud.org.roomscanstudio.ui-test"
+            )
+        }
+
+        XCTAssertEqual(
+            CloudBackupContainerArgument.resolve(
+                arguments: [],
+                buildContainerIdentifier: ""
+            ),
+            ""
+        )
+    }
+
+    func testExplicitUITestCloudContainerOverridesBuildValueAndFakeFallback() {
+        XCTAssertEqual(
+            CloudBackupContainerArgument.resolve(
+                arguments: [
+                    "--ui-testing",
+                    "--use-fake-cloud-backup",
+                    "--cloud-container=iCloud.org.roomscanstudio.override",
+                ],
+                buildContainerIdentifier: "iCloud.org.roomscanstudio.operator"
+            ),
+            "iCloud.org.roomscanstudio.override"
+        )
+        XCTAssertEqual(
+            CloudBackupContainerArgument.resolve(
+                arguments: [],
+                buildContainerIdentifier: " iCloud.org.roomscanstudio.operator "
+            ),
+            "iCloud.org.roomscanstudio.operator"
+        )
+    }
+
     func testDisabledAndEnableOnlyChangeLocalPreferenceWithoutCloudCalls() async {
         let provider = FakeCloudBackupProvider()
         let preferences = RoomCloudBackupPreferences(

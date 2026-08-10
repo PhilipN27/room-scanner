@@ -1464,6 +1464,8 @@ def phase6_cloud_backup_contract_errors(
         ("no launch CloudKit action", "cloudBackupCoordinator", environment),
         ("operator build-setting resolver", "RoomScanStudioCloudBackupContainerIdentifier", environment),
         ("UI-test-only container override", "arguments.contains(\"--ui-testing\")", environment),
+        ("pure cloud-container build-value injection", "buildContainerIdentifier:", environment),
+        ("deterministic fake cloud-container fallback", "deterministicFakeContainerIdentifier", environment),
         ("startup local marker recovery", "cloudWorkspaceFactory.recoverOwnedOrphans()", environment),
         ("controller recovery wrapper", "func prepareBackupRecovery", controller),
     ):
@@ -2083,6 +2085,8 @@ def verify_source_contract(errors: list[str]) -> None:
     for required_test in (
         "testDisabledAndEnableOnlyChangeLocalPreferenceWithoutCloudCalls",
         "testEnabledPreferencePersistsLocallyWithFalseDefaultAndNeverCallsTransport",
+        "testFakeCloudBackupUsesFixtureContainerWhenBuildValueIsBlankOrUnresolved",
+        "testExplicitUITestCloudContainerOverridesBuildValueAndFakeFallback",
         "testCheckIsExplicitAndUsesOnlyAccountOperation",
         "testAccountUnavailableIsPublishedWithoutListingOrUploading",
         "testListMissingZoneIsEmptyWithoutCreatingZone",
@@ -2124,6 +2128,16 @@ def verify_source_contract(errors: list[str]) -> None:
     expect(
         'XCTAssertEqual(coordinator.listStatusMessage, "Loaded 1 private backup record.")' in cloud_backup_app_tests,
         "Phase-6 app tests do not reject a stale empty-list status after a successful backup",
+        errors,
+    )
+    expect(
+        '.accessibilityIdentifier("settings.privacyPolicy")' not in sources["cloud_view"],
+        "Phase-7 Privacy Policy children are masked by an identifier on their passive container",
+        errors,
+    )
+    expect(
+        '?? (usesFakeCloudBackup ?' not in sources["environment"],
+        "Phase-6 fake cloud-container fallback still treats blank build values as configured",
         errors,
     )
     expect(

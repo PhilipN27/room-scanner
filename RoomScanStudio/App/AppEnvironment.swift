@@ -154,8 +154,12 @@ final class AppEnvironment: ObservableObject {
                 forInfoDictionaryKey: "RoomScanStudioPrivacyPolicyURL"
             ) as? String
         )
-        let cloudContainer = CloudBackupContainerArgument.resolve(arguments: arguments)
-            ?? (usesFakeCloudBackup ? "iCloud.org.roomscanstudio.ui-test" : "")
+        let cloudContainer = CloudBackupContainerArgument.resolve(
+            arguments: arguments,
+            buildContainerIdentifier: Bundle.main.object(
+                forInfoDictionaryKey: "RoomScanStudioCloudBackupContainerIdentifier"
+            ) as? String
+        )
         let explicitCloudEnabled: Bool? = usesFakeCloudBackup || arguments.contains("--cloud-backup-enabled")
             ? true
             : (arguments.contains("--cloud-backup-disabled") ? false : nil)
@@ -230,16 +234,43 @@ final class AppEnvironment: ObservableObject {
     }
 }
 
-private enum CloudBackupContainerArgument {
-    static func resolve(arguments: [String]) -> String? {
+enum CloudBackupContainerArgument {
+    static let deterministicFakeContainerIdentifier = "iCloud.org.roomscanstudio.ui-test"
+
+    static func resolve(
+        arguments: [String],
+        buildContainerIdentifier: String?
+    ) -> String {
         let prefix = "--cloud-container="
         if arguments.contains("--ui-testing"),
            let argument = arguments.first(where: { $0.hasPrefix(prefix) }) {
-            return String(argument.dropFirst(prefix.count))
+            if let resolved = normalized(String(argument.dropFirst(prefix.count))) {
+                return resolved
+            }
         }
-        return Bundle.main.object(
-            forInfoDictionaryKey: "RoomScanStudioCloudBackupContainerIdentifier"
-        ) as? String
+        if let resolved = normalized(buildContainerIdentifier) {
+            return resolved
+        }
+        if arguments.contains("--use-fake-cloud-backup") {
+            return deterministicFakeContainerIdentifier
+        }
+        return ""
+    }
+
+    private static func normalized(_ rawValue: String?) -> String? {
+        guard let rawValue else {
+            return nil
+        }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains("$("),
+              !trimmed.contains("${"),
+              !trimmed.contains("\n"),
+              !trimmed.contains("\r")
+        else {
+            return nil
+        }
+        return trimmed
     }
 }
 
