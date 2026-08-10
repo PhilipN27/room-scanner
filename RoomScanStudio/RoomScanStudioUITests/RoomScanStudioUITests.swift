@@ -627,20 +627,14 @@ final class RoomScanStudioUITests: XCTestCase {
         timeout: TimeInterval = 30
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
-        var scanDirection = direction
-        var swipesBeforeTurn = 2
         while Date() < deadline {
-            for _ in 0..<swipesBeforeTurn {
-                if element.isHittable {
-                    return true
-                }
-                swipe(scrollView, direction: scanDirection)
-                if Date() >= deadline {
-                    break
-                }
+            if element.isHittable {
+                return true
             }
-            scanDirection = opposite(scanDirection)
-            swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)
+            guard scrollView.exists else { return false }
+            // Keep the caller's layout direction. Reversing at a form-sheet
+            // edge can turn a scroll probe into an interactive iPad dismissal.
+            swipe(scrollView, direction: direction)
         }
         return element.isHittable
     }
