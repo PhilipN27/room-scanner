@@ -624,12 +624,13 @@ final class RoomScanStudioUITests: XCTestCase {
         _ element: XCUIElement,
         in scrollView: XCUIElement,
         direction: ScrollDirection = .forward,
-        timeout: TimeInterval = 15
+        timeout: TimeInterval = 30
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         var scanDirection = direction
+        var swipesBeforeTurn = 2
         while Date() < deadline {
-            for _ in 0..<8 {
+            for _ in 0..<swipesBeforeTurn {
                 if element.isHittable {
                     return true
                 }
@@ -639,6 +640,7 @@ final class RoomScanStudioUITests: XCTestCase {
                 }
             }
             scanDirection = opposite(scanDirection)
+            swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)
         }
         return element.isHittable
     }

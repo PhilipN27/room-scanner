@@ -2120,9 +2120,12 @@ def verify_source_contract(errors: list[str]) -> None:
     )
     expect(
         'private func waitForHittable(' in ui_tests
+        and 'timeout: TimeInterval = 30' in ui_tests
         and 'let deadline = Date().addingTimeInterval(timeout)' in ui_tests
-        and 'if element.isHittable {' in ui_tests,
-        "Phase-6 UI cloud tests do not use a bounded hittability wait for asynchronous controls",
+        and 'if element.isHittable {' in ui_tests
+        and 'var swipesBeforeTurn = 2' in ui_tests
+        and 'swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)' in ui_tests,
+        "Phase-6 UI tests do not use a bounded expanding bidirectional scan for asynchronous controls",
         errors,
     )
     expect(
