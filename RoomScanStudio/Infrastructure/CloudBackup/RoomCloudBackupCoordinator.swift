@@ -22,6 +22,7 @@ final class RoomCloudBackupCoordinator: ObservableObject {
     @Published private(set) var backups: [RoomCloudBackupRemoteRecord] = []
     @Published private(set) var backupsAreTruncated = false
     @Published private(set) var skippedMalformedBackupRecordCount = 0
+    @Published private(set) var listStatusMessage: String?
     @Published private(set) var preparedRecovery: RoomCloudBackupPreparedRecovery?
     @Published private(set) var lastRecoveryResult: RoomBackupRecoveryResult?
     @Published private(set) var errorMessage: String?
@@ -64,6 +65,7 @@ final class RoomCloudBackupCoordinator: ObservableObject {
             backups = []
             backupsAreTruncated = false
             skippedMalformedBackupRecordCount = 0
+            listStatusMessage = nil
             errorMessage = nil
         }
     }
@@ -85,6 +87,7 @@ final class RoomCloudBackupCoordinator: ObservableObject {
 
     func listBackups() async {
         guard let context = begin(.listing) else { return }
+        listStatusMessage = nil
         defer { finishIfCurrent(.listing) }
         do {
             let result = try await retrying {
@@ -97,10 +100,12 @@ final class RoomCloudBackupCoordinator: ObservableObject {
                 backups = []
                 backupsAreTruncated = false
                 skippedMalformedBackupRecordCount = 0
+                refreshListStatusMessage()
             case let .backups(listing):
                 backups = listing.records.sorted { $0.descriptor.sourceUpdatedAt > $1.descriptor.sourceUpdatedAt }
                 backupsAreTruncated = listing.isTruncated
                 skippedMalformedBackupRecordCount = listing.skippedMalformedRecordCount
+                refreshListStatusMessage()
             }
             errorMessage = nil
         } catch {
@@ -121,6 +126,7 @@ final class RoomCloudBackupCoordinator: ObservableObject {
             }
             guard isCurrentConsent(context) else { return }
             upsert(record)
+            refreshListStatusMessage()
             errorMessage = nil
         } catch {
             fail(error)
@@ -265,6 +271,14 @@ final class RoomCloudBackupCoordinator: ObservableObject {
             backups = Array(backups.prefix(RoomCloudBackupListedRecords.maximumRecords))
             backupsAreTruncated = true
         }
+    }
+
+    private func refreshListStatusMessage() {
+        let recordCount = backups.count
+        let recordNoun = recordCount == 1 ? "record" : "records"
+        listStatusMessage = backups.isEmpty
+            ? "No private backup records were found."
+            : "Loaded \(recordCount) private backup \(recordNoun)."
     }
 
     private func fail(_ error: Error) {

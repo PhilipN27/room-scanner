@@ -106,6 +106,7 @@ final class RoomCloudBackupAppTests: XCTestCase {
         await coordinator.listBackups()
 
         XCTAssertEqual(coordinator.backups, [])
+        XCTAssertEqual(coordinator.listStatusMessage, "No private backup records were found.")
         XCTAssertEqual(provider.listRequests.count, 1)
         XCTAssertEqual(provider.zoneCreates, 0)
     }
@@ -122,12 +123,15 @@ final class RoomCloudBackupAppTests: XCTestCase {
             )
         )
 
+        await coordinator.listBackups()
+        XCTAssertEqual(coordinator.listStatusMessage, "No private backup records were found.")
         await coordinator.backUp(projectID: "project-001", expectedHeadRevisionID: "revision-001")
         await coordinator.backUp(projectID: "project-001", expectedHeadRevisionID: "revision-001")
 
         XCTAssertEqual(provider.backupRequests.count, 2)
         XCTAssertEqual(provider.zoneCreates, 2)
         XCTAssertEqual(coordinator.backups.map(\.descriptor.snapshotID), [descriptor.snapshotID])
+        XCTAssertEqual(coordinator.listStatusMessage, "Loaded 1 private backup record.")
     }
 
     func testTransientFailureRetriesButLimitExceededDoesNotRetry() async {

@@ -2108,8 +2108,28 @@ def verify_source_contract(errors: list[str]) -> None:
         errors,
     )
     expect(
-        'app.staticTexts["cloudBackup.recoveryOutcome"].waitForExistence(timeout: 5)' in ui_tests,
-        "Phase-6 UI cloud test does not wait for a recovery outcome before closing",
+        'let listStatus = app.staticTexts["cloudBackup.listStatus"]' in ui_tests
+        and 'XCTAssertTrue(waitForHittable(listStatus, in: settingsScroll))' in ui_tests
+        and 'XCTAssertTrue(listStatus.waitForExistence(timeout: 5))' in ui_tests,
+        "Phase-6 UI cloud test does not await the explicit list-completion state before backup",
+        errors,
+    )
+    expect(
+        'private func waitForHittable(' in ui_tests
+        and 'let deadline = Date().addingTimeInterval(timeout)' in ui_tests
+        and 'if element.isHittable {' in ui_tests,
+        "Phase-6 UI cloud tests do not use a bounded hittability wait for asynchronous controls",
+        errors,
+    )
+    expect(
+        'XCTAssertEqual(coordinator.listStatusMessage, "Loaded 1 private backup record.")' in cloud_backup_app_tests,
+        "Phase-6 app tests do not reject a stale empty-list status after a successful backup",
+        errors,
+    )
+    expect(
+        'identifiedElement("cloudBackup.recoveryOutcome", in: app)' in ui_tests
+        and 'XCTAssertTrue(outcome.waitForExistence(timeout: 5))' in ui_tests,
+        "Phase-6 UI cloud test does not wait for a role-independent recovery outcome before closing",
         errors,
     )
 

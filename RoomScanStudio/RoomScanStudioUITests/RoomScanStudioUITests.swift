@@ -432,9 +432,8 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(check.isHittable)
         check.tap()
         let error = app.descendants(matching: .any)["cloudBackup.error"]
+        XCTAssertTrue(waitForHittable(error, in: settingsScroll))
         XCTAssertTrue(error.waitForExistence(timeout: 5))
-        scrollIntoView(error, in: settingsScroll)
-        XCTAssertTrue(error.isHittable)
         // No account/list/backup screen is auto-triggered merely by opening or
         // enabling the local setting; the error is the explicit Check action.
     }
@@ -448,9 +447,8 @@ final class RoomScanStudioUITests: XCTestCase {
         let settingsScroll = app.scrollViews["cloudBackup.scroll"]
         XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
         let notConfigured = app.descendants(matching: .any)["settings.privacyPolicyNotConfigured"]
+        XCTAssertTrue(waitForHittable(notConfigured, in: settingsScroll))
         XCTAssertTrue(notConfigured.waitForExistence(timeout: 5))
-        scrollIntoView(notConfigured, in: settingsScroll)
-        XCTAssertTrue(notConfigured.isHittable)
         XCTAssertFalse(app.links["settings.privacyPolicyLink"].exists)
     }
 
@@ -474,33 +472,30 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["cloudBackup.accountStatus"].exists)
         check.tap()
         let accountStatus = app.staticTexts["cloudBackup.accountStatus"]
+        XCTAssertTrue(waitForHittable(accountStatus, in: settingsScroll))
         XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
-        scrollIntoView(accountStatus, in: settingsScroll)
-        XCTAssertTrue(accountStatus.isHittable)
         let list = app.buttons["cloudBackup.list"]
+        XCTAssertTrue(waitForHittable(list, in: settingsScroll, direction: .backward))
         XCTAssertTrue(list.waitForExistence(timeout: 5))
-        scrollIntoView(list, in: settingsScroll, direction: .backward)
-        XCTAssertTrue(list.isHittable)
         list.tap()
+        let listStatus = app.staticTexts["cloudBackup.listStatus"]
+        XCTAssertTrue(waitForHittable(listStatus, in: settingsScroll))
+        XCTAssertTrue(listStatus.waitForExistence(timeout: 5))
         let backup = app.buttons["cloudBackup.backup"]
+        XCTAssertTrue(waitForHittable(backup, in: settingsScroll))
         XCTAssertTrue(backup.waitForExistence(timeout: 5))
-        scrollIntoView(backup, in: settingsScroll)
-        XCTAssertTrue(backup.isHittable)
         backup.tap()
-        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5))
         let prepare = app.buttons["cloudBackup.prepare"]
-        scrollIntoView(prepare, in: settingsScroll)
-        XCTAssertTrue(prepare.isHittable)
+        XCTAssertTrue(waitForHittable(prepare, in: settingsScroll))
+        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5))
         prepare.tap()
         let recoverCopy = app.buttons["cloudBackup.recoverCopy"]
+        XCTAssertTrue(waitForHittable(recoverCopy, in: settingsScroll, direction: .backward))
         XCTAssertTrue(recoverCopy.waitForExistence(timeout: 5))
-        scrollIntoView(recoverCopy, in: settingsScroll)
-        XCTAssertTrue(recoverCopy.isHittable)
         recoverCopy.tap()
-        XCTAssertTrue(app.staticTexts["cloudBackup.recoveryOutcome"].waitForExistence(timeout: 5))
-        let outcome = app.staticTexts["cloudBackup.recoveryOutcome"]
-        scrollIntoView(outcome, in: settingsScroll)
-        XCTAssertTrue(outcome.isHittable)
+        let outcome = identifiedElement("cloudBackup.recoveryOutcome", in: app)
+        XCTAssertTrue(waitForHittable(outcome, in: settingsScroll))
+        XCTAssertTrue(outcome.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["cloudBackup.close"].waitForExistence(timeout: 5))
     }
 
@@ -518,9 +513,8 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["cloudBackup.accountStatus"].exists)
         check.tap()
         let accountStatus = app.staticTexts["cloudBackup.accountStatus"]
+        XCTAssertTrue(waitForHittable(accountStatus, in: settingsScroll))
         XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
-        scrollIntoView(accountStatus, in: settingsScroll)
-        XCTAssertTrue(accountStatus.isHittable)
     }
 
     private func launchIsolatedApp() -> XCUIApplication {
@@ -617,18 +611,44 @@ final class RoomScanStudioUITests: XCTestCase {
         in scrollView: XCUIElement,
         direction: ScrollDirection = .forward
     ) {
-        for _ in 0..<6 where !element.isHittable {
+        for _ in 0..<12 where !element.isHittable {
             swipe(scrollView, direction: direction)
         }
-        let fallbackDirection: ScrollDirection
-        switch direction {
-        case .forward:
-            fallbackDirection = .backward
-        case .backward:
-            fallbackDirection = .forward
-        }
+        let fallbackDirection = opposite(direction)
         for _ in 0..<12 where !element.isHittable {
             swipe(scrollView, direction: fallbackDirection)
+        }
+    }
+
+    private func waitForHittable(
+        _ element: XCUIElement,
+        in scrollView: XCUIElement,
+        direction: ScrollDirection = .forward,
+        timeout: TimeInterval = 15
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var scanDirection = direction
+        while Date() < deadline {
+            for _ in 0..<8 {
+                if element.isHittable {
+                    return true
+                }
+                swipe(scrollView, direction: scanDirection)
+                if Date() >= deadline {
+                    break
+                }
+            }
+            scanDirection = opposite(scanDirection)
+        }
+        return element.isHittable
+    }
+
+    private func opposite(_ direction: ScrollDirection) -> ScrollDirection {
+        switch direction {
+        case .forward:
+            return .backward
+        case .backward:
+            return .forward
         }
     }
 

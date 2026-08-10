@@ -163,6 +163,12 @@ struct RoomCloudBackupSettingsView: View {
                     .foregroundStyle(AppPalette.mutedInk)
                     .accessibilityIdentifier("cloudBackup.accountStatus")
             }
+            if let listStatusMessage = coordinator.listStatusMessage {
+                Text(listStatusMessage)
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.mutedInk)
+                    .accessibilityIdentifier("cloudBackup.listStatus")
+            }
             if let projectID, let expectedHeadRevisionID {
                 Button("Back up this full project") {
                     Task {
