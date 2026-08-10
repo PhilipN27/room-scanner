@@ -100,16 +100,18 @@ final class RoomScanStudioUITests: XCTestCase {
         app.buttons["detail.unarchive"].tap()
         XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 5))
         app.buttons["detail.delete"].tap()
-        XCTAssertTrue(app.buttons["delete.confirm"].waitForExistence(timeout: 2))
-        app.buttons["delete.confirm"].tap()
+        let deleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
+        XCTAssertTrue(deleteConfirmation.waitForExistence(timeout: 2))
+        deleteConfirmation.tap()
         XCTAssertTrue(app.buttons["library.showActive"].waitForExistence(timeout: 2))
         app.buttons["library.showActive"].tap()
         XCTAssertTrue(app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 2))
 
         app.buttons["library.project.ui-project-002"].tap()
         app.buttons["detail.delete"].tap()
-        XCTAssertTrue(app.buttons["delete.confirm"].waitForExistence(timeout: 2))
-        app.buttons["delete.confirm"].tap()
+        let duplicateDeleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
+        XCTAssertTrue(duplicateDeleteConfirmation.waitForExistence(timeout: 2))
+        duplicateDeleteConfirmation.tap()
         XCTAssertTrue(app.staticTexts["library.empty"].waitForExistence(timeout: 2))
     }
 
@@ -118,13 +120,19 @@ final class RoomScanStudioUITests: XCTestCase {
         saveMockRoom(in: app)
 
         app.buttons["library.project.ui-project-001"].tap()
-        app.buttons["revision.revision-001"].tap()
+        let revisionOne = app.buttons["revision.revision-001"]
+        scrollIntoView(revisionOne, in: app)
+        XCTAssertTrue(revisionOne.isHittable)
+        revisionOne.tap()
         XCTAssertTrue(app.staticTexts["revision.inspect.revision-001"].waitForExistence(timeout: 2))
         app.buttons["revision.restore.revision-001"].tap()
         let headRevision = app.staticTexts["detail.headRevision"]
-        XCTAssertTrue(headRevision.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["revision.revision-002"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel(headRevision, equals: "revision-002", timeout: 5))
         XCTAssertEqual(headRevision.label, "revision-002")
+        let revisionTwo = app.buttons["revision.revision-002"]
+        scrollIntoView(revisionTwo, in: app)
+        XCTAssertTrue(app.buttons["revision.revision-002"].waitForExistence(timeout: 5))
+        XCTAssertTrue(revisionTwo.isHittable)
     }
 
     func testProductionRescanPathIsExplicitlyUnavailable() {
@@ -155,14 +163,22 @@ final class RoomScanStudioUITests: XCTestCase {
         app.buttons["rescan.accept"].tap()
         XCTAssertTrue(app.staticTexts["rescan.accepted"].waitForExistence(timeout: 5))
         app.buttons["rescan.done"].tap()
-        XCTAssertTrue(app.buttons["revision.revision-002"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["detail.headRevision"].label, "revision-002")
+        let headRevision = app.staticTexts["detail.headRevision"]
+        XCTAssertTrue(waitForLabel(headRevision, equals: "revision-002", timeout: 5))
+        let revisionTwo = app.buttons["revision.revision-002"]
+        scrollIntoView(revisionTwo, in: app)
+        XCTAssertTrue(revisionTwo.isHittable)
 
-        app.buttons["revision.revision-001"].tap()
+        let revisionOne = app.buttons["revision.revision-001"]
+        scrollIntoView(revisionOne, in: app)
+        XCTAssertTrue(revisionOne.isHittable)
+        revisionOne.tap()
         XCTAssertTrue(app.buttons["revision.restore.revision-001"].waitForExistence(timeout: 5))
         app.buttons["revision.restore.revision-001"].tap()
-        XCTAssertTrue(app.buttons["revision.revision-003"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["detail.headRevision"].label, "revision-003")
+        XCTAssertTrue(waitForLabel(headRevision, equals: "revision-003", timeout: 5))
+        let revisionThree = app.buttons["revision.revision-003"]
+        scrollIntoView(revisionThree, in: app, direction: .backward)
+        XCTAssertTrue(revisionThree.isHittable)
     }
 
     func testFixtureViewerShowsNonARCameraAndVisibilityControls() {
@@ -376,11 +392,25 @@ final class RoomScanStudioUITests: XCTestCase {
         let app = launchIsolatedApp()
         XCTAssertTrue(app.buttons["home.cloudBackupSettings"].waitForExistence(timeout: 5))
         app.buttons["home.cloudBackupSettings"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["cloudBackup.settings"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.switches["cloudBackup.enable"].waitForExistence(timeout: 5))
-        app.switches["cloudBackup.enable"].tap()
-        app.buttons["cloudBackup.check"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["cloudBackup.error"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))
+        let settingsScroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
+        let enable = app.switches["cloudBackup.enable"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 5))
+        scrollIntoView(enable, in: settingsScroll)
+        XCTAssertTrue(enable.isHittable)
+        enable.tap()
+        XCTAssertFalse(app.staticTexts["cloudBackup.accountStatus"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["cloudBackup.error"].exists)
+        let check = app.buttons["cloudBackup.check"]
+        XCTAssertTrue(check.waitForExistence(timeout: 5))
+        scrollIntoView(check, in: settingsScroll)
+        XCTAssertTrue(check.isHittable)
+        check.tap()
+        let error = app.descendants(matching: .any)["cloudBackup.error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        scrollIntoView(error, in: settingsScroll)
+        XCTAssertTrue(error.isHittable)
         // No account/list/backup screen is auto-triggered merely by opening or
         // enabling the local setting; the error is the explicit Check action.
     }
@@ -390,10 +420,13 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home.cloudBackupSettings"].waitForExistence(timeout: 5))
         app.buttons["home.cloudBackupSettings"].tap()
 
-        XCTAssertTrue(
-            app.descendants(matching: .any)["settings.privacyPolicyNotConfigured"]
-                .waitForExistence(timeout: 5)
-        )
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))
+        let settingsScroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
+        let notConfigured = app.descendants(matching: .any)["settings.privacyPolicyNotConfigured"]
+        XCTAssertTrue(notConfigured.waitForExistence(timeout: 5))
+        scrollIntoView(notConfigured, in: settingsScroll)
+        XCTAssertTrue(notConfigured.isHittable)
         XCTAssertFalse(app.links["settings.privacyPolicyLink"].exists)
     }
 
@@ -401,28 +434,69 @@ final class RoomScanStudioUITests: XCTestCase {
         let app = launchFakeCloudBackupApp()
         saveMockRoom(in: app)
         app.buttons["library.project.ui-project-001"].tap()
-        XCTAssertTrue(app.buttons["detail.backup"].waitForExistence(timeout: 5))
-        app.buttons["detail.backup"].tap()
-        XCTAssertTrue(app.buttons["cloudBackup.backup"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.check"].tap()
-        XCTAssertTrue(app.staticTexts["cloudBackup.accountStatus"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.backup"].tap()
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 5))
+        let detailBackup = app.buttons["detail.backup"]
+        XCTAssertTrue(detailBackup.waitForExistence(timeout: 5))
+        scrollIntoView(detailBackup, in: app)
+        XCTAssertTrue(detailBackup.isHittable)
+        detailBackup.tap()
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))
+        let settingsScroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
+        let check = app.buttons["cloudBackup.check"]
+        XCTAssertTrue(check.waitForExistence(timeout: 5))
+        scrollIntoView(check, in: settingsScroll)
+        XCTAssertTrue(check.isHittable)
+        XCTAssertFalse(app.staticTexts["cloudBackup.accountStatus"].exists)
+        check.tap()
+        let accountStatus = app.staticTexts["cloudBackup.accountStatus"]
+        XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
+        scrollIntoView(accountStatus, in: settingsScroll)
+        XCTAssertTrue(accountStatus.isHittable)
+        let list = app.buttons["cloudBackup.list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        scrollIntoView(list, in: settingsScroll, direction: .backward)
+        XCTAssertTrue(list.isHittable)
+        list.tap()
+        let backup = app.buttons["cloudBackup.backup"]
+        XCTAssertTrue(backup.waitForExistence(timeout: 5))
+        scrollIntoView(backup, in: settingsScroll)
+        XCTAssertTrue(backup.isHittable)
+        backup.tap()
         XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.list"].tap()
-        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.prepare"].tap()
-        XCTAssertTrue(app.buttons["cloudBackup.recoverCopy"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.recoverCopy"].tap()
+        let prepare = app.buttons["cloudBackup.prepare"]
+        scrollIntoView(prepare, in: settingsScroll)
+        XCTAssertTrue(prepare.isHittable)
+        prepare.tap()
+        let recoverCopy = app.buttons["cloudBackup.recoverCopy"]
+        XCTAssertTrue(recoverCopy.waitForExistence(timeout: 5))
+        scrollIntoView(recoverCopy, in: settingsScroll)
+        XCTAssertTrue(recoverCopy.isHittable)
+        recoverCopy.tap()
         XCTAssertTrue(app.staticTexts["cloudBackup.recoveryOutcome"].waitForExistence(timeout: 5))
+        let outcome = app.staticTexts["cloudBackup.recoveryOutcome"]
+        scrollIntoView(outcome, in: settingsScroll)
+        XCTAssertTrue(outcome.isHittable)
         XCTAssertTrue(app.buttons["cloudBackup.close"].waitForExistence(timeout: 5))
     }
 
     func testFakeCloudAccountUnavailableIsVisibleOnlyAfterExplicitCheck() {
         let app = launchFakeCloudBackupApp(extraArguments: ["--fake-cloud-account-unavailable"])
+        XCTAssertTrue(app.buttons["home.cloudBackupSettings"].waitForExistence(timeout: 5))
         app.buttons["home.cloudBackupSettings"].tap()
-        XCTAssertTrue(app.buttons["cloudBackup.check"].waitForExistence(timeout: 5))
-        app.buttons["cloudBackup.check"].tap()
-        XCTAssertTrue(app.staticTexts["cloudBackup.accountStatus"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))
+        let settingsScroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
+        let check = app.buttons["cloudBackup.check"]
+        XCTAssertTrue(check.waitForExistence(timeout: 5))
+        scrollIntoView(check, in: settingsScroll)
+        XCTAssertTrue(check.isHittable)
+        XCTAssertFalse(app.staticTexts["cloudBackup.accountStatus"].exists)
+        check.tap()
+        let accountStatus = app.staticTexts["cloudBackup.accountStatus"]
+        XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
+        scrollIntoView(accountStatus, in: settingsScroll)
+        XCTAssertTrue(accountStatus.isHittable)
     }
 
     private func launchIsolatedApp() -> XCUIApplication {
@@ -501,10 +575,42 @@ final class RoomScanStudioUITests: XCTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
-    private func scrollIntoView(_ element: XCUIElement, in app: XCUIApplication) {
+    private enum ScrollDirection {
+        case forward
+        case backward
+    }
+
+    private func scrollIntoView(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        direction: ScrollDirection = .forward
+    ) {
+        scrollIntoView(element, in: app.scrollViews.firstMatch, direction: direction)
+    }
+
+    private func scrollIntoView(
+        _ element: XCUIElement,
+        in scrollView: XCUIElement,
+        direction: ScrollDirection = .forward
+    ) {
         for _ in 0..<6 where !element.isHittable {
-            app.scrollViews.firstMatch.swipeUp()
+            switch direction {
+            case .forward:
+                scrollView.swipeUp()
+            case .backward:
+                scrollView.swipeDown()
+            }
         }
+    }
+
+    private func waitForLabel(
+        _ element: XCUIElement,
+        equals expectedLabel: String,
+        timeout: TimeInterval
+    ) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", expectedLabel)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func advanceSimulatedCaptureToProcessing(in app: XCUIApplication) {

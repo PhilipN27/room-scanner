@@ -72,7 +72,7 @@ final class RoomViewerEditorAppTests: XCTestCase {
 
     func testFixturePhotoMarkerAssetStagesOnlyAfterExplicitSave() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "RoomViewerFixturePhoto-(UUID().uuidString)",
+            "RoomViewerFixturePhoto-\(UUID().uuidString)",
             isDirectory: true
         )
         defer { try? FileManager.default.removeItem(at: root) }

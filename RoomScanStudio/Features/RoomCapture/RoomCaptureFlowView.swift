@@ -134,6 +134,7 @@ struct RoomCaptureFlowView: View {
                 Text("Camera access is ready. Optional GPS can still be declined; manual location remains editable in review.")
                     .foregroundStyle(AppPalette.primaryOnDark)
                 actionRow(showStart: true)
+                gpsReadout
             }
 
         case .starting:

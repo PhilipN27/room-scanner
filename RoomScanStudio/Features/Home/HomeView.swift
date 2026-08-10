@@ -6,11 +6,11 @@ struct HomeView: View {
         case newRoomScan
         case liveCapture
         case mockReview
-        case cloudBackup
     }
 
     @ObservedObject var environment: AppEnvironment
     @State private var path: [Route] = []
+    @State private var showingCloudBackup = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -69,17 +69,12 @@ struct HomeView: View {
                         onDiscard: { path.removeAll() },
                         onOpenLibrary: { path = [.existingRooms] }
                     )
-                case .cloudBackup:
-                    RoomCloudBackupSettingsView(
-                        coordinator: environment.cloudBackupCoordinator,
-                        privacyPolicyURL: environment.privacyPolicyURL
-                    )
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        path.append(.cloudBackup)
+                        showingCloudBackup = true
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -90,6 +85,12 @@ struct HomeView: View {
             }
         }
         .tint(AppPalette.blueprint)
+        .sheet(isPresented: $showingCloudBackup) {
+            RoomCloudBackupSettingsView(
+                coordinator: environment.cloudBackupCoordinator,
+                privacyPolicyURL: environment.privacyPolicyURL
+            )
+        }
     }
 
     private var header: some View {

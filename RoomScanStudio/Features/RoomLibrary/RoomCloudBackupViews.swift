@@ -59,6 +59,7 @@ struct RoomCloudBackupSettingsView: View {
                 .frame(maxWidth: 760, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
+            .accessibilityIdentifier("cloudBackup.scroll")
             .background(AppPalette.paper.ignoresSafeArea())
             .navigationTitle("Settings & privacy")
             .toolbar {
