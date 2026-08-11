@@ -727,27 +727,92 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     /// shared session with RoomPlan's configuration plus mesh reconstruction
     /// keeps the scan working while exposing the LiDAR mesh the photoreal
     /// capture bundle harvests. The session configuration may not be
-    /// readable immediately after run(), so this retries briefly.
+    /// readable immediately after run(), so phase 1 retries briefly.
+    ///
+    /// Device-observed 2026-08-10 (second gate): inserting sceneDepth frame
+    /// semantics in the SAME re-run that enables mesh reconstruction produced
+    /// per-keyframe depth but zero ARMeshAnchors for the whole scan. Phase 2
+    /// therefore waits until mesh anchors actually exist before adding
+    /// sceneDepth in a separate re-run, and phase 3 logs coarse status
+    /// transitions so a reconstruction loss is visible in the device log.
     private func beginSceneReconstructionEnablement(
         for attempt: RoomCaptureAttemptToken
     ) {
         guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
             return
         }
+        let wantsSceneDepth = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
         Task { @MainActor [weak self] in
+            // Phase 1: enable mesh reconstruction exactly as device-proven.
+            var meshRequested = false
             for _ in 0..<10 {
                 guard let self, self.activeAttempt == attempt, !self.didIssueFinalStop else {
                     return
                 }
                 if let configuration = self.arSession.configuration as? ARWorldTrackingConfiguration {
-                    guard configuration.sceneReconstruction != .mesh else { return }
-                    configuration.sceneReconstruction = .mesh
-                    self.arSession.run(configuration)
-                    return
+                    if configuration.sceneReconstruction != .mesh {
+                        configuration.sceneReconstruction = .mesh
+                        self.arSession.run(configuration)
+                    }
+                    meshRequested = true
+                    break
                 }
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
-            print("RoomScanStudio capture bundle: session configuration never became readable; scene reconstruction stays off.")
+            guard meshRequested else {
+                print("RoomScanStudio capture bundle: session configuration never became readable; scene reconstruction stays off.")
+                return
+            }
+
+            // Phase 2: only after reconstruction demonstrably produces
+            // anchors is sceneDepth added, in its own re-run.
+            if wantsSceneDepth {
+                var sawAnchors = false
+                for _ in 0..<60 {
+                    guard let self, self.activeAttempt == attempt, !self.didIssueFinalStop else {
+                        return
+                    }
+                    let anchorCount = (self.arSession.currentFrame?.anchors ?? [])
+                        .filter { $0 is ARMeshAnchor }.count
+                    if anchorCount > 0 {
+                        sawAnchors = true
+                        print("RoomScanStudio capture bundle: enabling sceneDepth after \(anchorCount) mesh anchors appeared.")
+                        if let configuration = self.arSession.configuration as? ARWorldTrackingConfiguration,
+                           !configuration.frameSemantics.contains(.sceneDepth) {
+                            configuration.frameSemantics.insert(.sceneDepth)
+                            self.arSession.run(configuration)
+                        }
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+                if !sawAnchors {
+                    print("RoomScanStudio capture bundle: mesh anchors never appeared; sceneDepth stays off to protect reconstruction.")
+                }
+            }
+
+            // Phase 3: coarse status telemetry, printed only on transitions.
+            // Device-observed 2026-08-10: after the phase-2 re-run this
+            // reported mesh=off while anchors kept growing (8 -> 28) and the
+            // final harvest was healthy, so the configuration readback is not
+            // a reliable witness for reconstruction; trust the anchors field.
+            var lastStatus = ""
+            while !Task.isCancelled {
+                guard let self, self.activeAttempt == attempt, !self.didIssueFinalStop else {
+                    return
+                }
+                let configuration = self.arSession.configuration as? ARWorldTrackingConfiguration
+                let meshOn = configuration?.sceneReconstruction == .mesh
+                let depthOn = configuration?.frameSemantics.contains(.sceneDepth) ?? false
+                let hasAnchors = (self.arSession.currentFrame?.anchors ?? [])
+                    .contains(where: { $0 is ARMeshAnchor })
+                let status = "mesh=\(meshOn ? "on" : "off") depth=\(depthOn ? "on" : "off") anchors=\(hasAnchors ? "present" : "absent")"
+                if status != lastStatus {
+                    print("RoomScanStudio capture bundle status: \(status)")
+                    lastStatus = status
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
         }
     }
 

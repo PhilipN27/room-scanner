@@ -12,6 +12,19 @@ import UIKit
 
 // MARK: - Bundle schema
 
+/// Schema version 2: per-keyframe LiDAR depth. The payload files hold
+/// tightly packed rows (no stride padding), zlib-compressed; depth is
+/// float32 meters, confidence is uint8 ARConfidenceLevel raw values.
+/// The whole block is optional so version-1 bundles keep decoding.
+struct RoomCaptureBundleFrameDepth: Codable, Equatable {
+    var fileName: String
+    var confidenceFileName: String?
+    var width: Int
+    var height: Int
+    var compression: String
+    var pixelFormat: String
+}
+
 struct RoomCaptureBundleFrame: Codable, Equatable {
     var fileName: String
     /// ARKit session timestamp (seconds).
@@ -23,9 +36,14 @@ struct RoomCaptureBundleFrame: Codable, Equatable {
     var imageWidth: Int
     var imageHeight: Int
     var exposureDuration: Double
+    /// Absent for schema-version-1 bundles and for keyframes whose depth
+    /// map was unavailable or failed to encode (recording is best-effort).
+    var depth: RoomCaptureBundleFrameDepth?
 }
 
 struct RoomCaptureBundleManifest: Codable, Equatable {
+    static let currentSchemaVersion = 2
+
     var schemaVersion: Int
     var createdAt: Date
     /// Images are stored in raw sensor orientation; the recorded transforms
@@ -169,11 +187,55 @@ enum RoomCaptureBundlePLYWriter {
     }
 }
 
+// MARK: - Depth map packing (pure, unit-testable)
+
+/// Bundle depth/confidence payload encoding: CVPixelBuffer rows are packed
+/// tightly (dropping stride padding) and zlib-compressed. Kept free of ARKit
+/// types so the byte layout is provable in simulator tests.
+enum RoomCaptureBundleDepthCodec {
+    static let compressionName = "zlib"
+    static let depthPixelFormatName = "float32"
+    static let confidencePixelFormatName = "uint8"
+
+    static func packTightRows(
+        base: UnsafeRawPointer,
+        bytesPerRow: Int,
+        width: Int,
+        height: Int,
+        bytesPerPixel: Int
+    ) -> Data {
+        let tightRowBytes = width * bytesPerPixel
+        var data = Data(capacity: tightRowBytes * height)
+        for row in 0..<height {
+            data.append(
+                Data(bytes: base.advanced(by: row * bytesPerRow), count: tightRowBytes)
+            )
+        }
+        return data
+    }
+
+    static func compress(_ data: Data) -> Data? {
+        try? (data as NSData).compressed(using: .zlib) as Data
+    }
+
+    static func decompress(_ data: Data, expectedByteCount: Int) -> Data? {
+        guard
+            let decompressed = try? (data as NSData).decompressed(using: .zlib) as Data,
+            decompressed.count == expectedByteCount
+        else {
+            return nil
+        }
+        return decompressed
+    }
+}
+
 // MARK: - Recorder
 
 /// Values crossing from the main-actor poll into the background JPEG encoder.
 private struct RoomCaptureBundleFrameCapture: @unchecked Sendable {
     let pixelBuffer: CVPixelBuffer
+    let depthPixelBuffer: CVPixelBuffer?
+    let confidencePixelBuffer: CVPixelBuffer?
     let fileName: String
     let timestamp: Double
     let cameraTransform: [Double]
@@ -201,6 +263,10 @@ final class RoomCaptureBundleRecorder {
     private var frameCounter = 0
     private var notes: [String] = []
     private var didFinish = false
+    /// Latest non-empty mesh-anchor set seen while polling. Finalize falls
+    /// back to it if the session loses its anchors before the scan stops
+    /// (observed on device when reconfiguring the shared session mid-scan).
+    private var latestMeshAnchors: [ARMeshAnchor] = []
 
     init(arSession: ARSession, parentDirectoryURL: URL) {
         self.arSession = arSession
@@ -245,7 +311,7 @@ final class RoomCaptureBundleRecorder {
 
         let meshCounts = writeSceneMesh()
         let manifest = RoomCaptureBundleManifest(
-            schemaVersion: 1,
+            schemaVersion: RoomCaptureBundleManifest.currentSchemaVersion,
             createdAt: Date(),
             frames: frames,
             meshAnchorCount: meshCounts.anchors,
@@ -264,8 +330,10 @@ final class RoomCaptureBundleRecorder {
         } catch {
             print("RoomScanStudio capture bundle: manifest write failed: \(error)")
         }
+        let depthFrameCount = frames.filter { $0.depth != nil }.count
         print(
-            "RoomScanStudio capture bundle: \(frames.count) keyframes, "
+            "RoomScanStudio capture bundle: \(frames.count) keyframes "
+                + "(\(depthFrameCount) with LiDAR depth), "
                 + "\(meshCounts.anchors) mesh anchors, "
                 + "\(meshCounts.vertices) vertices, \(meshCounts.faces) faces."
         )
@@ -288,8 +356,13 @@ final class RoomCaptureBundleRecorder {
     // MARK: Keyframes
 
     private func captureTickIfReady() {
-        guard !didFinish, encodeTask == nil else { return }
+        guard !didFinish else { return }
         guard let frame = arSession.currentFrame else { return }
+        let meshAnchors = frame.anchors.compactMap { $0 as? ARMeshAnchor }
+        if !meshAnchors.isEmpty {
+            latestMeshAnchors = meshAnchors
+        }
+        guard encodeTask == nil else { return }
         guard frame.timestamp > lastCapturedTimestamp else { return }
         guard case .normal = frame.camera.trackingState else { return }
         lastCapturedTimestamp = frame.timestamp
@@ -297,6 +370,8 @@ final class RoomCaptureBundleRecorder {
         frameCounter += 1
         let capture = RoomCaptureBundleFrameCapture(
             pixelBuffer: frame.capturedImage,
+            depthPixelBuffer: frame.sceneDepth?.depthMap,
+            confidencePixelBuffer: frame.sceneDepth?.confidenceMap,
             fileName: String(format: "frame-%05d.jpg", frameCounter),
             timestamp: frame.timestamp,
             cameraTransform: Self.columnMajor(frame.camera.transform),
@@ -347,15 +422,97 @@ final class RoomCaptureBundleRecorder {
             intrinsics: capture.intrinsics,
             imageWidth: capture.imageWidth,
             imageHeight: capture.imageHeight,
-            exposureDuration: capture.exposureDuration
+            exposureDuration: capture.exposureDuration,
+            depth: encodeAndWriteDepth(capture, into: framesURL)
         )
+    }
+
+    /// LiDAR depth is a per-frame bonus on top of the keyframe JPEG: any
+    /// failure here returns nil and the keyframe stays valid without depth.
+    private nonisolated static func encodeAndWriteDepth(
+        _ capture: RoomCaptureBundleFrameCapture,
+        into framesURL: URL
+    ) -> RoomCaptureBundleFrameDepth? {
+        guard let depthBuffer = capture.depthPixelBuffer else { return nil }
+        guard
+            CVPixelBufferGetPixelFormatType(depthBuffer) == kCVPixelFormatType_DepthFloat32,
+            let depthPayload = packedCompressedPayload(from: depthBuffer, bytesPerPixel: 4)
+        else {
+            return nil
+        }
+        let baseName = (capture.fileName as NSString).deletingPathExtension
+        let depthFileName = "\(baseName)-depth.bin"
+        do {
+            try depthPayload.data.write(
+                to: framesURL.appendingPathComponent(depthFileName),
+                options: .atomic
+            )
+        } catch {
+            return nil
+        }
+
+        // Confidence is best-effort on top of best-effort: depth without a
+        // confidence map is still worth keeping.
+        var confidenceFileName: String?
+        if let confidenceBuffer = capture.confidencePixelBuffer,
+           CVPixelBufferGetPixelFormatType(confidenceBuffer) == kCVPixelFormatType_OneComponent8,
+           CVPixelBufferGetWidth(confidenceBuffer) == depthPayload.width,
+           CVPixelBufferGetHeight(confidenceBuffer) == depthPayload.height,
+           let confidencePayload = packedCompressedPayload(from: confidenceBuffer, bytesPerPixel: 1) {
+            let candidate = "\(baseName)-confidence.bin"
+            if (try? confidencePayload.data.write(
+                to: framesURL.appendingPathComponent(candidate),
+                options: .atomic
+            )) != nil {
+                confidenceFileName = candidate
+            }
+        }
+
+        return RoomCaptureBundleFrameDepth(
+            fileName: depthFileName,
+            confidenceFileName: confidenceFileName,
+            width: depthPayload.width,
+            height: depthPayload.height,
+            compression: RoomCaptureBundleDepthCodec.compressionName,
+            pixelFormat: RoomCaptureBundleDepthCodec.depthPixelFormatName
+        )
+    }
+
+    private nonisolated static func packedCompressedPayload(
+        from pixelBuffer: CVPixelBuffer,
+        bytesPerPixel: Int
+    ) -> (data: Data, width: Int, height: Int)? {
+        guard CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else {
+            return nil
+        }
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        guard width > 0, height > 0 else { return nil }
+        let packed = RoomCaptureBundleDepthCodec.packTightRows(
+            base: base,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
+            width: width,
+            height: height,
+            bytesPerPixel: bytesPerPixel
+        )
+        guard let compressed = RoomCaptureBundleDepthCodec.compress(packed) else { return nil }
+        return (compressed, width, height)
     }
 
     // MARK: Scene mesh
 
     private func writeSceneMesh() -> (anchors: Int, vertices: Int, faces: Int) {
-        let meshAnchors = (arSession.currentFrame?.anchors ?? [])
+        var meshAnchors = (arSession.currentFrame?.anchors ?? [])
             .compactMap { $0 as? ARMeshAnchor }
+        if meshAnchors.isEmpty, !latestMeshAnchors.isEmpty {
+            meshAnchors = latestMeshAnchors
+            notes.append(
+                "Scene mesh harvested from the latest mid-scan anchor snapshot; "
+                    + "the session had no ARMeshAnchors at stop."
+            )
+        }
         guard !meshAnchors.isEmpty else {
             notes.append(
                 "No ARMeshAnchors were available at scan end; the RoomPlan session "
