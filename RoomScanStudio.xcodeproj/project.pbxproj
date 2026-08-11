@@ -62,6 +62,8 @@
 		7A0000000000000000000007 /* RoomMeshViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000008 /* RoomMeshViewer.swift */; };
 		7A0000000000000000000009 /* RoomMeshViewerAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000A /* RoomMeshViewerAppTests.swift */; };
 		7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */; };
+		7A000000000000000000000D /* RoomCaptureBundleTrainingExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */; };
+		7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */; };
 		DCBA00000000000000000003 /* RoomEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000003 /* RoomEditorView.swift */; };
 		DCBA00000000000000000004 /* RoomViewerEditorAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */; };
 		E40000000000000000000001 /* RoomCaptureCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */; };
@@ -128,6 +130,8 @@
 		7A0000000000000000000008 /* RoomMeshViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshViewer.swift; sourceTree = "<group>"; };
 		7A000000000000000000000A /* RoomMeshViewerAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshViewerAppTests.swift; sourceTree = "<group>"; };
 		7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleDepthTests.swift; sourceTree = "<group>"; };
+		7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleTrainingExport.swift; sourceTree = "<group>"; };
+		7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleTrainingExportTests.swift; sourceTree = "<group>"; };
 		ABCD00000000000000000003 /* RoomEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomEditorView.swift; sourceTree = "<group>"; };
 		ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomViewerEditorAppTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
@@ -315,6 +319,7 @@
 				F61000000000000000000006 /* RoomCloudBackupAppTests.swift */,
 				7A000000000000000000000A /* RoomMeshViewerAppTests.swift */,
 				7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */,
+				7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -431,6 +436,7 @@
 				F20000000000000000000001 /* AppleCaptureDependencies.swift */,
 				F20000000000000000000002 /* AppleRoomCaptureDriver.swift */,
 				7A0000000000000000000006 /* RoomCaptureBundleRecorder.swift */,
+				7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -630,6 +636,7 @@
 				F40000000000000000000001 /* AppleCaptureDependencies.swift in Sources */,
 				F40000000000000000000002 /* AppleRoomCaptureDriver.swift in Sources */,
 				7A0000000000000000000005 /* RoomCaptureBundleRecorder.swift in Sources */,
+				7A000000000000000000000D /* RoomCaptureBundleTrainingExport.swift in Sources */,
 				DCBA00000000000000000001 /* RoomViewerRealityView.swift in Sources */,
 				DCBA00000000000000000002 /* RoomViewerView.swift in Sources */,
 				7A0000000000000000000003 /* RoomSplatViewer.swift in Sources */,
@@ -659,6 +666,7 @@
 				F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */,
 				7A0000000000000000000009 /* RoomMeshViewerAppTests.swift in Sources */,
 				7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */,
+				7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

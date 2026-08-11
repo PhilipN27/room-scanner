@@ -79,10 +79,23 @@ whole walkthrough experience using a splat produced by any external tool
    ARMeshAnchors, but re-running the shared session with RoomPlan's config +
    sceneReconstruction=.mesh works (real scan: 37 keyframes, 23 anchors,
    82k vertices, 148k faces) without disturbing the scan.
-3. Phase A slice 2: per-keyframe LiDAR depth + confidence; colored-mesh
-   preview from keyframe projection; show bundle status in room profile.
-4. Phase B1: export bundle + train on Mac/cloud GPU + import splat round-trip.
-5. Phase C1: colored-mesh fallback viewer + first-person collision from mesh.
+3. ✅ Phase A slice 2 + C1 viewer (2026-08-10): colored-mesh viewer renders
+   the bundle's scene mesh with keyframe-projected vertex colors (occlusion
+   tested, cached as scene-mesh-colored.ply) behind a "Colored mesh room"
+   profile button; per-keyframe LiDAR depth + confidence recorded
+   (manifest schema v2, zlib float32/uint8). Device gates PASSED: 107k
+   vertices 93% colored; 50/50 keyframes with depth AND healthy mesh —
+   but ONLY with two-phase enablement (mesh first, sceneDepth only after
+   anchors appear; same-run enablement kills reconstruction). Still open
+   from this slice: textual bundle status in profile; first-person
+   collision from mesh.
+4. ✅ Phase B1 export half (2026-08-10): "Export capture bundle" share-sheet
+   zip = bundle verbatim + nerfstudio transforms.json (OPENCV, per-frame
+   intrinsics, OpenGL c2w rows, ply_file_path seed = colored mesh) +
+   16-bit millimeter depth PNGs; format verified against nerfstudio data
+   conventions + OpenSplat nerfstudio.cpp. Device gate PASSED (204-file,
+   36.7 MB zip inspected on Mac). Still open: actually train a splat from
+   an exported bundle and import it (import path itself proven in C0).
 6. Phase B2: in-app cloud training (product decision: cost/hosting).
 7. Adopt RealityKit native splat rendering on iOS 27 SDK.
 

@@ -25,6 +25,10 @@ struct RoomDetailView: View {
     @State private var splatImportErrorMessage: String?
     @State private var showingMeshViewer = false
     @State private var hasBundleMesh = false
+    @State private var hasCaptureBundle = false
+    @State private var buildingBundleExport = false
+    @State private var bundleExportURL: URL?
+    @State private var bundleExportErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -53,6 +57,7 @@ struct RoomDetailView: View {
         .task(id: projectID) {
             splatURL = RoomSplatLibrary.splatURL(forProject: projectID)
             hasBundleMesh = RoomMeshBundleLoader.hasRenderableMesh(forProject: projectID)
+            hasCaptureBundle = RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID) != nil
             await reload()
         }
         .onChange(of: controller.summaries) { _ in
@@ -100,6 +105,22 @@ struct RoomDetailView: View {
                                 }
                             }
                         }
+                }
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { bundleExportURL != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        cleanUpBundleExport()
+                    }
+                }
+            )
+        ) {
+            if let bundleExportURL {
+                RoomExportShareSheet(archiveURL: bundleExportURL) { _ in
+                    cleanUpBundleExport()
                 }
             }
         }
@@ -369,12 +390,60 @@ struct RoomDetailView: View {
             .buttonStyle(.bordered)
             .accessibilityIdentifier("detail.export")
 
+            if hasCaptureBundle {
+                Button {
+                    Task { await buildBundleExport() }
+                } label: {
+                    if buildingBundleExport {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Preparing capture bundle...")
+                        }
+                    } else {
+                        Text("Export capture bundle")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(buildingBundleExport)
+                .accessibilityIdentifier("detail.exportBundle")
+
+                if let bundleExportErrorMessage {
+                    Label(bundleExportErrorMessage, systemImage: "exclamationmark.triangle")
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.amber)
+                        .accessibilityIdentifier("detail.exportBundleError")
+                }
+            }
+
             Button("Back up full project") {
                 showingCloudBackup = true
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("detail.backup")
         }
+    }
+
+    private func buildBundleExport() async {
+        guard !buildingBundleExport else { return }
+        buildingBundleExport = true
+        bundleExportErrorMessage = nil
+        let projectID = projectID
+        do {
+            let built = try await Task.detached(priority: .userInitiated) {
+                try await RoomCaptureBundleTrainingExport.buildExportZip(forProject: projectID)
+            }.value
+            bundleExportURL = built.url
+        } catch {
+            bundleExportErrorMessage = "The capture bundle could not be exported: \(error.localizedDescription)"
+        }
+        buildingBundleExport = false
+    }
+
+    private func cleanUpBundleExport() {
+        if let bundleExportURL {
+            try? FileManager.default.removeItem(at: bundleExportURL)
+        }
+        bundleExportURL = nil
     }
 
     private func reload() async {
