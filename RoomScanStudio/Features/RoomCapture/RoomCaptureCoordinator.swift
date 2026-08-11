@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RoomScanCore
+import UIKit
 
 /// Interprets the Foundation-only reducer for one UI-owned capture attempt.
 /// Every asynchronous effect is owned by this coordinator and tracked until it
@@ -70,6 +71,13 @@ final class RoomCaptureCoordinator: ObservableObject {
         driver.observationHandler = { [weak self] observation in
             self?.receiveDriverObservation(observation)
         }
+    }
+
+    /// The driver's live camera/scan surface for full-screen scanning, when
+    /// one exists. Deterministic drivers have none; the UI shows the semantic
+    /// canvas instead.
+    var liveCameraView: UIView? {
+        driver.liveCaptureView
     }
 
     var canStart: Bool {
@@ -288,6 +296,27 @@ final class RoomCaptureCoordinator: ObservableObject {
         }
     }
 
+    /// Moves the attempt's recorded photoreal capture bundle out of scratch
+    /// (which is about to be deleted) into the per-project bundle library.
+    /// Best-effort: a bundle failure never fails the save that just happened.
+    private func adoptCaptureBundleIfPresent(forProject projectID: String) {
+        guard let workspace else { return }
+        let bundleURL = workspace.directoryURL.appendingPathComponent(
+            RoomCaptureBundleRecorder.bundleSubdirectoryName,
+            isDirectory: true
+        )
+        var isDirectory: ObjCBool = false
+        guard
+            FileManager.default.fileExists(atPath: bundleURL.path, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        else { return }
+        do {
+            try RoomCaptureBundleLibrary.adoptBundle(at: bundleURL, forProject: projectID)
+        } catch {
+            print("RoomScanStudio capture bundle adoption failed: \(error)")
+        }
+    }
+
     private func launchCleanupRetry(for attempt: RoomCaptureAttemptToken) {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -420,8 +449,11 @@ final class RoomCaptureCoordinator: ObservableObject {
                 guard let commit = editedCommitForSaving(), isActive(attempt, phase: .saving) else {
                     throw RoomCaptureDriverError.noCapturedResult
                 }
-                _ = try await controller.commitInitialCapture(commit, decision: .save)
+                let savedSummary = try await controller.commitInitialCapture(commit, decision: .save)
                 guard isActive(attempt, phase: .saving) else { return }
+                if let savedSummary {
+                    adoptCaptureBundleIfPresent(forProject: savedSummary.projectID)
+                }
                 pendingSuccessfulSaveAttempt = attempt
                 if await cleanupWorkspace(for: attempt) {
                     finishCleanup(for: attempt)

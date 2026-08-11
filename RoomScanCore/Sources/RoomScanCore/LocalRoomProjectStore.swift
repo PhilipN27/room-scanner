@@ -3347,7 +3347,6 @@ public actor LocalRoomProjectStore {
                 )
             }
             let requiredPaths: [(RoomEvidenceArtifactKind, String)] = [
-                (.capturedRoomDataJSON, "evidence/roomplan/captured-room-data.json"),
                 (.capturedRoomJSON, "evidence/roomplan/captured-room.json"),
                 (.nativeUSDZ, "evidence/native/RoomScan.usdz"),
             ]
@@ -3361,6 +3360,25 @@ public actor LocalRoomProjectStore {
                         "RoomPlan evidence requires \(expectedPath)."
                     )
                 }
+            }
+            // Raw CapturedRoomData is archival-only and Apple's Codable
+            // implementation for it can refuse to serialize on device
+            // ("Invalid data"). It may therefore be explicitly unavailable
+            // with a reason; the reviewed capture record remains the
+            // processed CapturedRoom JSON, the USDZ model, and the semantic
+            // snapshot. The general artifact validation above already
+            // enforces the reason for non-present statuses.
+            guard
+                let rawDataArtifact = evidencePlan.artifacts.first(
+                    where: { $0.kind == .capturedRoomDataJSON }
+                ),
+                rawDataArtifact.status == .present
+                    ? rawDataArtifact.relativePath?.value == "evidence/roomplan/captured-room-data.json"
+                    : rawDataArtifact.status == .unavailable
+            else {
+                throw RoomProjectStoreError.invalidEvidencePlan(
+                    "RoomPlan raw capture data must be present at evidence/roomplan/captured-room-data.json or explicitly unavailable with a reason."
+                )
             }
         case .deterministicFixture:
             guard evidencePlan.artifacts.allSatisfy({ $0.status != .present }) else {

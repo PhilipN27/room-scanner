@@ -1,5 +1,6 @@
 import Foundation
 import RoomScanCore
+import UIKit
 
 /// A scratch directory owned by one app capture attempt. It is deliberately a
 /// sibling of, never a child of, the authoritative project-package root.
@@ -354,6 +355,11 @@ struct RoomCapturePreparedReview: Sendable, Equatable {
 protocol RoomCaptureDriving: AnyObject {
     var observationHandler: ((RoomCaptureDriverObservation) -> Void)? { get set }
 
+    /// The live camera/scan surface for full-screen presentation during a
+    /// scan, when the driver has one. Deterministic and inert drivers return
+    /// nil and the capture UI falls back to the semantic canvas.
+    var liveCaptureView: UIView? { get }
+
     func start(
         attempt: RoomCaptureAttemptToken,
         workspace: RoomCaptureScratchWorkspace
@@ -376,6 +382,10 @@ protocol RoomCaptureDriving: AnyObject {
     /// files. The coordinator also awaits its own tracked tasks before removal.
     func awaitScratchWriteBarrier(for attempt: RoomCaptureAttemptToken) async
     func cleanup(workspace: RoomCaptureScratchWorkspace) async throws
+}
+
+extension RoomCaptureDriving {
+    var liveCaptureView: UIView? { nil }
 }
 
 @MainActor

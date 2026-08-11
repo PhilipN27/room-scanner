@@ -90,6 +90,72 @@ final class LocalRoomProjectStoreCaptureTests: XCTestCase {
         }
     }
 
+    /// Device RoomPlan can refuse to serialize its raw CapturedRoomData
+    /// ("Invalid data"). Raw evidence may therefore be explicitly unavailable
+    /// with a reason, while a silent .notRequested skip remains rejected.
+    func testRoomPlanRawCapturedDataMayBeExplicitlyUnavailableButNotSilentlySkipped() async throws {
+        let root = temporaryURL(prefix: "RoomScanRawDataOmission")
+        let prepared = try makePreparedRoomPlanCommit()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: prepared.sourceDirectory)
+        }
+
+        var commit = prepared.commit
+        var plan = try XCTUnwrap(commit.evidence)
+        plan.artifacts = plan.artifacts.map { artifact in
+            guard artifact.kind == .capturedRoomDataJSON else { return artifact }
+            return RoomEvidenceArtifact(
+                kind: .capturedRoomDataJSON,
+                status: .unavailable,
+                relativePath: nil,
+                byteCount: nil,
+                mediaType: nil,
+                omissionReason: "RoomPlan's raw CapturedRoomData did not support serialization for this capture."
+            )
+        }
+        commit.evidence = plan
+        commit.assets.removeAll {
+            $0.destination.value == "evidence/roomplan/captured-room-data.json"
+        }
+
+        let store = makeStore(root: root)
+        let savedResult = try await store.commitInitialCapture(commit, decision: .save)
+        let saved = try XCTUnwrap(savedResult)
+        let package = try await store.load(projectID: saved.projectID)
+        let storedPlan = try XCTUnwrap(package.revisions.first?.manifest.captureEvidence)
+        let rawArtifact = try XCTUnwrap(
+            storedPlan.artifacts.first { $0.kind == .capturedRoomDataJSON }
+        )
+        XCTAssertEqual(rawArtifact.status, .unavailable)
+        XCTAssertFalse((rawArtifact.omissionReason ?? "").isEmpty)
+        XCTAssertEqual(storedPlan.artifacts.filter { $0.status == .present }.count, 2)
+
+        let notRequestedPrepared = try makePreparedRoomPlanCommit()
+        defer { try? FileManager.default.removeItem(at: notRequestedPrepared.sourceDirectory) }
+        var notRequestedCommit = notRequestedPrepared.commit
+        var notRequestedPlan = try XCTUnwrap(notRequestedCommit.evidence)
+        notRequestedPlan.artifacts = notRequestedPlan.artifacts.map { artifact in
+            guard artifact.kind == .capturedRoomDataJSON else { return artifact }
+            return RoomEvidenceArtifact(
+                kind: .capturedRoomDataJSON,
+                status: .notRequested,
+                relativePath: nil,
+                byteCount: nil,
+                mediaType: nil,
+                omissionReason: "Raw data was skipped without a device failure."
+            )
+        }
+        notRequestedCommit.evidence = notRequestedPlan
+        notRequestedCommit.assets.removeAll {
+            $0.destination.value == "evidence/roomplan/captured-room-data.json"
+        }
+        try await assertCommitRejected(
+            notRequestedCommit,
+            label: "not-requested raw captured data"
+        )
+    }
+
     func testDeterministicFixtureEvidenceUsesExplicitOmissionsWithoutBogusPaths() async throws {
         let root = temporaryURL(prefix: "RoomScanFixtureEvidence")
         defer { try? FileManager.default.removeItem(at: root) }

@@ -1,9 +1,12 @@
 import SwiftUI
 import RoomScanCore
 
-/// A custom, deliberately black scanning surface. It displays normalized
-/// semantic geometry from the active driver rather than a framework capture
-/// view, so physical-device validation remains an explicit Phase-2B gate.
+/// During an active scan this is a full-screen live camera surface: the
+/// driver's RoomCaptureView renders the camera feed with RoomPlan's live
+/// model overlay, and controls float above it like the system camera.
+/// Deterministic drivers have no camera view, so the semantic canvas remains
+/// the scan surface on simulators and in UI tests. All other phases keep the
+/// instrument-card layout.
 struct RoomCaptureFlowView: View {
     @StateObject private var coordinator: RoomCaptureCoordinator
     let sceneMeshAvailable: Bool
@@ -24,40 +27,46 @@ struct RoomCaptureFlowView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                if sceneMeshAvailable {
-                    Label(
-                        "Optional scene mesh is available, but raw mesh is not collected in this version. RoomPlan evidence remains the reviewed capture record.",
-                        systemImage: "cube.transparent"
-                    )
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.amberOnDark)
-                    .accessibilityIdentifier("capture.meshV1Omitted")
-                } else {
-                    Label(
-                        "Optional scene mesh is unavailable. This does not block RoomPlan capture; raw-mesh evidence is omitted.",
-                        systemImage: "cube.transparent"
-                    )
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.amberOnDark)
-                    .accessibilityIdentifier("capture.meshUnavailable")
+        Group {
+            if isImmersiveScanPhase {
+                immersiveScanLayout
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header
+                        if sceneMeshAvailable {
+                            Label(
+                                "Optional scene mesh is available, but raw mesh is not collected in this version. RoomPlan evidence remains the reviewed capture record.",
+                                systemImage: "cube.transparent"
+                            )
+                            .font(AppTypography.measurement)
+                            .foregroundStyle(AppPalette.amberOnDark)
+                            .accessibilityIdentifier("capture.meshV1Omitted")
+                        } else {
+                            Label(
+                                "Optional scene mesh is unavailable. This does not block RoomPlan capture; raw-mesh evidence is omitted.",
+                                systemImage: "cube.transparent"
+                            )
+                            .font(AppTypography.measurement)
+                            .foregroundStyle(AppPalette.amberOnDark)
+                            .accessibilityIdentifier("capture.meshUnavailable")
+                        }
+
+                        phaseContent
+                        cleanupErrorReadout
+
+                        Label(
+                            RoomCaptureState.nonSurveyAccuracyDisclaimer,
+                            systemImage: "ruler"
+                        )
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.mutedOnDark)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: 780, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
-
-                phaseContent
-                cleanupErrorReadout
-
-                Label(
-                    RoomCaptureState.nonSurveyAccuracyDisclaimer,
-                    systemImage: "ruler"
-                )
-                .font(AppTypography.measurement)
-                .foregroundStyle(AppPalette.mutedOnDark)
             }
-            .padding(24)
-            .frame(maxWidth: 780, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(AppPalette.captureBlack.ignoresSafeArea())
         .navigationTitle("Capture")
@@ -137,30 +146,10 @@ struct RoomCaptureFlowView: View {
                 gpsReadout
             }
 
-        case .starting:
-            instrumentCard {
-                ProgressView("Starting the capture attempt...")
-                    .tint(AppPalette.blueprintOnDark)
-                    .foregroundStyle(AppPalette.primaryOnDark)
-                discardButton
-            }
-
-        case .scanning:
-            scanInstrument(showStop: true)
-
-        case .stopping:
-            scanInstrument(showStop: false)
-            ProgressView("Finishing the scan before review...")
-                .tint(AppPalette.blueprintOnDark)
-                .foregroundStyle(AppPalette.primaryOnDark)
-
-        case .processing:
-            scanInstrument(showStop: false)
-            ProgressView("Preparing immutable review evidence...")
-                .tint(AppPalette.blueprintOnDark)
-                .foregroundStyle(AppPalette.primaryOnDark)
-                .accessibilityIdentifier("capture.processing")
-            discardButton
+        case .starting, .scanning, .stopping, .processing:
+            // These phases render through `immersiveScanLayout` instead of the
+            // scrolling instrument stack.
+            EmptyView()
 
         case .review:
             reviewInstrument
@@ -198,38 +187,51 @@ struct RoomCaptureFlowView: View {
         }
     }
 
-    private func scanInstrument(showStop: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
-                .frame(minHeight: 300)
-                .accessibilityIdentifier("capture.canvas")
-            scanReadout
-            guidanceReadout
-            AdaptiveActionRow(alignment: .leading, spacing: 12) {
-                if coordinator.state.referencePhotoRequestID != nil {
-                    ProgressView("Reference photo in flight")
-                        .tint(AppPalette.amberOnDark)
-                        .foregroundStyle(AppPalette.primaryOnDark)
-                        .accessibilityIdentifier("capture.photoInFlight")
-                } else if coordinator.canRequestReferencePhoto {
-                    Button("Reference photo") {
-                        coordinator.requestReferencePhoto()
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(AppPalette.blueprintOnDark)
-                    .accessibilityIdentifier("capture.referencePhoto")
-                }
+    /// `.starting` is immersive so the camera view is installed in a window
+    /// before the driver runs the capture session — RoomCaptureView's
+    /// documented order is display first, then run.
+    private var isImmersiveScanPhase: Bool {
+        switch coordinator.state.phase {
+        case .starting, .scanning, .stopping, .processing:
+            return true
+        case .preflight, .requestingCamera, .ready, .review,
+             .saving, .saved, .failed, .discarding, .discarded, .cancelled:
+            return false
+        }
+    }
 
-                if showStop {
-                    Button("Stop scan") {
-                        coordinator.stop()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.amberOnDark)
-                    .disabled(!coordinator.canStop)
-                    .accessibilityIdentifier("capture.stop")
+    /// Full-screen scan surface with floating controls, like the system
+    /// camera. The live camera view fills the display when the driver has
+    /// one; the semantic canvas remains the fallback surface.
+    private var immersiveScanLayout: some View {
+        ZStack(alignment: .bottom) {
+            scanSurface
+                .ignoresSafeArea()
+            // At accessibility Dynamic Type sizes (where AdaptiveActionRow
+            // stacks every action vertically) the overlay can outgrow the
+            // screen, so it degrades to a scrollable panel instead of pushing
+            // Stop/Discard out of the viewport.
+            ViewThatFits(in: .vertical) {
+                immersiveOverlayContent
+                ScrollView {
+                    immersiveOverlayContent
                 }
             }
+            .background(
+                LinearGradient(
+                    colors: [.black.opacity(0), .black.opacity(0.65)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
+        }
+    }
+
+    private var immersiveOverlayContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            guidanceReadout
+            scanReadout
             if coordinator.state.referencePhotoCount > 0 {
                 Text("Reference photo attached")
                     .font(AppTypography.measurement)
@@ -245,12 +247,87 @@ struct RoomCaptureFlowView: View {
                 .foregroundStyle(AppPalette.amberOnDark)
                 .accessibilityIdentifier("capture.photoError")
             }
+            scanPhaseControls
+            Label(
+                RoomCaptureState.nonSurveyAccuracyDisclaimer,
+                systemImage: "ruler"
+            )
+            .font(AppTypography.measurement)
+            .foregroundStyle(AppPalette.mutedOnDark)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var scanSurface: some View {
+        if let cameraView = coordinator.liveCameraView {
+            RoomLiveCaptureViewRepresentable(cameraView: cameraView)
+                .accessibilityIdentifier("capture.canvas")
+        } else {
+            RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
+                .accessibilityIdentifier("capture.canvas")
+        }
+    }
+
+    @ViewBuilder
+    private var scanPhaseControls: some View {
+        switch coordinator.state.phase {
+        case .starting:
+            ProgressView("Starting the capture attempt...")
+                .tint(AppPalette.blueprintOnDark)
+                .foregroundStyle(AppPalette.primaryOnDark)
             if coordinator.showsDiscard {
                 discardButton
             }
+
+        case .scanning:
+            AdaptiveActionRow(alignment: .leading, spacing: 12) {
+                if coordinator.state.referencePhotoRequestID != nil {
+                    ProgressView("Reference photo in flight")
+                        .tint(AppPalette.amberOnDark)
+                        .foregroundStyle(AppPalette.primaryOnDark)
+                        .accessibilityIdentifier("capture.photoInFlight")
+                } else if coordinator.canRequestReferencePhoto {
+                    Button("Reference photo") {
+                        coordinator.requestReferencePhoto()
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(AppPalette.blueprintOnDark)
+                    .accessibilityIdentifier("capture.referencePhoto")
+                }
+
+                Button("Stop scan") {
+                    coordinator.stop()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppPalette.amberOnDark)
+                .disabled(!coordinator.canStop)
+                .accessibilityIdentifier("capture.stop")
+
+                if coordinator.showsDiscard {
+                    discardButton
+                }
+            }
+
+        case .stopping:
+            ProgressView("Finishing the scan before review...")
+                .tint(AppPalette.blueprintOnDark)
+                .foregroundStyle(AppPalette.primaryOnDark)
+
+        case .processing:
+            ProgressView("Preparing immutable review evidence...")
+                .tint(AppPalette.blueprintOnDark)
+                .foregroundStyle(AppPalette.primaryOnDark)
+                .accessibilityIdentifier("capture.processing")
+            if coordinator.showsDiscard {
+                discardButton
+            }
+
+        case .preflight, .requestingCamera, .ready, .review,
+             .saving, .saved, .failed, .discarding, .discarded, .cancelled:
+            EmptyView()
         }
-        .padding(18)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private var reviewInstrument: some View {
@@ -527,6 +604,42 @@ enum RoomCaptureTerminationPresentation {
         case .unknown:
             return "RoomPlan ended for an unknown reason. Close this attempt and start a new one; no room profile was created."
         }
+    }
+}
+
+/// Hosts the driver-owned live capture UIView (RoomPlan's camera + live model
+/// overlay). The driver keeps ownership; this wrapper only parents it for the
+/// duration of the scan phases.
+private struct RoomLiveCaptureViewRepresentable: UIViewRepresentable {
+    let cameraView: UIView
+
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        attach(cameraView, to: container)
+        return container
+    }
+
+    /// Reclaims the shared camera view only when it is unparented or its
+    /// current host has left the window. During a navigation transition two
+    /// hosts can briefly coexist; without this guard each would steal the
+    /// singleton view back on every update, flickering the feed.
+    func updateUIView(_ container: UIView, context: Context) {
+        guard cameraView.superview !== container else { return }
+        if cameraView.superview == nil || cameraView.superview?.window == nil {
+            attach(cameraView, to: container)
+        }
+    }
+
+    private func attach(_ view: UIView, to container: UIView) {
+        view.removeFromSuperview()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            view.topAnchor.constraint(equalTo: container.topAnchor),
+            view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
     }
 }
 

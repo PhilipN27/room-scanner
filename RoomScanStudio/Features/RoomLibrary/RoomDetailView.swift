@@ -19,6 +19,10 @@ struct RoomDetailView: View {
     @State private var showingRoomEditor = false
     @State private var showingExport = false
     @State private var showingCloudBackup = false
+    @State private var showingSplatViewer = false
+    @State private var showingSplatImporter = false
+    @State private var splatURL: URL?
+    @State private var splatImportErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -45,6 +49,7 @@ struct RoomDetailView: View {
         .navigationTitle("Room profile")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: projectID) {
+            splatURL = RoomSplatLibrary.splatURL(forProject: projectID)
             await reload()
         }
         .onChange(of: controller.summaries) { _ in
@@ -79,6 +84,37 @@ struct RoomDetailView: View {
                     roomName: package?.metadata.customName ?? "Saved room",
                     payload: head.payload
                 )
+            }
+        }
+        .sheet(isPresented: $showingSplatViewer) {
+            if let splatURL {
+                NavigationStack {
+                    RoomSplatViewerScreen(projectID: projectID, splatURL: splatURL)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Close") {
+                                    showingSplatViewer = false
+                                }
+                            }
+                        }
+                }
+            }
+        }
+        .fileImporter(
+            isPresented: $showingSplatImporter,
+            allowedContentTypes: RoomSplatLibrary.importContentTypes
+        ) { result in
+            switch result {
+            case let .success(url):
+                do {
+                    splatURL = try RoomSplatLibrary.importSplat(from: url, forProject: projectID)
+                    splatImportErrorMessage = nil
+                    showingSplatViewer = true
+                } catch {
+                    splatImportErrorMessage = "The splat file could not be imported: \(error.localizedDescription)"
+                }
+            case let .failure(error):
+                splatImportErrorMessage = "The splat file could not be imported: \(error.localizedDescription)"
             }
         }
         .sheet(isPresented: $showingRoomEditor, onDismiss: {
@@ -227,6 +263,28 @@ struct RoomDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("detail.editRoom")
+            }
+
+            AdaptiveActionRow(alignment: .leading, spacing: 10) {
+                if splatURL != nil {
+                    Button("Photoreal room") {
+                        showingSplatViewer = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.primaryAction)
+                    .accessibilityIdentifier("detail.photoreal")
+                }
+                Button(splatURL == nil ? "Import photoreal splat" : "Replace photoreal splat") {
+                    showingSplatImporter = true
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("detail.importSplat")
+            }
+            if let splatImportErrorMessage {
+                Label(splatImportErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.splatImportError")
             }
 
             AdaptiveActionRow(alignment: .leading, spacing: 10) {

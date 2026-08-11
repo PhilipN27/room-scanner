@@ -16,18 +16,23 @@ enum AppleRoomPlanDelegatePayloadKind: Sendable, Equatable {
     case didUpdate
 }
 
-/// iOS-17 production RoomPlan adapter. One instance owns exactly one ARSession
-/// for one app-coordinated capture attempt; the session is injected into
-/// RoomCaptureSession and is never independently run, reconfigured, or given
-/// an ARSession delegate.
+/// iOS-17 production RoomPlan adapter. One instance owns exactly one
+/// RoomCaptureView (and through it exactly one ARSession/RoomCaptureSession)
+/// for one app-coordinated capture attempt. The view renders the live camera
+/// feed with RoomPlan's in-progress model overlay; its built-in
+/// post-processing presentation is suppressed so `process()` remains the only
+/// RoomBuilder path.
 @MainActor
 final class AppleRoomCaptureDriver: RoomCaptureDriving {
     var observationHandler: ((RoomCaptureDriverObservation) -> Void)?
 
     private let fileManager = FileManager.default
+    private let captureView: RoomCaptureView
     private let arSession: ARSession
     private let roomCaptureSession: RoomCaptureSession
     private let delegateProxy: AppleRoomCaptureSessionDelegateProxy
+
+    var liveCaptureView: UIView? { captureView }
 
     private var activeAttempt: RoomCaptureAttemptToken?
     private var activeWorkspace: RoomCaptureScratchWorkspace?
@@ -36,6 +41,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     private var sessionEndObservationGate = RoomCaptureSessionEndObservationGate()
     private var rawCapturedRoomData: CapturedRoomData?
     private var latestSnapshot: RoomSemanticSnapshot?
+    private var bundleRecorder: RoomCaptureBundleRecorder?
     private var referencePhotoAssets: [(photo: RoomPhoto, asset: RoomAssetInput)] = []
     private var processingTask: Task<RoomCapturePreparedReview, Error>?
     private var photoTask: Task<Void, Error>?
@@ -46,14 +52,18 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     /// retryable scratch-cleanup error; no continuation is allocated or leaked.
     private static let sessionEndWaitPollNanoseconds: UInt64 = 50_000_000
     private static let sessionEndWaitAttempts = 40
+    private static let windowAttachWaitPollNanoseconds: UInt64 = 50_000_000
+    private static let windowAttachWaitAttempts = 40
 
     init() {
-        let arSession = ARSession()
-        self.arSession = arSession
-        roomCaptureSession = RoomCaptureSession(arSession: arSession)
+        let captureView = RoomCaptureView(frame: .zero)
+        self.captureView = captureView
+        roomCaptureSession = captureView.captureSession
+        arSession = captureView.captureSession.arSession
         delegateProxy = AppleRoomCaptureSessionDelegateProxy()
         delegateProxy.owner = self
         roomCaptureSession.delegate = delegateProxy
+        captureView.delegate = delegateProxy
     }
 
     func start(
@@ -76,10 +86,37 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         latestSnapshot = nil
         referencePhotoAssets = []
 
+        // RoomCaptureView's documented order is display first, then run its
+        // captureSession; running before the view is in a window leaves the
+        // camera surface black on device. The capture UI mounts the view
+        // during `.starting`, so this normally resolves within a frame or
+        // two. The timeout keeps start() from hanging if the view is never
+        // mounted; run() then proceeds exactly as before.
+        for _ in 0..<Self.windowAttachWaitAttempts where captureView.window == nil {
+            try? await Task.sleep(nanoseconds: Self.windowAttachWaitPollNanoseconds)
+        }
+        guard activeAttempt == attempt, !didIssueFinalStop else {
+            // The attempt was stopped or discarded before run() was issued.
+            // A never-run session gets no didEndWith callback, so release the
+            // ownership gate here or cleanup would wait on it forever.
+            sessionEndObservationGate.recordDidEnd(for: attempt)
+            return
+        }
+
         var configuration = RoomCaptureSession.Configuration()
         configuration.isCoachingEnabled = true
         roomCaptureSession.run(configuration: configuration)
         beginTrackingPoll(for: attempt)
+
+        // Photoreal capture bundle (roadmap Phase A): best-effort keyframe +
+        // scene-mesh recording alongside the scan; never blocks the attempt.
+        let recorder = RoomCaptureBundleRecorder(
+            arSession: arSession,
+            parentDirectoryURL: workspace.directoryURL
+        )
+        recorder.start()
+        bundleRecorder = recorder
+        beginSceneReconstructionEnablement(for: attempt)
     }
 
     /// V1 ends the single RoomPlan session when the user stops. It does not
@@ -90,6 +127,10 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
             throw RoomCaptureDriverError.invalidAttempt
         }
         guard !didIssueFinalStop else { return }
+        // The bundle harvests the scene mesh from the still-running session,
+        // so it must finalize before the final RoomPlan stop pauses ARKit.
+        await bundleRecorder?.finalize()
+        guard activeAttempt == attempt, !didIssueFinalStop else { return }
         didIssueFinalStop = true
         trackingTask?.cancel()
         roomCaptureSession.stop(pauseARSession: true)
@@ -100,6 +141,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     /// discarded attempt.
     func terminate(attempt: RoomCaptureAttemptToken) async {
         guard activeAttempt == attempt else { return }
+        bundleRecorder?.cancel()
         trackingTask?.cancel()
         guard !didIssueFinalStop else { return }
         didIssueFinalStop = true
@@ -193,6 +235,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         if let trackingTask {
             await trackingTask.value
         }
+        await bundleRecorder?.waitForWrites()
     }
 
     func cleanup(workspace: RoomCaptureScratchWorkspace) async throws {
@@ -206,6 +249,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         rawCapturedRoomData = nil
         latestSnapshot = nil
         referencePhotoAssets = []
+        bundleRecorder = nil
         activeWorkspace = nil
         activeAttempt = nil
         coordinateSpaceEpochID = nil
@@ -300,14 +344,26 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         try Task.checkCancellation()
 
         let builder = RoomBuilder(options: [])
-        let room = try await builder.capturedRoom(from: data)
+        let room: CapturedRoom
+        do {
+            room = try await builder.capturedRoom(from: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw Self.processingStepFailure("RoomBuilder post-processing", error)
+        }
         try Task.checkCancellation()
 
-        let snapshot = try AppleRoomPlanSnapshotAdapter.makeSnapshot(
-            from: room,
-            attempt: attempt,
-            coordinateSpaceEpochID: coordinateSpaceEpochID
-        )
+        let snapshot: RoomSemanticSnapshot
+        do {
+            snapshot = try AppleRoomPlanSnapshotAdapter.makeSnapshot(
+                from: room,
+                attempt: attempt,
+                coordinateSpaceEpochID: coordinateSpaceEpochID
+            )
+        } catch {
+            throw Self.processingStepFailure("semantic snapshot mapping", error)
+        }
         latestSnapshot = snapshot
 
         let rawRelativePath = try RoomRelativePath(
@@ -321,31 +377,65 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         let processedURL = workspace.directoryURL.appendingPathComponent(processedRelativePath.value)
         let usdzURL = workspace.directoryURL.appendingPathComponent(usdzRelativePath.value)
 
-        try writeScratchData(
-            RoomJSONCoding.makeEncoder().encode(data),
-            to: rawURL
-        )
-        try writeScratchData(
-            RoomJSONCoding.makeEncoder().encode(room),
-            to: processedURL
-        )
-        try fileManager.createDirectory(
-            at: usdzURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try room.export(to: usdzURL, exportOptions: .mesh)
+        // CapturedRoomData's Codable implementation is Apple-internal and can
+        // refuse to serialize on device (EncodingError "Invalid data"). The
+        // raw blob is archival-only with no read path, so its failure demotes
+        // the artifact to explicitly-unavailable instead of failing the
+        // entire capture attempt.
+        let rawDataWriteError: Error?
+        do {
+            try writeScratchData(
+                Self.makeEvidenceEncoder().encode(data),
+                to: rawURL
+            )
+            rawDataWriteError = nil
+        } catch {
+            print("RoomScanStudio: raw CapturedRoomData evidence omitted: \(String(describing: error))")
+            rawDataWriteError = error
+        }
+        do {
+            try writeScratchData(
+                Self.makeEvidenceEncoder().encode(room),
+                to: processedURL
+            )
+        } catch {
+            throw Self.processingStepFailure("processed CapturedRoom JSON evidence", error)
+        }
+        do {
+            try fileManager.createDirectory(
+                at: usdzURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try room.export(to: usdzURL, exportOptions: .mesh)
+        } catch {
+            throw Self.processingStepFailure("USDZ model export", error)
+        }
         try Task.checkCancellation()
 
-        let thumbnail = try writeProjectThumbnail(
-            for: snapshot,
-            workspace: workspace
-        )
-        let rawArtifact = try presentEvidenceArtifact(
-            kind: .capturedRoomDataJSON,
-            path: rawRelativePath,
-            url: rawURL,
-            mediaType: "application/json"
-        )
+        let thumbnail: RoomAssetInput
+        do {
+            thumbnail = try writeProjectThumbnail(
+                for: snapshot,
+                workspace: workspace
+            )
+        } catch {
+            throw Self.processingStepFailure("project thumbnail", error)
+        }
+        let rawArtifact: RoomEvidenceArtifact
+        if rawDataWriteError == nil {
+            rawArtifact = try presentEvidenceArtifact(
+                kind: .capturedRoomDataJSON,
+                path: rawRelativePath,
+                url: rawURL,
+                mediaType: "application/json"
+            )
+        } else {
+            rawArtifact = unavailableEvidenceArtifact(
+                kind: .capturedRoomDataJSON,
+                reason: "RoomPlan's raw CapturedRoomData did not support serialization for this capture. The processed CapturedRoom JSON, USDZ model, and semantic snapshot remain the reviewed record.",
+                status: .unavailable
+            )
+        }
         let processedArtifact = try presentEvidenceArtifact(
             kind: .capturedRoomJSON,
             path: processedRelativePath,
@@ -397,12 +487,17 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
             measurements: [],
             photos: referencePhotoAssets.map(\.photo)
         )
-        let evidenceAssets = [
-            RoomAssetInput(
-                sourceURL: rawURL,
-                destination: rawRelativePath,
-                scope: .revision
-            ),
+        var evidenceAssets: [RoomAssetInput] = []
+        if rawDataWriteError == nil {
+            evidenceAssets.append(
+                RoomAssetInput(
+                    sourceURL: rawURL,
+                    destination: rawRelativePath,
+                    scope: .revision
+                )
+            )
+        }
+        evidenceAssets.append(contentsOf: [
             RoomAssetInput(
                 sourceURL: processedURL,
                 destination: processedRelativePath,
@@ -413,7 +508,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
                 destination: usdzRelativePath,
                 scope: .revision
             ),
-        ]
+        ])
         return RoomCapturePreparedReview(
             commit: RoomInitialCaptureCommit(
                 draft: RoomDraft(metadata: metadata, revision: payload),
@@ -422,6 +517,48 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
             ),
             guidance: guidanceForCompletedSnapshot(snapshot)
         )
+    }
+
+    /// RoomPlan's CapturedRoomData/CapturedRoom can contain non-finite floats
+    /// on real devices, which plain JSONEncoder rejects with "The data
+    /// couldn't be written because it isn't in the correct format." Evidence
+    /// files are archival, so non-finite values are preserved as strings
+    /// instead of failing the whole capture attempt. App-owned models keep the
+    /// strict `RoomJSONCoding` encoder.
+    nonisolated static func makeEvidenceEncoder() -> JSONEncoder {
+        let encoder = RoomJSONCoding.makeEncoder()
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
+        return encoder
+    }
+
+    /// Counterpart for reading evidence JSON back. No production path decodes
+    /// these archival files today; this keeps the written format readable by
+    /// construction rather than write-only.
+    nonisolated static func makeEvidenceDecoder() -> JSONDecoder {
+        let decoder = RoomJSONCoding.makeDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(
+            positiveInfinity: "Infinity",
+            negativeInfinity: "-Infinity",
+            nan: "NaN"
+        )
+        return decoder
+    }
+
+    /// Wraps a processing-step error with the step name and the error's full
+    /// structural description (for EncodingError this includes the exact
+    /// coding path), so a device-only failure identifies itself in one run
+    /// instead of surfacing as a bare Cocoa message.
+    private static func processingStepFailure(
+        _ step: String,
+        _ error: Error
+    ) -> AppleRoomCaptureDriverError {
+        let detail = String(describing: error)
+        print("RoomScanStudio capture processing failed at step '\(step)': \(detail)")
+        return .processingStepFailed(step: step, detail: detail)
     }
 
     private func writeScratchData(_ data: Data, to url: URL) throws {
@@ -475,11 +612,12 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
 
     private func unavailableEvidenceArtifact(
         kind: RoomEvidenceArtifactKind,
-        reason: String
+        reason: String,
+        status: RoomEvidenceArtifactStatus = .notRequested
     ) -> RoomEvidenceArtifact {
         RoomEvidenceArtifact(
             kind: kind,
-            status: .notRequested,
+            status: status,
             relativePath: nil,
             byteCount: nil,
             mediaType: nil,
@@ -580,6 +718,37 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     /// between the documented async API and an installed SDK revision.
     private func captureHighResolutionReferenceFrame() async throws -> ARFrame {
         try await arSession.captureHighResolutionFrame()
+    }
+
+    // MARK: - Scene reconstruction for the capture bundle
+
+    /// Device-proven 2026-08-10: RoomPlan's own configuration does not enable
+    /// scene reconstruction, so ARMeshAnchors never appear. Re-running the
+    /// shared session with RoomPlan's configuration plus mesh reconstruction
+    /// keeps the scan working while exposing the LiDAR mesh the photoreal
+    /// capture bundle harvests. The session configuration may not be
+    /// readable immediately after run(), so this retries briefly.
+    private func beginSceneReconstructionEnablement(
+        for attempt: RoomCaptureAttemptToken
+    ) {
+        guard ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) else {
+            return
+        }
+        Task { @MainActor [weak self] in
+            for _ in 0..<10 {
+                guard let self, self.activeAttempt == attempt, !self.didIssueFinalStop else {
+                    return
+                }
+                if let configuration = self.arSession.configuration as? ARWorldTrackingConfiguration {
+                    guard configuration.sceneReconstruction != .mesh else { return }
+                    configuration.sceneReconstruction = .mesh
+                    self.arSession.run(configuration)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
+            print("RoomScanStudio capture bundle: session configuration never became readable; scene reconstruction stays off.")
+        }
     }
 
     // MARK: - Qualitative AR guidance
@@ -917,8 +1086,29 @@ private struct AppleRoomPlanUncheckedTransfer<Value>: @unchecked Sendable {
     let value: Value
 }
 
-private final class AppleRoomCaptureSessionDelegateProxy: NSObject, RoomCaptureSessionDelegate, @unchecked Sendable {
+/// The stable Objective-C name satisfies NSCoding (inherited through
+/// RoomCaptureViewDelegate); the proxy itself is never archived.
+@objc(RoomScanStudioAppleRoomCaptureSessionDelegateProxy)
+private final class AppleRoomCaptureSessionDelegateProxy: NSObject, RoomCaptureSessionDelegate, RoomCaptureViewDelegate, @unchecked Sendable {
     weak var owner: AppleRoomCaptureDriver?
+
+    override init() {
+        super.init()
+    }
+
+    // RoomCaptureViewDelegate inherits NSCoding; this proxy is never archived.
+    func encode(with coder: NSCoder) {}
+
+    init?(coder: NSCoder) {
+        return nil
+    }
+
+    /// The driver's `process()` is the single RoomBuilder path. Declining
+    /// presentation keeps RoomCaptureView from running a second, redundant
+    /// post-processing pass after stop.
+    func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
+        false
+    }
 
     func captureSession(
         _ session: RoomCaptureSession,
@@ -986,6 +1176,7 @@ private enum AppleRoomCaptureDriverError: LocalizedError {
     case thumbnailWriteFailed
     case referencePhotoEncodingFailed
     case sessionEndNotObserved
+    case processingStepFailed(step: String, detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -997,6 +1188,8 @@ private enum AppleRoomCaptureDriverError: LocalizedError {
             return "The reference photo could not be encoded from the active AR session."
         case .sessionEndNotObserved:
             return "RoomPlan has not confirmed session termination yet. Keep this attempt open and retry cleanup after the final callback arrives."
+        case let .processingStepFailed(step, detail):
+            return "Processing failed at step '\(step)': \(detail)"
         }
     }
 }
