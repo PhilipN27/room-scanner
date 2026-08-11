@@ -23,6 +23,8 @@ struct RoomDetailView: View {
     @State private var showingSplatImporter = false
     @State private var splatURL: URL?
     @State private var splatImportErrorMessage: String?
+    @State private var showingMeshViewer = false
+    @State private var hasBundleMesh = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -50,6 +52,7 @@ struct RoomDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: projectID) {
             splatURL = RoomSplatLibrary.splatURL(forProject: projectID)
+            hasBundleMesh = RoomMeshBundleLoader.hasRenderableMesh(forProject: projectID)
             await reload()
         }
         .onChange(of: controller.summaries) { _ in
@@ -98,6 +101,18 @@ struct RoomDetailView: View {
                             }
                         }
                 }
+            }
+        }
+        .sheet(isPresented: $showingMeshViewer) {
+            NavigationStack {
+                RoomMeshViewerScreen(projectID: projectID)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Close") {
+                                showingMeshViewer = false
+                            }
+                        }
+                    }
             }
         }
         .fileImporter(
@@ -273,6 +288,24 @@ struct RoomDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(AppPalette.primaryAction)
                     .accessibilityIdentifier("detail.photoreal")
+                }
+                if hasBundleMesh {
+                    // Primary photoreal entry until a trained splat exists,
+                    // then it steps back behind the splat viewer.
+                    if splatURL == nil {
+                        Button("Colored mesh room") {
+                            showingMeshViewer = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppPalette.primaryAction)
+                        .accessibilityIdentifier("detail.coloredMesh")
+                    } else {
+                        Button("Colored mesh room") {
+                            showingMeshViewer = true
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("detail.coloredMesh")
+                    }
                 }
                 Button(splatURL == nil ? "Import photoreal splat" : "Replace photoreal splat") {
                     showingSplatImporter = true

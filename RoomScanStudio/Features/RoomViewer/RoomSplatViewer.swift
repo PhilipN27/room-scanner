@@ -90,6 +90,16 @@ final class SplatCameraController: ObservableObject {
 
     @Published var mode: Mode = .orbit
 
+    /// Most 3D GS PLY files are captured y-down and need the flip below;
+    /// ARKit-space scene meshes are already y-up and pass identity.
+    private let upAxisCalibration: simd_float4x4
+
+    init(appliesSplatUpAxisCalibration: Bool = true) {
+        upAxisCalibration = appliesSplatUpAxisCalibration
+            ? SplatMatrices.rotation(radians: .pi, axis: SIMD3<Float>(0, 0, 1))
+            : matrix_identity_float4x4
+    }
+
     // Orbit state.
     var orbitCenter = SIMD3<Float>(0, 0, 0)
     var orbitDistance: Float = 3
@@ -147,9 +157,9 @@ final class SplatCameraController: ObservableObject {
     }
 
     var viewMatrix: simd_float4x4 {
-        // Most 3D GS PLY files are captured y-down; flipping around Z turns
-        // them right-side-up (same calibration as MetalSplatter's sample).
-        let upCalibration = SplatMatrices.rotation(radians: .pi, axis: SIMD3<Float>(0, 0, 1))
+        // The flip around Z (same calibration as MetalSplatter's sample)
+        // turns y-down splat files right-side-up; see upAxisCalibration.
+        let upCalibration = upAxisCalibration
         switch mode {
         case .orbit:
             return SplatMatrices.translation(0, 0, -orbitDistance)
@@ -508,8 +518,9 @@ struct RoomSplatViewerScreen: View {
 }
 
 /// Bottom-right virtual joystick: drag distance from center maps to walking
-/// velocity in first-person mode.
-private struct SplatWalkJoystick: View {
+/// velocity in first-person mode. Shared by the splat and colored-mesh
+/// viewers.
+struct SplatWalkJoystick: View {
     @ObservedObject var camera: SplatCameraController
     @State private var thumbOffset: CGSize = .zero
 
