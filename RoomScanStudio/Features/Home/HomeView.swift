@@ -6,6 +6,7 @@ struct HomeView: View {
         case newRoomScan
         case liveCapture
         case mockReview
+        case roomDetail(String)
     }
 
     @ObservedObject var environment: AppEnvironment
@@ -39,6 +40,7 @@ struct HomeView: View {
                         rescanProvider: environment.rescanProvider,
                         exportCoordinator: environment.exportCoordinator,
                         cloudBackupCoordinator: environment.cloudBackupCoordinator,
+                        meshColoringCoordinator: environment.meshColoringCoordinator,
                         privacyPolicyURL: environment.privacyPolicyURL
                     )
                 case .newRoomScan:
@@ -69,6 +71,17 @@ struct HomeView: View {
                         onDiscard: { path.removeAll() },
                         onOpenLibrary: { path = [.existingRooms] }
                     )
+                case let .roomDetail(projectID):
+                    RoomDetailView(
+                        projectID: projectID,
+                        controller: environment.libraryController,
+                        rescanProvider: environment.rescanProvider,
+                        exportCoordinator: environment.exportCoordinator,
+                        cloudBackupCoordinator: environment.cloudBackupCoordinator,
+                        meshColoringCoordinator: environment.meshColoringCoordinator,
+                        privacyPolicyURL: environment.privacyPolicyURL,
+                        openColoredMeshOnAppear: true
+                    )
                 }
             }
             .toolbar {
@@ -85,6 +98,11 @@ struct HomeView: View {
             }
         }
         .tint(AppPalette.blueprint)
+        .onChange(of: environment.meshNotificationRouter.requestedProjectID) { _, projectID in
+            guard let projectID else { return }
+            path = [.roomDetail(projectID)]
+            environment.meshNotificationRouter.consumeRequestedProjectID()
+        }
         .sheet(isPresented: $showingCloudBackup) {
             RoomCloudBackupSettingsView(
                 coordinator: environment.cloudBackupCoordinator,

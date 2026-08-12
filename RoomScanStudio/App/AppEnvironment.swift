@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftData
 import RoomScanCore
+import UIKit
 
 @MainActor
 final class AppEnvironment: ObservableObject {
@@ -10,6 +11,8 @@ final class AppEnvironment: ObservableObject {
     let rescanProvider: any RoomRescanProviding
     let exportCoordinator: RoomExportCoordinator
     let cloudBackupCoordinator: RoomCloudBackupCoordinator
+    let meshColoringCoordinator: RoomMeshColoringJobCoordinator
+    let meshNotificationRouter: RoomMeshNotificationRouter
     let privacyPolicyURL: URL?
     @Published private(set) var bootstrapMessage: String?
 
@@ -41,6 +44,36 @@ final class AppEnvironment: ObservableObject {
             idGenerator: generator
         )
         let indexBootstrap = RoomProjectIndexBootstrap.makeContainer()
+
+        let usesIsolatedUIEnvironment = arguments.contains("--ui-testing")
+        let jobRecordStore: RoomMeshColoringJobRecordStore
+        if usesIsolatedUIEnvironment {
+            let isolatedJobURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("RoomScanStudio-UI-MeshJob", isDirectory: true)
+                    .appendingPathComponent("active-job.json")
+            if arguments.contains("--reset-local-store") {
+                try? FileManager.default.removeItem(at: isolatedJobURL)
+            }
+            jobRecordStore = RoomMeshColoringJobRecordStore(fileURL: isolatedJobURL)
+        } else {
+            jobRecordStore = .applicationSupport()
+        }
+        let notificationRouter = RoomMeshNotificationRouter()
+        meshNotificationRouter = notificationRouter
+        UNUserNotificationCenter.current().delegate = notificationRouter
+        meshColoringCoordinator = RoomMeshColoringJobCoordinator(
+            background: usesIsolatedUIEnvironment
+                ? ForegroundOnlyRoomMeshBackgroundTaskAdapter()
+                : AppleRoomMeshBackgroundTaskAdapter(),
+            notifications: usesIsolatedUIEnvironment
+                ? NoopRoomMeshColoringNotificationAdapter()
+                : AppleRoomMeshColoringNotificationAdapter(),
+            recordStore: jobRecordStore,
+            isAppActive: { UIApplication.shared.applicationState == .active }
+        )
+        meshColoringCoordinator.reconcileStoredState {
+            RoomMeshBundleLoader.hasValidPhotorealCache(forProject: $0)
+        }
 
         let usesSimulatedCapture = arguments.contains("--use-simulated-capture")
         let scratchRootURL = RoomCaptureScratchRootResolver.resolve(

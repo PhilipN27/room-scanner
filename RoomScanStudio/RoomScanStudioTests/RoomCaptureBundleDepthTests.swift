@@ -145,7 +145,7 @@ final class RoomCaptureBundleDepthTests: XCTestCase {
             meshFaceCount: 0,
             notes: []
         )
-        XCTAssertEqual(RoomCaptureBundleManifest.currentSchemaVersion, 2)
+        XCTAssertEqual(RoomCaptureBundleManifest.currentSchemaVersion, 3)
         let encoded = try RoomJSONCoding.makeEncoder().encode(manifest)
         let decoded = try RoomJSONCoding.makeDecoder().decode(
             RoomCaptureBundleManifest.self,
@@ -154,5 +154,95 @@ final class RoomCaptureBundleDepthTests: XCTestCase {
         XCTAssertEqual(decoded, manifest)
         XCTAssertEqual(decoded.frames[0].depth?.width, 256)
         XCTAssertEqual(decoded.frames[0].depth?.height, 192)
+    }
+
+    func testSchemaV3RoundTripsOptionalPhotometricMetadataAndOlderSchemasDefaultNil() throws {
+        let versionTwoJSON = """
+        {
+          "schemaVersion": 2,
+          "createdAt": "2026-08-10T18:00:00Z",
+          "frames": [{
+            "fileName":"frame.jpg", "timestamp":1,
+            "cameraTransform":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+            "intrinsics":[100,0,0,0,100,0,320,240,1],
+            "imageWidth":640, "imageHeight":480, "exposureDuration":0.008
+          }],
+          "meshAnchorCount":0, "meshVertexCount":0, "meshFaceCount":0, "notes":[]
+        }
+        """
+        let old = try RoomJSONCoding.makeDecoder().decode(
+            RoomCaptureBundleManifest.self,
+            from: Data(versionTwoJSON.utf8)
+        )
+        XCTAssertNil(old.frames[0].iso)
+        XCTAssertNil(old.frames[0].exposureBias)
+
+        var frame = old.frames[0]
+        frame.iso = 125
+        frame.exposureBias = -0.3
+        let v3 = RoomCaptureBundleManifest(
+            schemaVersion: 3,
+            createdAt: Date(timeIntervalSince1970: 1),
+            frames: [frame],
+            meshAnchorCount: 0,
+            meshVertexCount: 0,
+            meshFaceCount: 0,
+            notes: []
+        )
+        let decoded = try RoomJSONCoding.makeDecoder().decode(
+            RoomCaptureBundleManifest.self,
+            from: RoomJSONCoding.makeEncoder().encode(v3)
+        )
+        XCTAssertEqual(decoded.frames[0].iso, 125)
+        XCTAssertEqual(decoded.frames[0].exposureBias, -0.3)
+    }
+
+    func testPoseDiversitySkipsNearDuplicateButForcesAfterTwoSeconds() {
+        let identity: [Double] = [
+            1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+        ]
+        var close = identity
+        close[12] = 0.049
+        XCTAssertFalse(RoomCapturePoseSelection.shouldAccept(
+            previousTransform: identity,
+            previousTimestamp: 1,
+            candidateTransform: close,
+            candidateTimestamp: 2
+        ))
+        XCTAssertTrue(RoomCapturePoseSelection.shouldAccept(
+            previousTransform: identity,
+            previousTimestamp: 1,
+            candidateTransform: close,
+            candidateTimestamp: 3
+        ))
+        var far = identity
+        far[12] = 0.051
+        XCTAssertTrue(RoomCapturePoseSelection.shouldAccept(
+            previousTransform: identity,
+            previousTimestamp: 1,
+            candidateTransform: far,
+            candidateTimestamp: 1.7
+        ))
+        var rotated = identity
+        let angle = 3.1 * Double.pi / 180
+        rotated[0] = cos(angle)
+        rotated[1] = sin(angle)
+        rotated[4] = -sin(angle)
+        rotated[5] = cos(angle)
+        XCTAssertTrue(RoomCapturePoseSelection.shouldAccept(
+            previousTransform: identity,
+            previousTimestamp: 1,
+            candidateTransform: rotated,
+            candidateTimestamp: 1.7
+        ))
+    }
+
+    func testPhotometricMetadataIgnoresNonnumericValues() {
+        let values = RoomCapturePhotometricMetadata.numericValues(from: [
+            "ISO": "automatic",
+            "ExposureBiasValue": NSNumber(value: -0.25),
+        ])
+        XCTAssertNil(values.iso)
+        XCTAssertEqual(values.exposureBias, -0.25)
     }
 }

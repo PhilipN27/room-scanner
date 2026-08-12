@@ -36,6 +36,15 @@ items stay unchecked until observed.
   iCloud-disabled behavior; capture default and accessibility Dynamic Type
   screenshots on separate iPhone and iPad runs.
 - [ ] Physical iPhone/iPad: follow [real-device-test-plan.md](real-device-test-plan.md).
+- [ ] Photoreal LiDAR gate: complete all six colored-mesh checks in the real-device
+  plan—0.5-source-pixel ARKit projection agreement, checkerboard bias, solid-patch
+  midtones, multi-view photo comparison, matched scan health/performance, and
+  minimum-device memory/cancellation—and attach the recorded evidence.
+- [ ] iOS 26 background-coloring gate: complete all eight continued-processing
+  checks in the real-device plan, including app switching/locking, system
+  progress and cancellation, exactly-once background notifications, denied
+  permission, expiration, force-quit recovery, performance/thermal recording,
+  and the iOS 18-through-25 foreground fallback.
 - [ ] External consumers: inspect ZIP/PDF/PNG/USDZ/share outputs and perform
   CloudKit development-container backup/recovery tests.
 - [ ] Device/storage: complete the disk-cleanup and performance protocol in

@@ -8,7 +8,9 @@ struct RoomDetailView: View {
     let rescanProvider: any RoomRescanProviding
     @ObservedObject var exportCoordinator: RoomExportCoordinator
     @ObservedObject var cloudBackupCoordinator: RoomCloudBackupCoordinator
+    @ObservedObject var meshColoringCoordinator: RoomMeshColoringJobCoordinator
     let privacyPolicyURL: URL?
+    var openColoredMeshOnAppear = false
 
     @State private var package: RoomProjectPackage?
     @State private var errorMessage: String?
@@ -29,6 +31,7 @@ struct RoomDetailView: View {
     @State private var buildingBundleExport = false
     @State private var bundleExportURL: URL?
     @State private var bundleExportErrorMessage: String?
+    @State private var didAutoOpenColoredMesh = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -59,8 +62,12 @@ struct RoomDetailView: View {
             hasBundleMesh = RoomMeshBundleLoader.hasRenderableMesh(forProject: projectID)
             hasCaptureBundle = RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID) != nil
             await reload()
+            if openColoredMeshOnAppear, hasBundleMesh, !didAutoOpenColoredMesh {
+                didAutoOpenColoredMesh = true
+                showingMeshViewer = true
+            }
         }
-        .onChange(of: controller.summaries) { _ in
+        .onChange(of: controller.summaries) {
             Task { await reload() }
         }
         .sheet(isPresented: $showingMetadataEditor, onDismiss: {
@@ -126,7 +133,11 @@ struct RoomDetailView: View {
         }
         .sheet(isPresented: $showingMeshViewer) {
             NavigationStack {
-                RoomMeshViewerScreen(projectID: projectID)
+                RoomMeshViewerScreen(
+                    projectID: projectID,
+                    roomName: package?.metadata.customName ?? "Room",
+                    coordinator: meshColoringCoordinator
+                )
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Close") {
@@ -224,6 +235,11 @@ struct RoomDetailView: View {
             )
             actionBar(package)
 
+            if meshColoringCoordinator.projectID == projectID,
+               let state = meshColoringCoordinator.state {
+                meshColoringStatus(state)
+            }
+
             Text("IMMUTABLE REVISION HISTORY")
                 .font(AppTypography.section)
                 .foregroundStyle(AppPalette.ink)
@@ -315,14 +331,14 @@ struct RoomDetailView: View {
                     // then it steps back behind the splat viewer.
                     if splatURL == nil {
                         Button("Colored mesh room") {
-                            showingMeshViewer = true
+                            openColoredMesh(package)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(AppPalette.primaryAction)
                         .accessibilityIdentifier("detail.coloredMesh")
                     } else {
                         Button("Colored mesh room") {
-                            showingMeshViewer = true
+                            openColoredMesh(package)
                         }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("detail.coloredMesh")
@@ -339,6 +355,22 @@ struct RoomDetailView: View {
                     .font(AppTypography.measurement)
                     .foregroundStyle(AppPalette.amber)
                     .accessibilityIdentifier("detail.splatImportError")
+            }
+            if let activeProjectID = meshColoringCoordinator.conflictProjectID {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(
+                        "Another room is already coloring. Open its status from the library or cancel it before starting this room.",
+                        systemImage: "hourglass"
+                    )
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    Button("Cancel active coloring", role: .destructive) {
+                        meshColoringCoordinator.cancel()
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("Cancels coloring for project \(activeProjectID).")
+                }
+                .accessibilityIdentifier("detail.meshColoringConflict")
             }
 
             AdaptiveActionRow(alignment: .leading, spacing: 10) {
@@ -421,6 +453,47 @@ struct RoomDetailView: View {
             .buttonStyle(.bordered)
             .accessibilityIdentifier("detail.backup")
         }
+    }
+
+    private func openColoredMesh(_ package: RoomProjectPackage) {
+        let outcome = meshColoringCoordinator.start(
+            projectID: projectID,
+            roomName: package.metadata.customName
+        )
+        if case .conflict = outcome { return }
+        showingMeshViewer = true
+    }
+
+    @ViewBuilder
+    private func meshColoringStatus(_ state: RoomMeshColoringJobState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(state == .cacheReady ? "Colored mesh is ready" : "Coloring this room")
+                    .font(AppTypography.bodyEmphasized)
+                Spacer()
+                Text("\(state == .cacheReady ? 100 : meshColoringCoordinator.progress.percent)%")
+                    .font(AppTypography.measurement.monospacedDigit())
+            }
+            ProgressView(value: state == .cacheReady ? 1 : meshColoringCoordinator.progress.fraction)
+                .tint(AppPalette.blueprint)
+            Text(meshColoringCoordinator.executionMessage)
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedInk)
+            if state == .interrupted || state == .failed {
+                Button("Retry coloring") {
+                    meshColoringCoordinator.retry()
+                }
+                .buttonStyle(.borderedProminent)
+            } else if meshColoringCoordinator.isActiveJob {
+                Button("Cancel coloring", role: .destructive) {
+                    meshColoringCoordinator.cancel()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(14)
+        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityIdentifier("detail.meshColoringStatus")
     }
 
     private func buildBundleExport() async {

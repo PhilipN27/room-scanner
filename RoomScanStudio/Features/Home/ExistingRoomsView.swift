@@ -15,6 +15,7 @@ struct ExistingRoomsView: View {
     let rescanProvider: any RoomRescanProviding
     @ObservedObject var exportCoordinator: RoomExportCoordinator
     @ObservedObject var cloudBackupCoordinator: RoomCloudBackupCoordinator
+    @ObservedObject var meshColoringCoordinator: RoomMeshColoringJobCoordinator
     let privacyPolicyURL: URL?
     @State private var filter: LibraryFilter = .active
 
@@ -139,6 +140,7 @@ struct ExistingRoomsView: View {
                             rescanProvider: rescanProvider,
                             exportCoordinator: exportCoordinator,
                             cloudBackupCoordinator: cloudBackupCoordinator,
+                            meshColoringCoordinator: meshColoringCoordinator,
                             privacyPolicyURL: privacyPolicyURL
                         )
                     } label: {

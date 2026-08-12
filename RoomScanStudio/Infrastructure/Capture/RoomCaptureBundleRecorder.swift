@@ -12,7 +12,8 @@ import UIKit
 
 // MARK: - Bundle schema
 
-/// Schema version 2: per-keyframe LiDAR depth. The payload files hold
+/// Schema version 3: optional photometric metadata, retaining schema-v2 depth.
+/// The payload files hold
 /// tightly packed rows (no stride padding), zlib-compressed; depth is
 /// float32 meters, confidence is uint8 ARConfidenceLevel raw values.
 /// The whole block is optional so version-1 bundles keep decoding.
@@ -36,13 +37,16 @@ struct RoomCaptureBundleFrame: Codable, Equatable {
     var imageWidth: Int
     var imageHeight: Int
     var exposureDuration: Double
+    /// Optional diagnostics copied from ARFrame.exifData. Older bundles omit them.
+    var iso: Double? = nil
+    var exposureBias: Double? = nil
     /// Absent for schema-version-1 bundles and for keyframes whose depth
     /// map was unavailable or failed to encode (recording is best-effort).
     var depth: RoomCaptureBundleFrameDepth?
 }
 
 struct RoomCaptureBundleManifest: Codable, Equatable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var createdAt: Date
@@ -54,6 +58,66 @@ struct RoomCaptureBundleManifest: Codable, Equatable {
     var meshVertexCount: Int
     var meshFaceCount: Int
     var notes: [String]
+}
+
+enum RoomCapturePoseSelection {
+    static let minimumTranslationMeters = 0.05
+    static let minimumRotationRadians = 3.0 * .pi / 180
+    static let forcedIntervalSeconds = 2.0
+
+    static func shouldAccept(
+        previousTransform: [Double]?,
+        previousTimestamp: Double?,
+        candidateTransform: [Double],
+        candidateTimestamp: Double
+    ) -> Bool {
+        guard
+            let previousTransform,
+            let previousTimestamp,
+            previousTransform.count == 16,
+            candidateTransform.count == 16,
+            previousTransform.allSatisfy(\.isFinite),
+            candidateTransform.allSatisfy(\.isFinite),
+            candidateTimestamp.isFinite,
+            previousTimestamp.isFinite
+        else { return true }
+        if candidateTimestamp - previousTimestamp >= forcedIntervalSeconds { return true }
+
+        let dx = candidateTransform[12] - previousTransform[12]
+        let dy = candidateTransform[13] - previousTransform[13]
+        let dz = candidateTransform[14] - previousTransform[14]
+        let translation = (dx * dx + dy * dy + dz * dz).squareRoot()
+        if translation >= minimumTranslationMeters { return true }
+
+        // trace(R_previous^T R_candidate) = sum of corresponding 3x3 entries.
+        let rotationOffsets = [0, 1, 2, 4, 5, 6, 8, 9, 10]
+        let trace = rotationOffsets.reduce(into: 0.0) { value, offset in
+            value += previousTransform[offset] * candidateTransform[offset]
+        }
+        let cosine = min(max((trace - 1) / 2, -1), 1)
+        return acos(cosine) >= minimumRotationRadians
+    }
+}
+
+enum RoomCapturePhotometricMetadata {
+    /// Reads only small scalar values. It is nonthrowing and performs no image work.
+    static func numericValues(
+        from exifData: [String: Any]
+    ) -> (iso: Double?, exposureBias: Double?) {
+        func number(for keys: [String]) -> Double? {
+            for key in keys {
+                if let value = exifData[key] as? NSNumber { return value.doubleValue }
+                if let values = exifData[key] as? [NSNumber], let value = values.first {
+                    return value.doubleValue
+                }
+            }
+            return nil
+        }
+        return (
+            number(for: ["PhotographicSensitivity", "ISOSpeedRatings", "ISO"]),
+            number(for: ["ExposureBiasValue", "ExposureBias"])
+        )
+    }
 }
 
 // MARK: - Sidecar bundle storage
@@ -243,14 +307,16 @@ private struct RoomCaptureBundleFrameCapture: @unchecked Sendable {
     let imageWidth: Int
     let imageHeight: Int
     let exposureDuration: Double
+    let iso: Double?
+    let exposureBias: Double?
 }
 
 @MainActor
 final class RoomCaptureBundleRecorder {
     static let bundleSubdirectoryName = "capture-bundle"
     private static let frameIntervalSeconds: Double = 0.7
-    private static let jpegQuality: CGFloat = 0.8
-    private static let sharedCIContext = CIContext(options: nil)
+    private nonisolated(unsafe) static let jpegQuality: CGFloat = 0.8
+    private nonisolated(unsafe) static let sharedCIContext = CIContext(options: nil)
 
     private let arSession: ARSession
     private let directoryURL: URL
@@ -260,6 +326,8 @@ final class RoomCaptureBundleRecorder {
     private var encodeTask: Task<Void, Never>?
     private var frames: [RoomCaptureBundleFrame] = []
     private var lastCapturedTimestamp: TimeInterval = 0
+    private var lastAcceptedTransform: [Double]?
+    private var lastAcceptedTimestamp: TimeInterval?
     private var frameCounter = 0
     private var notes: [String] = []
     private var didFinish = false
@@ -365,7 +433,16 @@ final class RoomCaptureBundleRecorder {
         guard encodeTask == nil else { return }
         guard frame.timestamp > lastCapturedTimestamp else { return }
         guard case .normal = frame.camera.trackingState else { return }
+        let cameraTransform = Self.columnMajor(frame.camera.transform)
+        guard RoomCapturePoseSelection.shouldAccept(
+            previousTransform: lastAcceptedTransform,
+            previousTimestamp: lastAcceptedTimestamp,
+            candidateTransform: cameraTransform,
+            candidateTimestamp: frame.timestamp
+        ) else { return }
         lastCapturedTimestamp = frame.timestamp
+
+        let metadata = RoomCapturePhotometricMetadata.numericValues(from: frame.exifData)
 
         frameCounter += 1
         let capture = RoomCaptureBundleFrameCapture(
@@ -374,11 +451,13 @@ final class RoomCaptureBundleRecorder {
             confidencePixelBuffer: frame.sceneDepth?.confidenceMap,
             fileName: String(format: "frame-%05d.jpg", frameCounter),
             timestamp: frame.timestamp,
-            cameraTransform: Self.columnMajor(frame.camera.transform),
+            cameraTransform: cameraTransform,
             intrinsics: Self.columnMajor(frame.camera.intrinsics),
             imageWidth: Int(frame.camera.imageResolution.width),
             imageHeight: Int(frame.camera.imageResolution.height),
-            exposureDuration: frame.camera.exposureDuration
+            exposureDuration: frame.camera.exposureDuration,
+            iso: metadata.iso,
+            exposureBias: metadata.exposureBias
         )
         let framesURL = framesURL
         encodeTask = Task.detached(priority: .utility) { [weak self] in
@@ -387,6 +466,8 @@ final class RoomCaptureBundleRecorder {
                 guard let self else { return }
                 if let record {
                     self.frames.append(record)
+                    self.lastAcceptedTransform = record.cameraTransform
+                    self.lastAcceptedTimestamp = record.timestamp
                 } else if self.notes.last?.hasPrefix("Keyframe encode failed") != true {
                     self.notes.append("Keyframe encode failed for \(capture.fileName).")
                 }
@@ -423,6 +504,8 @@ final class RoomCaptureBundleRecorder {
             imageWidth: capture.imageWidth,
             imageHeight: capture.imageHeight,
             exposureDuration: capture.exposureDuration,
+            iso: capture.iso,
+            exposureBias: capture.exposureBias,
             depth: encodeAndWriteDepth(capture, into: framesURL)
         )
     }

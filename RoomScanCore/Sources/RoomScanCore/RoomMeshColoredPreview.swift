@@ -280,6 +280,14 @@ public struct RoomMeshKeyframeSample: Sendable {
     public var imageWidth: Int
     public var imageHeight: Int
     public var imageRGBA: [UInt8]
+    public var depthWidth: Int
+    public var depthHeight: Int
+    public var depthMeters: [Float]
+    public var confidence: [UInt8]
+    public var normalizedSharpness: Double
+    /// Per-channel natural-log gain, applied in linear sRGB.
+    public var photometricLogGain: SIMD3<Double>
+    public var isPhotometricallyConnected: Bool
 
     public init(
         cameraToWorldColumnMajor: [Double],
@@ -288,7 +296,14 @@ public struct RoomMeshKeyframeSample: Sendable {
         sensorHeight: Int,
         imageWidth: Int,
         imageHeight: Int,
-        imageRGBA: [UInt8]
+        imageRGBA: [UInt8],
+        depthWidth: Int = 0,
+        depthHeight: Int = 0,
+        depthMeters: [Float] = [],
+        confidence: [UInt8] = [],
+        normalizedSharpness: Double = 1,
+        photometricLogGain: SIMD3<Double> = .zero,
+        isPhotometricallyConnected: Bool = true
     ) {
         self.cameraToWorldColumnMajor = cameraToWorldColumnMajor
         self.intrinsicsColumnMajor = intrinsicsColumnMajor
@@ -297,12 +312,22 @@ public struct RoomMeshKeyframeSample: Sendable {
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
         self.imageRGBA = imageRGBA
+        self.depthWidth = depthWidth
+        self.depthHeight = depthHeight
+        self.depthMeters = depthMeters
+        self.confidence = confidence
+        self.normalizedSharpness = normalizedSharpness
+        self.photometricLogGain = photometricLogGain
+        self.isPhotometricallyConnected = isPhotometricallyConnected
     }
 }
 
 public enum RoomMeshKeyframeColorizer {
     public struct Result: Sendable {
         public var colors: [SIMD3<UInt8>]
+        public var coloredVertices: [Bool]
+        public var linearColors: [SIMD3<Double>?]
+        public var selectedScores: [Double]
         /// Vertices that received at least one keyframe sample.
         public var coloredVertexCount: Int
     }
@@ -310,10 +335,6 @@ public enum RoomMeshKeyframeColorizer {
     /// Vertices no keyframe could see keep this neutral gray.
     public static let uncoloredGray = SIMD3<UInt8>(128, 128, 128)
 
-    /// Occlusion test tolerance: a vertex passes if its distance along the
-    /// camera axis is within 5% + 5 cm of the nearest rasterized surface.
-    private static let depthToleranceScale = 1.05
-    private static let depthToleranceBias = 0.05
     private static let nearPlane = 0.05
 
     public static func colorize(
@@ -323,59 +344,54 @@ public enum RoomMeshKeyframeColorizer {
         keyframes: [RoomMeshKeyframeSample],
         depthBufferWidth: Int = 160
     ) -> Result {
-        var accumulated = [SIMD3<Double>](repeating: .init(), count: vertices.count)
-        var weights = [Double](repeating: 0, count: vertices.count)
+        var candidates = [[RoomMeshColorCandidate]](repeating: [], count: vertices.count)
         let hasNormals = normals.count == vertices.count
 
-        for keyframe in keyframes {
+        for (frameIndex, keyframe) in keyframes.enumerated() {
             guard
-                keyframe.cameraToWorldColumnMajor.count == 16,
-                keyframe.intrinsicsColumnMajor.count == 9,
-                keyframe.sensorWidth > 0,
-                keyframe.sensorHeight > 0,
                 keyframe.imageWidth > 0,
                 keyframe.imageHeight > 0,
                 keyframe.imageRGBA.count == keyframe.imageWidth * keyframe.imageHeight * 4,
-                let worldToCamera = rigidInverse(columnMajor4x4: keyframe.cameraToWorldColumnMajor)
+                let camera = RoomMeshProjection.Camera(
+                    cameraToWorldColumnMajor: keyframe.cameraToWorldColumnMajor,
+                    intrinsicsColumnMajor: keyframe.intrinsicsColumnMajor,
+                    sensorWidth: keyframe.sensorWidth,
+                    sensorHeight: keyframe.sensorHeight
+                )
             else {
                 continue
             }
-            let cameraPosition = SIMD3<Double>(
-                keyframe.cameraToWorldColumnMajor[12],
-                keyframe.cameraToWorldColumnMajor[13],
-                keyframe.cameraToWorldColumnMajor[14]
+            let depthPayload = RoomMeshDepthPayload(
+                width: keyframe.depthWidth,
+                height: keyframe.depthHeight,
+                depthMeters: keyframe.depthMeters,
+                confidence: keyframe.confidence.isEmpty ? nil : keyframe.confidence
             )
-            let k = keyframe.intrinsicsColumnMajor
-            let fx = k[0], fy = k[4], cx = k[6], cy = k[7]
 
-            // Pass 1: project every vertex into sensor pixels once.
+            // Pass 1: project every vertex into raw sensor pixel-center coordinates.
             var projected = [SIMD3<Double>](repeating: .init(), count: vertices.count)
+            var cameraPoints = [SIMD3<Double>](repeating: .init(), count: vertices.count)
             var valid = [Bool](repeating: false, count: vertices.count)
             for index in vertices.indices {
                 let world = SIMD3<Double>(
                     Double(vertices[index].x), Double(vertices[index].y), Double(vertices[index].z)
                 )
-                let cam = worldToCamera.transformPoint(world)
-                // ARKit camera space looks down -Z; convert to a CV-style
-                // forward distance and top-left-origin pixel coordinates.
-                let forward = -cam.z
-                guard forward > nearPlane else { continue }
-                let u = cx + fx * (cam.x / forward)
-                let v = cy - fy * (cam.y / forward)
-                projected[index] = SIMD3<Double>(u, v, forward)
-                valid[index] = u >= 0 && u < Double(keyframe.sensorWidth)
-                    && v >= 0 && v < Double(keyframe.sensorHeight)
+                guard let cameraPoint = camera.cameraPoint(world: world) else { continue }
+                cameraPoints[index] = cameraPoint
+                guard let point = camera.project(camera: cameraPoint, nearPlane: nearPlane) else { continue }
+                projected[index] = SIMD3<Double>(point.pixel.x, point.pixel.y, point.forward)
+                valid[index] = camera.containsSensorPixel(point.pixel)
             }
 
-            // Pass 2: rasterize the mesh into a coarse depth buffer so a
-            // vertex behind a nearer surface is not painted through it.
-            let bufferWidth = max(depthBufferWidth, 8)
+            // Pass 2: clip at the near plane, then rasterize reciprocal depth.
+            let bufferWidth = RoomMeshVisibility.meshBufferWidth(
+                requested: depthBufferWidth,
+                recordedDepthWidth: depthPayload?.width
+            )
             let bufferHeight = max(
                 Int((Double(bufferWidth) * Double(keyframe.sensorHeight) / Double(keyframe.sensorWidth)).rounded()),
                 8
             )
-            let scaleX = Double(bufferWidth) / Double(keyframe.sensorWidth)
-            let scaleY = Double(bufferHeight) / Double(keyframe.sensorHeight)
             var depthBuffer = [Double](repeating: .infinity, count: bufferWidth * bufferHeight)
             var faceIndex = 0
             while faceIndex + 2 < faces.count {
@@ -384,31 +400,53 @@ public enum RoomMeshKeyframeColorizer {
                 let i1 = Int(faces[faceIndex + 1])
                 let i2 = Int(faces[faceIndex + 2])
                 guard
-                    i0 < vertices.count, i1 < vertices.count, i2 < vertices.count,
-                    projected[i0].z > 0, projected[i1].z > 0, projected[i2].z > 0
+                    i0 < vertices.count, i1 < vertices.count, i2 < vertices.count
                 else { continue }
-                rasterizeTriangle(
-                    SIMD3<Double>(projected[i0].x * scaleX, projected[i0].y * scaleY, projected[i0].z),
-                    SIMD3<Double>(projected[i1].x * scaleX, projected[i1].y * scaleY, projected[i1].z),
-                    SIMD3<Double>(projected[i2].x * scaleX, projected[i2].y * scaleY, projected[i2].z),
-                    into: &depthBuffer,
-                    width: bufferWidth,
-                    height: bufferHeight
+                let polygon = RoomMeshProjection.clipTriangleToNearPlane(
+                    [cameraPoints[i0], cameraPoints[i1], cameraPoints[i2]],
+                    nearPlane: nearPlane
                 )
+                guard polygon.count >= 3 else { continue }
+                for triangleIndex in 1..<(polygon.count - 1) {
+                    let triangle = [polygon[0], polygon[triangleIndex], polygon[triangleIndex + 1]]
+                    let rasterPoints = triangle.compactMap { cameraPoint -> RoomMeshProjection.ProjectedPoint? in
+                        guard let sensor = camera.project(camera: cameraPoint, nearPlane: nearPlane) else { return nil }
+                        return RoomMeshProjection.ProjectedPoint(
+                            pixel: SIMD2<Double>(
+                                RoomMeshProjection.resizedPixelCenter(
+                                    sensor.pixel.x,
+                                    sourceSize: keyframe.sensorWidth,
+                                    destinationSize: bufferWidth
+                                ),
+                                RoomMeshProjection.resizedPixelCenter(
+                                    sensor.pixel.y,
+                                    sourceSize: keyframe.sensorHeight,
+                                    destinationSize: bufferHeight
+                                )
+                            ),
+                            forward: sensor.forward
+                        )
+                    }
+                    guard rasterPoints.count == 3 else { continue }
+                    RoomMeshProjection.rasterizeDepthTriangle(
+                        rasterPoints[0], rasterPoints[1], rasterPoints[2],
+                        into: &depthBuffer,
+                        width: bufferWidth,
+                        height: bufferHeight
+                    )
+                }
             }
 
             // Pass 3: sample the image for every visible, front-facing vertex.
-            let imageScaleX = Double(keyframe.imageWidth) / Double(keyframe.sensorWidth)
-            let imageScaleY = Double(keyframe.imageHeight) / Double(keyframe.sensorHeight)
             for index in vertices.indices where valid[index] {
                 let world = SIMD3<Double>(
                     Double(vertices[index].x), Double(vertices[index].y), Double(vertices[index].z)
                 )
-                let toCamera = cameraPosition - world
+                let toCamera = camera.cameraPosition - world
                 let distance = length(toCamera)
                 guard distance > 0 else { continue }
 
-                var facingWeight = 1.0
+                var facingCosine = 1.0
                 if hasNormals {
                     let normal = SIMD3<Double>(
                         Double(normals[index].x), Double(normals[index].y), Double(normals[index].z)
@@ -417,42 +455,110 @@ public enum RoomMeshKeyframeColorizer {
                     guard normalLength > 0 else { continue }
                     let cosine = dot(normal, toCamera) / (normalLength * distance)
                     guard cosine > 0 else { continue }
-                    facingWeight = cosine * cosine
+                    facingCosine = cosine
                 }
 
                 let depth = projected[index].z
-                let bufferX = min(Int(projected[index].x * scaleX), bufferWidth - 1)
-                let bufferY = min(Int(projected[index].y * scaleY), bufferHeight - 1)
+                let bufferPoint = SIMD2<Double>(
+                    RoomMeshProjection.resizedPixelCenter(
+                        projected[index].x,
+                        sourceSize: keyframe.sensorWidth,
+                        destinationSize: bufferWidth
+                    ),
+                    RoomMeshProjection.resizedPixelCenter(
+                        projected[index].y,
+                        sourceSize: keyframe.sensorHeight,
+                        destinationSize: bufferHeight
+                    )
+                )
+                let bufferX = min(max(Int(bufferPoint.x.rounded()), 0), bufferWidth - 1)
+                let bufferY = min(max(Int(bufferPoint.y.rounded()), 0), bufferHeight - 1)
                 let nearest = depthBuffer[bufferY * bufferWidth + bufferX]
-                if nearest.isFinite, depth > nearest * depthToleranceScale + depthToleranceBias {
-                    continue
-                }
+                let lidar = depthPayload?.bilinearSample(
+                    x: RoomMeshProjection.resizedPixelCenter(
+                        projected[index].x,
+                        sourceSize: keyframe.sensorWidth,
+                        destinationSize: depthPayload?.width ?? 1
+                    ),
+                    y: RoomMeshProjection.resizedPixelCenter(
+                        projected[index].y,
+                        sourceSize: keyframe.sensorHeight,
+                        destinationSize: depthPayload?.height ?? 1
+                    )
+                )
+                let visibility = RoomMeshVisibility.evaluate(
+                    sampleDepth: depth,
+                    lidarDepth: lidar?.depth,
+                    confidence: lidar?.confidence,
+                    meshDepth: nearest.isFinite ? nearest : nil
+                )
+                guard visibility.isVisible else { continue }
 
-                let sampled = bilinearSample(
+                let imageX = RoomMeshProjection.resizedPixelCenter(
+                    projected[index].x,
+                    sourceSize: keyframe.sensorWidth,
+                    destinationSize: keyframe.imageWidth
+                )
+                let imageY = RoomMeshProjection.resizedPixelCenter(
+                    projected[index].y,
+                    sourceSize: keyframe.sensorHeight,
+                    destinationSize: keyframe.imageHeight
+                )
+                var sampled = RoomMeshColor.bilinearSample(
                     rgba: keyframe.imageRGBA,
                     width: keyframe.imageWidth,
                     height: keyframe.imageHeight,
-                    x: projected[index].x * imageScaleX - 0.5,
-                    y: projected[index].y * imageScaleY - 0.5
+                    x: imageX,
+                    y: imageY
                 )
-                let weight = facingWeight / (depth * depth)
-                accumulated[index] += sampled * weight
-                weights[index] += weight
+                sampled *= SIMD3<Double>(
+                    exp(keyframe.photometricLogGain.x),
+                    exp(keyframe.photometricLogGain.y),
+                    exp(keyframe.photometricLogGain.z)
+                )
+                let pixelX = min(max(Int(imageX.rounded()), 0), keyframe.imageWidth - 1)
+                let pixelY = min(max(Int(imageY.rounded()), 0), keyframe.imageHeight - 1)
+                let pixelOffset = (pixelY * keyframe.imageWidth + pixelX) * 4
+                let saturated = (0..<3).contains { channel in
+                    keyframe.imageRGBA[pixelOffset + channel] <= 1
+                        || keyframe.imageRGBA[pixelOffset + channel] >= 254
+                }
+                let score = RoomMeshFrameAnalysis.sampleScore(
+                    facingCosine: facingCosine,
+                    euclideanDistance: distance,
+                    normalizedSharpness: keyframe.normalizedSharpness,
+                    visibilityFactor: visibility.qualityFactor,
+                    isSaturated: saturated,
+                    isPhotometricallyConnected: keyframe.isPhotometricallyConnected
+                )
+                if score > 0 {
+                    candidates[index].append(RoomMeshColorCandidate(
+                        linearRGB: sampled,
+                        score: score,
+                        frameIndex: frameIndex
+                    ))
+                }
             }
         }
 
         var colors = [SIMD3<UInt8>](repeating: uncoloredGray, count: vertices.count)
+        var linearColors = [SIMD3<Double>?](repeating: nil, count: vertices.count)
+        var selectedScores = [Double](repeating: 0, count: vertices.count)
         var coloredCount = 0
-        for index in vertices.indices where weights[index] > 0 {
-            let blended = accumulated[index] / weights[index]
-            colors[index] = SIMD3<UInt8>(
-                UInt8(min(max(blended.x.rounded(), 0), 255)),
-                UInt8(min(max(blended.y.rounded(), 0), 255)),
-                UInt8(min(max(blended.z.rounded(), 0), 255))
-            )
+        for index in vertices.indices {
+            guard let selected = RoomMeshFrameAnalysis.bestInlier(from: candidates[index]) else { continue }
+            colors[index] = RoomMeshColor.encode(selected.linearRGB)
+            linearColors[index] = selected.linearRGB
+            selectedScores[index] = selected.score
             coloredCount += 1
         }
-        return Result(colors: colors, coloredVertexCount: coloredCount)
+        return Result(
+            colors: colors,
+            coloredVertices: candidates.map { !$0.isEmpty },
+            linearColors: linearColors,
+            selectedScores: selectedScores,
+            coloredVertexCount: coloredCount
+        )
     }
 
     // MARK: Small math helpers (Core stays free of the simd module)

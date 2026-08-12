@@ -60,6 +60,11 @@
 		7A0000000000000000000003 /* RoomSplatViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000004 /* RoomSplatViewer.swift */; };
 		7A0000000000000000000005 /* RoomCaptureBundleRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000006 /* RoomCaptureBundleRecorder.swift */; };
 		7A0000000000000000000007 /* RoomMeshViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000008 /* RoomMeshViewer.swift */; };
+		7B0000000000000000000001 /* RoomMeshColoringProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0000000000000000000002 /* RoomMeshColoringProgress.swift */; };
+		7C0000000000000000000003 /* RoomMeshColoringJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0000000000000000000004 /* RoomMeshColoringJob.swift */; };
+		7C0000000000000000000005 /* RoomMeshBackgroundProcessing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0000000000000000000006 /* RoomMeshBackgroundProcessing.swift */; };
+		7C0000000000000000000007 /* RoomMeshColoringNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0000000000000000000008 /* RoomMeshColoringNotifications.swift */; };
+		7C0000000000000000000001 /* RoomMeshColoringJobTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0000000000000000000002 /* RoomMeshColoringJobTests.swift */; };
 		7A0000000000000000000009 /* RoomMeshViewerAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000A /* RoomMeshViewerAppTests.swift */; };
 		7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */; };
 		7A000000000000000000000D /* RoomCaptureBundleTrainingExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */; };
@@ -128,6 +133,11 @@
 		7A0000000000000000000004 /* RoomSplatViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSplatViewer.swift; sourceTree = "<group>"; };
 		7A0000000000000000000006 /* RoomCaptureBundleRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleRecorder.swift; sourceTree = "<group>"; };
 		7A0000000000000000000008 /* RoomMeshViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshViewer.swift; sourceTree = "<group>"; };
+		7B0000000000000000000002 /* RoomMeshColoringProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshColoringProgress.swift; sourceTree = "<group>"; };
+		7C0000000000000000000004 /* RoomMeshColoringJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshColoringJob.swift; sourceTree = "<group>"; };
+		7C0000000000000000000006 /* RoomMeshBackgroundProcessing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshBackgroundProcessing.swift; sourceTree = "<group>"; };
+		7C0000000000000000000008 /* RoomMeshColoringNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshColoringNotifications.swift; sourceTree = "<group>"; };
+		7C0000000000000000000002 /* RoomMeshColoringJobTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshColoringJobTests.swift; sourceTree = "<group>"; };
 		7A000000000000000000000A /* RoomMeshViewerAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomMeshViewerAppTests.swift; sourceTree = "<group>"; };
 		7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleDepthTests.swift; sourceTree = "<group>"; };
 		7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleTrainingExport.swift; sourceTree = "<group>"; };
@@ -320,6 +330,7 @@
 				7A000000000000000000000A /* RoomMeshViewerAppTests.swift */,
 				7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */,
 				7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */,
+				7C0000000000000000000002 /* RoomMeshColoringJobTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -347,6 +358,8 @@
 				ABCD00000000000000000002 /* RoomViewerView.swift */,
 				7A0000000000000000000004 /* RoomSplatViewer.swift */,
 				7A0000000000000000000008 /* RoomMeshViewer.swift */,
+				7B0000000000000000000002 /* RoomMeshColoringProgress.swift */,
+				7C0000000000000000000004 /* RoomMeshColoringJob.swift */,
 			);
 			path = RoomViewer;
 			sourceTree = "<group>";
@@ -362,6 +375,7 @@
 		B30000000000000000000001 /* RoomScanStudio/Infrastructure */ = {
 			isa = PBXGroup;
 			children = (
+				7C0000000000000000000009 /* Background */,
 				B30000000000000000000002 /* Persistence */,
 				B30000000000000000000003 /* FileStorage */,
 				D30000000000000000000001 /* Capture */,
@@ -369,6 +383,15 @@
 				F62000000000000000000001 /* CloudBackup */,
 			);
 			path = RoomScanStudio/Infrastructure;
+			sourceTree = "<group>";
+		};
+		7C0000000000000000000009 /* Background */ = {
+			isa = PBXGroup;
+			children = (
+				7C0000000000000000000006 /* RoomMeshBackgroundProcessing.swift */,
+				7C0000000000000000000008 /* RoomMeshColoringNotifications.swift */,
+			);
+			path = Background;
 			sourceTree = "<group>";
 		};
 		B30000000000000000000002 /* Persistence */ = {
@@ -641,6 +664,10 @@
 				DCBA00000000000000000002 /* RoomViewerView.swift in Sources */,
 				7A0000000000000000000003 /* RoomSplatViewer.swift in Sources */,
 				7A0000000000000000000007 /* RoomMeshViewer.swift in Sources */,
+				7B0000000000000000000001 /* RoomMeshColoringProgress.swift in Sources */,
+				7C0000000000000000000003 /* RoomMeshColoringJob.swift in Sources */,
+				7C0000000000000000000005 /* RoomMeshBackgroundProcessing.swift in Sources */,
+				7C0000000000000000000007 /* RoomMeshColoringNotifications.swift in Sources */,
 				DCBA00000000000000000003 /* RoomEditorView.swift in Sources */,
 				ED5000000000000000000001 /* RoomExportCoordinator.swift in Sources */,
 				ED5000000000000000000002 /* RoomExportService.swift in Sources */,
@@ -667,6 +694,7 @@
 				7A0000000000000000000009 /* RoomMeshViewerAppTests.swift in Sources */,
 				7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */,
 				7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */,
+				7C0000000000000000000001 /* RoomMeshColoringJobTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

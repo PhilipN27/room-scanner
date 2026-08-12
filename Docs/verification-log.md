@@ -998,3 +998,198 @@ capture and permission paths; Accessibility Inspector/VoiceOver review;
 CloudKit development-container account, upload, listing, recovery, cancellation,
 and service-limit checks; independent ZIP/USDZ/PNG/PDF inspection; and system
 share completion/cancellation.
+
+## 2026-08-11 - Photoreal colored-mesh redesign
+
+Scope: the approved photoreal colored-mesh design, including projection and
+visibility math, frame analysis and calibration, deterministic texture baking,
+mixed textured/fallback rendering, v3 derived caches, capture schema v3, and
+the associated physical-device test contracts.
+
+Focused TDD evidence:
+
+- New projection, frame-analysis, visibility, coverage-fill, texture-baker,
+  photoreal-cache, and colored-preview tests first failed against missing or
+  incorrect production behavior, then passed after the corresponding changes.
+- Safe mutation controls detected affine instead of reciprocal-depth
+  interpolation, a reduced photometric-overlap floor, a relaxed coverage depth
+  guard, a relaxed high-confidence LiDAR tolerance, disabled atlas dilation,
+  bypassed sRGB decoding, non-Euclidean frame scoring, and disabled full-size
+  checkerboard atlas sampling. Each live implementation was restored and its
+  focused test rerun green.
+- Restored focused RoomMesh sweep: 37 tests, 0 failures.
+
+Fresh local verification:
+
+1. Complete portable `RoomScanCore`: 160 tests, 0 failures.
+2. Final iOS Simulator app-unit target: 86 tests, 0 failures; `TEST SUCCEEDED`.
+3. Full iOS Simulator scheme: all 86 app tests passed; the 25-test UI target
+   recorded one timing-sensitive failure in the pre-existing editor revision
+   assertion (`revision-001` observed before `revision-002`). The exact failed
+   UI test was rerun without code changes and passed, 1 test, 0 failures.
+4. Unsigned generic iOS device build: `BUILD SUCCEEDED`.
+5. Built-product byte inspection found `room_mesh_textured_fragment`,
+   `scene-mesh-photoreal-v3`, `texture_valid`, and `exposureBias` in the device
+   application binary.
+6. Final whitespace, diff, and repository-status inspection completed without
+   staging, committing, pushing, or opening a pull request.
+
+These are source/build/Simulator results only. Still open and intentionally not
+claimed: LiDAR-device subpixel RGB registration, 5 mm seam review, scan-health
+latency and memory targets, thermal behavior, and photo-level visual quality.
+The physical-device protocol and release gate remain in
+`Docs/real-device-test-plan.md` and `Docs/release-checklist.md`.
+
+## 2026-08-11 - Colored-mesh first-open hang regression
+
+The first implementation built texture charts by comparing every projected
+face against every other projected face. A focused 6,000-face regression took
+8.13 seconds and failed its two-second boundedness oracle. Edge-indexed chart
+construction reduced the same focused run to 0.03 seconds while preserving the
+connected-chart/opposite-winding fixture.
+
+Atlas padding was also changed from full `SIMD3<Double>` and native-`Int`
+snapshots on every dilation pass to normalized linear UInt16 channels, Int32
+owners, and deterministic frontier expansion. Negative controls proved the
+chart-adjacency and compact-dilation tests fail when their live behavior is
+neutralized.
+
+Fresh restored verification: 9 texture-baker tests passed; complete
+`RoomScanCore` passed 162 tests; the focused colored-mesh Simulator target
+passed 5 tests; the complete RoomScanStudio app-unit target passed 86 tests;
+and the unsigned generic iOS device build succeeded. A real captured room on a
+physical LiDAR device remains the final latency and peak-memory oracle.
+
+## 2026-08-11 - Measured colored-mesh progress and recovery UX
+
+Scope: accurate measured progress for colored-mesh generation, cancellation,
+30-second no-work detection, actionable failures, recoverable warnings, retry,
+and stable accessibility wiring. The renderer alone publishes 100 percent so
+the bar cannot claim completion before the textured mesh is ready.
+
+Focused TDD evidence:
+
+- Progress phase mapping, monotonic event sequencing, uncached and cached loader
+  progress, cancellation without cache publication, recoverable fallback,
+  controller completion ownership, stall timing, actionable errors, and stable
+  accessibility identifiers each failed against absent or incorrect behavior
+  before their production changes passed.
+- Safe mutation controls changed the 30-second threshold to 31 seconds and
+  prevented renderer readiness from reaching 100 percent. Both focused tests
+  failed for the intended reason; the live behavior was restored and the
+  surrounding viewer tests rerun green.
+- Core atlas dilation work reporting and cancellation first failed against the
+  old non-reporting signature, then passed with the cancellable implementation.
+
+Fresh local verification:
+
+1. Complete portable `RoomScanCore`: 163 tests, 0 failures.
+2. Final iOS Simulator app-unit target: 94 tests, 0 failures, including 13
+   `RoomMeshViewerAppTests`; `TEST SUCCEEDED`.
+3. Full iOS Simulator scheme before the final accessibility-identifier-only
+   correction: 93 app tests and 25 UI tests, 0 failures; `TEST SUCCEEDED`.
+   After that correction, the focused identifier regression passed and the
+   complete 94-test app-unit target passed as recorded above.
+4. Final unsigned generic iOS device build with signing disabled:
+   `BUILD SUCCEEDED`.
+5. Final device-product inspection found `room_mesh_textured_fragment`,
+   `scene-mesh-photoreal-v3.json`, `meshViewer.progress`,
+   `meshViewer.percent`, `meshViewer.stall`, and `meshViewer.retry` in the
+   application binary.
+6. Final whitespace, diff, and repository-status inspection completed without
+   staging, committing, pushing, or opening a pull request.
+
+The Simulator cannot establish real-room progress pacing, cancellation latency
+under device load, LiDAR registration, memory/thermal behavior, seam quality,
+or photo-level appearance. Those remain physical-device gates in
+`Docs/real-device-test-plan.md` and `Docs/release-checklist.md`.
+
+## 2026-08-11 - Large-room colored-mesh analysis optimization
+
+Scope: remove redundant linear-light conversion during 1,024-pixel sharpness
+analysis and avoid exhaustive sample scans between photograph pairs that cannot
+share the required photometric overlap. Frame eligibility, the 128-sample
+threshold, robust ratios, calibration objective, image bounds, visibility,
+atlas resolution, and cache format remain unchanged.
+
+Focused red/green evidence:
+
+- The original 1,024 x 768 sharpness workload took 0.90 seconds and failed its
+  0.60-second core-operation bound. A 256-entry immutable sRGB-byte lookup and
+  one-pass luminance buffer made the focused test pass. All 256 encoded values
+  match the explicit sRGB transfer function within `1e-15`, and buffered
+  sharpness matches the direct repeated formula within `1e-15`.
+- The original 192-frame, 4,096-samples-per-frame unrelated-view calibration
+  workload took 4.83 seconds and failed its two-second initial bound. Exact
+  sample-range pruning plus a deterministic inverted occurrence index reduced
+  the restored test to approximately 0.50-0.62 seconds under its final
+  one-second bound. Existing robust-overlap, gain-clamp, anchor, and
+  disconnected-frame tests remain green.
+- Mutation controls replaced buffered sharpness with repeated nonlinear
+  conversion (1.06 seconds, focused failure) and forced disjoint frames into
+  the occurrence index (1.93 seconds, focused failure). Both optimized paths
+  were restored and the complete frame-analysis suite passed 10 tests.
+
+Fresh local verification:
+
+1. Complete portable `RoomScanCore`: 167 tests, 0 failures.
+2. Full iOS Simulator scheme: 94 app tests and 25 UI tests, 0 failures;
+   `TEST SUCCEEDED`.
+3. Final unsigned generic iOS device build with signing disabled:
+   `BUILD SUCCEEDED`.
+4. Device-product symbol inspection found
+   `RoomMeshFrameAnalysis.luminanceSharpness`,
+   `RoomMeshFrameAnalysis.solvePhotometricCalibration`, and
+   `RoomMeshColor.sRGBToLinear`, plus `room_mesh_textured_fragment`,
+   `scene-mesh-photoreal-v3.json`, and `meshViewer.progress`.
+5. Final whitespace, diff, and repository-status inspection completed without
+   staging, committing, pushing, or opening a pull request.
+
+Host timing proves the redundant-work regressions and their local improvement;
+it does not prove wall-clock speed, memory, or thermal behavior on a LiDAR
+device. The updated physical-device plan requires a same-bundle phase-by-phase
+comparison on the minimum supported device.
+
+## 2026-08-11 - Adaptive background colored-mesh processing
+
+Scope: one app-owned coloring worker, iOS 26 continued-processing admission,
+foreground fallback, measured system progress, generation-scoped background
+notifications, durable derived-state recovery, notification routing, and
+viewer-independent progress/cancellation UI.
+
+Focused TDD evidence:
+
+- Capability, notification milestone, generation, atomic-record, recovery,
+  one-worker, detach, expiration, cache-publication, relaunch, submission
+  fallback, and cache-ready attachment tests first failed against missing or
+  incorrect behavior and then passed after the corresponding production work.
+- Mutation controls proved the 50-percent boundary, viewer-detach ownership,
+  cache-publication success guard, and delivered-active-task recovery guard are
+  exercised. Each focused test failed with its live guard neutralized, then
+  passed after restoration.
+- Final restored `RoomMeshColoringJobTests`: 14 tests, 0 failures.
+
+Fresh local verification:
+
+1. Complete portable `RoomScanCore`: 172 tests, 0 failures.
+2. Full iOS Simulator scheme on iPhone 16 Pro / iOS 26.3.1: all 108 app tests
+   passed; 24 of 25 UI tests passed. The sole failure was the existing
+   capture-discard navigation timing assertion. Its exact test was rerun
+   unchanged after removing disposable DerivedData that had filled the host
+   volume and passed, 1 test, 0 failures.
+3. Unsigned generic iOS device build with signing disabled: succeeded.
+4. Built-product inspection found the wildcard continued-task identifier,
+   `RoomMeshColoringJobCoordinator`, notification adapter/milestone symbols,
+   `Room coloring is halfway done`, `room_mesh_textured_fragment`, and the
+   `scene-mesh-photoreal-v3` asset names. Source/configuration inspection found
+   no background-GPU resource request or entitlement.
+5. Final whitespace, scoped diff, capture-ordering, and repository-status
+   inspection completed without staging, committing, pushing, or opening a
+   pull request. JPEG quality remains unchanged, and reconstruction remains
+   enabled before scene depth is added after the observed mesh-anchor gate.
+
+These results prove local policy, persistence, integration, Simulator UI, and
+delivery wiring only. Scheduler admission, sustained background execution,
+system progress UI, notification timing, force-quit behavior, battery/thermal
+behavior, LiDAR registration, scan health, and photo-level quality remain the
+physical-device gates in `Docs/real-device-test-plan.md`.

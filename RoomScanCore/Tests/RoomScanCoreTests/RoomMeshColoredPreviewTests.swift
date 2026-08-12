@@ -113,6 +113,8 @@ final class RoomMeshColoredPreviewTests: XCTestCase {
         )
         XCTAssertEqual(result.coloredVertexCount, 1)
         XCTAssertEqual(result.colors[0], SIMD3<UInt8>(255, 0, 0))
+        XCTAssertGreaterThan(result.selectedScores[0], 0)
+        XCTAssertEqual(result.linearColors[0], SIMD3<Double>(1, 0, 0))
     }
 
     /// A vertex above the camera axis must sample the UPPER half of the
@@ -135,7 +137,8 @@ final class RoomMeshColoredPreviewTests: XCTestCase {
         )
         XCTAssertEqual(result.coloredVertexCount, 1)
         XCTAssertGreaterThan(result.colors[0].x, 200, "vertex above the axis should sample the top (red) rows")
-        XCTAssertLessThan(result.colors[0].z, 60)
+        XCTAssertLessThan(result.colors[0].z, 100, "linear-light filtering may retain a small blue contribution")
+        XCTAssertGreaterThan(result.colors[0].x, result.colors[0].z * 2)
     }
 
     func testOccludedVertexStaysUncolored() {
