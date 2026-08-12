@@ -4,6 +4,21 @@ This document is the complete product brief, technical plan, implementation sequ
 
 The intended first user is the Norwalk YMCA team, but the app should be designed as a reusable open-source room-scanning product.
 
+## Approved 2026-08-12 product expansion
+
+The original plan below remains authoritative for the local package-first scan,
+revision, viewer, editor, export, and private-backup foundations. The approved
+AI redesign and professional-delivery expansion is defined by:
+
+- `Docs/superpowers/specs/2026-08-12-ai-redesign-platform-design.md`
+- `Docs/superpowers/plans/2026-08-12-ai-redesign-platform.md`
+
+Those documents deliberately authorize bounded accounts, professional hosted
+sync, lightweight property grouping, immutable public snapshots, client links,
+and asynchronous collaboration while preserving fully functional account-free
+offline use. Where their approved scope conflicts with a legacy exclusion in
+this document, the 2026-08-12 design controls.
+
 ---
 
 Rules:
@@ -17,7 +32,7 @@ Rules:
 7. Treat rescanning and geometry merging as a high-risk feature. Implement safe review, accept, undo, and revert behavior. Never silently overwrite geometry or duplicate recognized objects.
 8. Keep the app local-first and offline-capable. Make iCloud optional.
 9. Keep large meshes, textures, photos, and scan packages file-backed rather than putting them directly into database records.
-10. Do not add a server, login, remote AI processing, analytics, multi-room support, public sharing links, or collaborative editing unless this plan is explicitly revised.
+10. Do not add a server, login, remote AI processing, analytics, multi-room support, public sharing links, or collaborative editing except within an explicitly approved revision. The bounded 2026-08-12 AI redesign platform documents above are such a revision; they do not authorize first-party v1 inference, analytics, continuous multi-room reconstruction, or real-time co-editing.
 11. Inspect the license and build status of any existing RoomPlan sample or GitHub project before copying or adapting code. If a license is absent or incompatible, use the project only as a reference.
 12. Prefer Apple frameworks and Swift Package Manager dependencies. Check dependency licenses before adding them.
 13. After every meaningful phase, build the project, run the relevant tests, report what changed, and record what was verified.
@@ -446,14 +461,19 @@ Do not mark the project complete based only on a successful compile.
 
 ## 10. Explicit exclusions for V1
 
-Do not add these unless the plan is later revised:
+Do not add these unless the plan is later revised. The 2026-08-12 AI redesign
+platform design has revised the former blanket exclusions on accounts, hosted
+services, property containers, public client links, and asynchronous
+collaboration only within its stated boundaries:
 
 - Multi-room building scans
 - Real-time collaboration
-- Public sharing links
-- User accounts
-- Server-side processing
-- Remote AI processing
+- Continuous cross-room reconstruction or inferred room alignment
+- Anonymous guest publishing or unowned hosted projects
+- Live project access from public links
+- Full browser capture or spatial editing
+- First-party hosted or local AI inference in v1
+- Server-side model inference paid for by RoomScanStudio in the core workflow
 - Automatic cloud upload without consent
 - Photogrammetry-grade visual reconstruction guarantees
 - Survey-grade measurement guarantees
