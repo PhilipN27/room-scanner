@@ -88,15 +88,20 @@ final class RoomViewerEditorTests: XCTestCase {
         camera = try RoomViewerCameraReducer.reduce(camera, action: .firstPerson)
         XCTAssertEqual(camera.mode, .firstPerson)
         XCTAssertTrue(camera.isNoClip)
-        let firstPersonPosition = camera.position
-        camera = try RoomViewerCameraReducer.reduce(
-            camera,
-            action: .pan(delta: RoomPoint3D(x: 1, y: 0, z: 0))
+        // Walk mode moves only through .move: pan and zoom are orbit-only
+        // no-ops so nothing can violate constant eye height.
+        let firstPersonCamera = camera
+        XCTAssertEqual(
+            try RoomViewerCameraReducer.reduce(
+                camera,
+                action: .pan(delta: RoomPoint3D(x: 1, y: 2, z: 0))
+            ),
+            firstPersonCamera
         )
-        XCTAssertNotEqual(camera.position, firstPersonPosition)
-        let beforeFirstPersonZoom = camera.position
-        camera = try RoomViewerCameraReducer.reduce(camera, action: .zoom(deltaMeters: -0.5))
-        XCTAssertNotEqual(camera.position, beforeFirstPersonZoom)
+        XCTAssertEqual(
+            try RoomViewerCameraReducer.reduce(camera, action: .zoom(deltaMeters: -0.5)),
+            firstPersonCamera
+        )
 
         let topCamera = try RoomViewerCameraReducer.reduce(camera, action: .top)
         XCTAssertEqual(topCamera.preset, .top)
@@ -136,6 +141,138 @@ final class RoomViewerEditorTests: XCTestCase {
         XCTAssertEqual(incremental.position.x, total.position.x, accuracy: 0.000_000_1)
         XCTAssertEqual(incremental.position.y, total.position.y, accuracy: 0.000_000_1)
         XCTAssertEqual(incremental.position.z, total.position.z, accuracy: 0.000_000_1)
+    }
+
+    func testWalkMoveIntegratesYawOnlyMovementAtConstantEyeHeight() throws {
+        var camera = try RoomViewerCameraReducer.reduce(
+            RoomViewerCamera.defaultState,
+            action: .firstPerson
+        )
+        // Look steeply downward: walking must still travel horizontally.
+        camera = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .orbit(yawDeltaRadians: 0, pitchDeltaRadians: -1.2)
+        )
+        let start = camera
+        let moved = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(localX: 0, localZ: 1, deltaTime: 0.1)
+        )
+        XCTAssertEqual(moved.position.y, start.position.y, accuracy: 0.000_001)
+        let dx = moved.position.x - start.position.x
+        let dz = moved.position.z - start.position.z
+        let distance = (dx * dx + dz * dz).squareRoot()
+        XCTAssertEqual(
+            distance,
+            RoomViewerCameraReducer.walkSpeedMetersPerSecond * 0.1,
+            accuracy: 0.000_001
+        )
+        // Movement follows the look yaw: forward is (-sin(yaw), -cos(yaw)).
+        XCTAssertEqual(dx, -sin(start.yawRadians) * distance, accuracy: 0.000_001)
+        XCTAssertEqual(dz, -cos(start.yawRadians) * distance, accuracy: 0.000_001)
+        XCTAssertEqual(moved.preset, .custom)
+    }
+
+    func testWalkMoveIsFrameRateIndependent() throws {
+        let camera = try RoomViewerCameraReducer.reduce(
+            RoomViewerCamera.defaultState,
+            action: .firstPerson
+        )
+        var manySmallTicks = camera
+        for _ in 0..<10 {
+            manySmallTicks = try RoomViewerCameraReducer.reduce(
+                manySmallTicks,
+                action: .move(localX: 0.5, localZ: 0.5, deltaTime: 0.008)
+            )
+        }
+        let oneBigTick = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(localX: 0.5, localZ: 0.5, deltaTime: 0.08)
+        )
+        XCTAssertEqual(manySmallTicks.position.x, oneBigTick.position.x, accuracy: 0.000_001)
+        XCTAssertEqual(manySmallTicks.position.y, oneBigTick.position.y, accuracy: 0.000_001)
+        XCTAssertEqual(manySmallTicks.position.z, oneBigTick.position.z, accuracy: 0.000_001)
+    }
+
+    func testWalkMoveClampsDiagonalInputRadially() throws {
+        let camera = try RoomViewerCameraReducer.reduce(
+            RoomViewerCamera.defaultState,
+            action: .firstPerson
+        )
+        // A full-diagonal thumb (1, 1) has magnitude sqrt(2); it must be
+        // clamped to unit magnitude, not per-axis, so diagonal walking is no
+        // faster than straight-line walking.
+        let diagonal = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(localX: 1, localZ: 1, deltaTime: 0.1)
+        )
+        let dx = diagonal.position.x - camera.position.x
+        let dy = diagonal.position.y - camera.position.y
+        let dz = diagonal.position.z - camera.position.z
+        let distance = (dx * dx + dy * dy + dz * dz).squareRoot()
+        XCTAssertEqual(
+            distance,
+            RoomViewerCameraReducer.walkSpeedMetersPerSecond * 0.1,
+            accuracy: 0.000_001
+        )
+    }
+
+    func testWalkMoveAppliesDeadZoneAndDeltaTimeCap() throws {
+        let camera = try RoomViewerCameraReducer.reduce(
+            RoomViewerCamera.defaultState,
+            action: .firstPerson
+        )
+        let deadZone = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(localX: 0.03, localZ: 0.03, deltaTime: 0.1)
+        )
+        XCTAssertEqual(deadZone, camera)
+
+        // A stalled frame (huge deltaTime) must not teleport the camera past
+        // the capped per-tick distance.
+        let stalled = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(localX: 0, localZ: 1, deltaTime: 10)
+        )
+        let capped = try RoomViewerCameraReducer.reduce(
+            camera,
+            action: .move(
+                localX: 0,
+                localZ: 1,
+                deltaTime: RoomViewerCameraReducer.maximumMoveDeltaTime
+            )
+        )
+        XCTAssertEqual(stalled.position, capped.position)
+    }
+
+    func testWalkMoveIgnoredInOrbitModeAndRejectsInvalidInput() throws {
+        let orbitCamera = RoomViewerCamera.defaultState
+        XCTAssertEqual(orbitCamera.mode, .orbit)
+        let unchanged = try RoomViewerCameraReducer.reduce(
+            orbitCamera,
+            action: .move(localX: 0, localZ: 1, deltaTime: 0.1)
+        )
+        XCTAssertEqual(unchanged, orbitCamera)
+
+        let walkCamera = try RoomViewerCameraReducer.reduce(orbitCamera, action: .firstPerson)
+        XCTAssertThrowsError(
+            try RoomViewerCameraReducer.reduce(
+                walkCamera,
+                action: .move(localX: .nan, localZ: 0, deltaTime: 0.1)
+            )
+        )
+        XCTAssertThrowsError(
+            try RoomViewerCameraReducer.reduce(
+                walkCamera,
+                action: .move(localX: 0, localZ: 1, deltaTime: .infinity)
+            )
+        )
+        XCTAssertThrowsError(
+            try RoomViewerCameraReducer.reduce(
+                walkCamera,
+                action: .move(localX: 0, localZ: 1, deltaTime: -0.1)
+            )
+        )
     }
 
     func testRevisionEditorUsesCopyOnWriteForSemanticSpatialAndPhotoEdits() throws {

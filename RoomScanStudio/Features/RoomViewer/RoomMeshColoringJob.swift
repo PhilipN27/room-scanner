@@ -272,6 +272,10 @@ final class RoomMeshColoringJobCoordinator: ObservableObject {
     @Published private(set) var state: RoomMeshColoringJobState?
     @Published private(set) var progress = RoomMeshColoringProgress.initial
     @Published private(set) var result: RoomMeshColoredResult?
+    /// Invoked once per successful load while the colored result is resident
+    /// in memory; the hero pipeline piggybacks here so it never re-loads a
+    /// mesh just to render a profile snapshot.
+    var onColoredResult: ((String, RoomMeshColoredResult) -> Void)?
     @Published private(set) var failureMessage: String?
     @Published private(set) var isCancelled = false
     @Published private(set) var isStalled = false
@@ -577,6 +581,12 @@ final class RoomMeshColoringJobCoordinator: ObservableObject {
                 return
             }
             state = .cacheReady
+            // Hero generation only after the cache published cleanly: its
+            // manifest reads identity from the on-disk cache, which on a
+            // failed publication could still describe the PREVIOUS colors.
+            if let projectID {
+                onColoredResult?(projectID, result)
+            }
             progress = RoomMeshColoringProgress(
                 sequence: progress.sequence + 1,
                 phase: .publishingCache,

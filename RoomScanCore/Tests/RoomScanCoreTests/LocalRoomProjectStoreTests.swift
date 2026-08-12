@@ -229,6 +229,94 @@ final class LocalRoomProjectStoreTests: XCTestCase {
 
     private let fixedDate = Date(timeIntervalSince1970: 1_704_067_200)
 
+    func testHeroCachePublishReadInvalidateRoundTripsAsDerivedData() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = makeStore(root: root)
+        let saveResult = try await store.saveDraft(try makeDraft(), disposition: .save)
+        let saved = try XCTUnwrap(saveResult)
+
+        let absent = try await store.heroCache(projectID: saved.projectID)
+        XCTAssertNil(absent)
+        // Invalidating an absent cache is a no-op, not an error.
+        try await store.invalidateHeroCache(projectID: saved.projectID)
+
+        let manifest = makeHeroManifest(pixelWidth: 800)
+        let image = Data([0x89, 0x50, 0x4E, 0x47, 1, 2, 3])
+        try await store.publishHeroCache(
+            projectID: saved.projectID, manifest: manifest, imageData: image
+        )
+        let cachedResult = try await store.heroCache(projectID: saved.projectID)
+        let cached = try XCTUnwrap(cachedResult)
+        XCTAssertEqual(cached.manifest, manifest)
+        XCTAssertEqual(cached.imageData, image)
+
+        // Derived data is replaceable: a second publish overwrites in place.
+        let replacement = makeHeroManifest(pixelWidth: 400)
+        try await store.publishHeroCache(
+            projectID: saved.projectID, manifest: replacement, imageData: Data([9])
+        )
+        let replacedResult = try await store.heroCache(projectID: saved.projectID)
+        let replaced = try XCTUnwrap(replacedResult)
+        XCTAssertEqual(replaced.manifest, replacement)
+        XCTAssertEqual(replaced.imageData, Data([9]))
+
+        try await store.invalidateHeroCache(projectID: saved.projectID)
+        let invalidated = try await store.heroCache(projectID: saved.projectID)
+        XCTAssertNil(invalidated)
+    }
+
+    func testHeroCacheRejectsUnsafeIdentifiersAndUnknownProjects() async throws {
+        let root = try makeTemporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = makeStore(root: root)
+        _ = try await store.saveDraft(try makeDraft(), disposition: .save)
+
+        let manifest = makeHeroManifest(pixelWidth: 800)
+        do {
+            try await store.publishHeroCache(
+                projectID: "../escape", manifest: manifest, imageData: Data([1])
+            )
+            XCTFail("unsafe identifier must be rejected")
+        } catch {}
+        do {
+            try await store.publishHeroCache(
+                projectID: "project-999", manifest: manifest, imageData: Data([1])
+            )
+            XCTFail("unknown project must be rejected")
+        } catch {}
+        do {
+            _ = try await store.heroCache(projectID: "../escape")
+            XCTFail("unsafe identifier must be rejected on read")
+        } catch {}
+        do {
+            _ = try await store.heroCache(projectID: "project-999")
+            XCTFail("unknown project must be rejected on read")
+        } catch {}
+    }
+
+    private func makeHeroManifest(pixelWidth: Int) -> RoomMeshHeroCacheManifest {
+        RoomMeshHeroCacheManifest(
+            heroAlgorithmVersion: RoomMeshHeroCache.algorithmVersion,
+            photorealManifest: RoomMeshPhotorealCacheManifest(
+                algorithmVersion: RoomMeshPhotorealCache.algorithmVersion,
+                sourceMeshSHA256: "mesh-hash",
+                bundleManifestSHA256: "bundle-hash",
+                sourceFrames: [],
+                atlasSize: 1_024,
+                coveredFaceCount: 3,
+                coveredAreaEstimate: 1.5,
+                colorSpaceTag: "sRGB",
+                settings: RoomMeshPhotorealSettings()
+            ),
+            coloredMeshSHA256: "colored-hash",
+            atlasSHA256: nil,
+            pixelWidth: pixelWidth,
+            pixelHeight: 600,
+            colorSpaceTag: "sRGB"
+        )
+    }
+
     private func makeTemporaryRoot() throws -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("RoomScanCoreTests-\(UUID().uuidString)", isDirectory: true)

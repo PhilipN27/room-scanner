@@ -202,6 +202,66 @@ final class RoomMeshViewerAppTests: XCTestCase {
         XCTAssertThrowsError(try RoomMeshBundleLoader.load(forProject: projectID))
     }
 
+    func testHeroSnapshotRendersMeshPixelsAtRequestedSizeDeterministically() throws {
+        // A bright single-triangle mesh in front of the deterministic hero
+        // camera: the render must produce a 800x600 PNG whose content is not
+        // uniformly background, and identical bytes across two renders.
+        var mesh = RoomMeshPhotorealMesh(
+            vertices: [
+                SIMD3<Float>(-1, 0, -1), SIMD3<Float>(1, 0, -1), SIMD3<Float>(0, 2, 1),
+            ],
+            normals: [],
+            fallbackColors: [
+                SIMD3<UInt8>(255, 40, 40), SIMD3<UInt8>(40, 255, 40), SIMD3<UInt8>(40, 40, 255),
+            ],
+            uvs: [.zero, .zero, .zero],
+            textureValid: [0, 0, 0],
+            faces: [0, 1, 2]
+        )
+        mesh.normals = []
+        let result = RoomMeshColoredResult(
+            mesh: RoomMeshPLYMesh(vertices: mesh.vertices, normals: [], colors: mesh.fallbackColors, faces: mesh.faces),
+            photorealMesh: mesh,
+            atlasPNG: nil,
+            keyframeCount: 0,
+            boundsMin: SIMD3<Float>(-1, 0, -1),
+            boundsMax: SIMD3<Float>(1, 2, 1),
+            usedCachedColors: false,
+            warnings: []
+        )
+
+        let first = try RoomMeshHeroRenderer.renderPNG(result: result)
+        let second = try RoomMeshHeroRenderer.renderPNG(result: result)
+        XCTAssertEqual(first, second, "hero rendering must be deterministic")
+
+        let image = try XCTUnwrap(UIImage(data: first))
+        XCTAssertEqual(Int(image.size.width * image.scale), RoomMeshHeroRenderer.pixelWidth)
+        XCTAssertEqual(Int(image.size.height * image.scale), RoomMeshHeroRenderer.pixelHeight)
+
+        // Sample a grid of pixels; the triangle must contribute non-background
+        // color somewhere near the center of frame.
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width, height = cgImage.height
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &rgba, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var foundForeground = false
+        for y in stride(from: 0, to: height, by: 8) where !foundForeground {
+            for x in stride(from: 0, to: width, by: 8) {
+                let offset = (y * width + x) * 4
+                if rgba[offset] > 24 || rgba[offset + 1] > 24 || rgba[offset + 2] > 24 {
+                    foundForeground = true
+                    break
+                }
+            }
+        }
+        XCTAssertTrue(foundForeground, "render must contain mesh pixels, not just background")
+    }
+
     func testTexturedShaderAndMSAAFallbackContract() {
         XCTAssertTrue(RoomMeshShaderSource.source.contains("room_mesh_textured_fragment"))
         XCTAssertTrue(RoomMeshShaderSource.source.contains("room_mesh_srgb_to_linear"))

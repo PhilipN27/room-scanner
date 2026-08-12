@@ -1,3 +1,4 @@
+import CryptoKit
 import ImageIO
 import RoomScanCore
 import UIKit
@@ -203,6 +204,71 @@ final class RoomCaptureBundleTrainingExportTests: XCTestCase {
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: transforms) as? [String: Any])
         let frames = try XCTUnwrap(root["frames"] as? [[String: Any]])
         XCTAssertEqual(frames[0]["depth_file_path"] as? String, "depth/frame-00001-depth.png")
+    }
+
+    /// Derived photoreal-cache artifacts live inside the bundle directory but
+    /// are replaceable derived data, not capture evidence — the export must
+    /// not ship them. The deliberate colored-mesh seed (scene-mesh.ply /
+    /// scene-mesh-colored.ply) is unaffected.
+    func testBuildExportZipExcludesDerivedCacheArtifacts() async throws {
+        try adoptSyntheticBundleWithDepth()
+        let bundleDirectory = try XCTUnwrap(
+            RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID)
+        )
+        let derivedNames = [
+            RoomMeshPhotorealCache.manifestFileName,
+            RoomMeshPhotorealCache.meshFileName,
+            RoomMeshPhotorealCache.atlasFileName,
+        ]
+        for name in derivedNames {
+            try Data([7]).write(to: bundleDirectory.appendingPathComponent(name))
+        }
+        // The legacy colored mesh is also a derived cache file, but it is a
+        // DELIBERATE training input (splat seed geometry): it must ship, and
+        // must be preferred as the seed path over the raw scene mesh.
+        try Data([7]).write(
+            to: bundleDirectory.appendingPathComponent(
+                RoomMeshPhotorealCache.legacyColoredMeshFileName
+            )
+        )
+
+        let built = try await RoomCaptureBundleTrainingExport.buildExportZip(forProject: projectID)
+        defer { try? FileManager.default.removeItem(at: built.url) }
+
+        let entryPaths = Set(built.receipt.entries.map(\.entryPath.value))
+        XCTAssertTrue(entryPaths.contains("scene-mesh.ply"))
+        XCTAssertTrue(
+            entryPaths.contains(RoomMeshPhotorealCache.legacyColoredMeshFileName),
+            "the colored-mesh seed is a deliberate training input"
+        )
+        for name in derivedNames {
+            XCTAssertFalse(entryPaths.contains(name), name)
+        }
+
+        // Shipping the seed is not enough: transforms.json must SELECT it as
+        // ply_file_path, or training silently seeds from the raw scene mesh.
+        // The shipped bytes are pinned by digest against a rebuild that uses
+        // the colored seed path.
+        let manifest = try XCTUnwrap(RoomCaptureBundleLibrary.manifest(forProject: projectID))
+        let expectedTransforms = try RoomCaptureBundleTrainingExport.makeTransformsJSON(
+            manifest: manifest,
+            plyEntryPath: RoomMeshPhotorealCache.legacyColoredMeshFileName,
+            depthPNGFrameFileNames: ["frame-00001.jpg"]
+        )
+        let expectedRoot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: expectedTransforms) as? [String: Any]
+        )
+        XCTAssertEqual(
+            expectedRoot["ply_file_path"] as? String,
+            RoomMeshPhotorealCache.legacyColoredMeshFileName
+        )
+        let transformsEntry = try XCTUnwrap(
+            built.receipt.entries.first { $0.entryPath.value == "transforms.json" }
+        )
+        let expectedDigest = SHA256.hash(data: expectedTransforms)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        XCTAssertEqual(transformsEntry.sha256Hex, expectedDigest)
     }
 
     /// Reproduces the device failure: the root URL reaches the bundle through

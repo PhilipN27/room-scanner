@@ -1,4 +1,5 @@
 import SwiftUI
+import RoomScanCore
 
 struct HomeView: View {
     private enum Route: Hashable {
@@ -12,13 +13,15 @@ struct HomeView: View {
     @ObservedObject var environment: AppEnvironment
     @State private var path: [Route] = []
     @State private var showingCloudBackup = false
+    @State private var capabilityDetailExpanded = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    header
-                    supportReadout
+                VStack(alignment: .leading, spacing: 24) {
+                    topRail
                     if let bootstrapMessage = environment.bootstrapMessage {
                         bootstrapReadout(bootstrapMessage)
                     }
@@ -26,7 +29,7 @@ struct HomeView: View {
                     footer
                 }
                 .padding(24)
-                .frame(maxWidth: 680, alignment: .leading)
+                .frame(maxWidth: 900, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(AppPalette.paper.ignoresSafeArea())
@@ -98,6 +101,13 @@ struct HomeView: View {
             }
         }
         .tint(AppPalette.blueprint)
+        .task {
+            // The Rooms surface shows a live count and the most recent
+            // room's thumbnail; ExistingRoomsView refreshed on its own
+            // appear, but Home must refresh too or the count/thumbnail go
+            // stale until the library screen happens to be opened.
+            await environment.libraryController.refreshLibrary()
+        }
         .onChange(of: environment.meshNotificationRouter.requestedProjectID) { _, projectID in
             guard let projectID else { return }
             path = [.roomDetail(projectID)]
@@ -111,45 +121,68 @@ struct HomeView: View {
         }
     }
 
-    private var header: some View {
+    // MARK: - Top rail
+
+    private var topRail: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("ROOM / FIELD")
-                .font(AppTypography.measurement)
-                .tracking(2)
-                .foregroundStyle(AppPalette.blueprint)
-
-            Text("A calm record of the space you can stand inside.")
-                .font(AppTypography.editorial)
-                .foregroundStyle(AppPalette.ink)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Room packages stay local unless you explicitly start private backup.")
-                .font(AppTypography.body)
-                .foregroundStyle(AppPalette.mutedInk)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: 12) {
+                Text("ROOM / FIELD")
+                    .font(AppTypography.measurement)
+                    .tracking(2)
+                    .foregroundStyle(AppPalette.blueprint)
+                Spacer(minLength: 8)
+                capabilityChip
+            }
+            if capabilityDetailExpanded {
+                capabilityDetail
+            }
         }
     }
 
-    private var supportReadout: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: supportSymbol)
-                .font(AppTypography.symbol)
-                .foregroundStyle(supportAccent)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(environment.capabilityProvider.supportStatus.title)
-                    .font(AppTypography.bodyEmphasized)
-                    .foregroundStyle(AppPalette.ink)
-                Text(environment.capabilityProvider.supportStatus.detail)
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.mutedInk)
-                    .fixedSize(horizontal: false, vertical: true)
+    /// Compact icon + one-word chip. Tapping expands the full capability
+    /// detail below the rail — the real-capture vs deterministic-fixture
+    /// distinction stays discoverable without occupying permanent space.
+    private var capabilityChip: some View {
+        Button {
+            let toggle = { capabilityDetailExpanded.toggle() }
+            if reduceMotion {
+                toggle()
+            } else {
+                withAnimation(.easeOut(duration: 0.18), toggle)
             }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: supportSymbol)
+                Text(capabilityChipWord)
+            }
+            .font(AppTypography.measurement)
+            .tracking(0.6)
+            .foregroundStyle(supportAccent)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 32)
+            .background(AppPalette.paperShadow.opacity(0.42), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(environment.capabilityProvider.supportStatus.title)
+        .accessibilityHint(capabilityDetailExpanded ? "Collapses capability detail" : "Expands capability detail")
+        .accessibilityIdentifier("home.capabilityChip")
+    }
+
+    private var capabilityDetail: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(environment.capabilityProvider.supportStatus.title)
+                .font(AppTypography.bodyEmphasized)
+                .foregroundStyle(AppPalette.ink)
+            Text(environment.capabilityProvider.supportStatus.detail)
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppPalette.paperShadow.opacity(0.38), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityIdentifier("home.capabilityStatus")
+        .transition(reduceMotion ? .identity : .opacity)
     }
 
     private func bootstrapReadout(_ message: String) -> some View {
@@ -162,44 +195,91 @@ struct HomeView: View {
             .accessibilityIdentifier("home.bootstrapIssue")
     }
 
-    private var primaryActions: some View {
-        AdaptiveActionRow(alignment: .leading, spacing: 14) {
-            Button {
-                path.append(.existingRooms)
-            } label: {
-                PrimaryActionLabel(
-                    kicker: "LIBRARY",
-                    title: "Existing Rooms",
-                    detail: "Open local room profiles and immutable revisions.",
-                    symbol: "square.stack.3d.up.fill",
-                    accent: AppPalette.blueprintOnDark,
-                    surface: AppPalette.graphite
-                )
-            }
-            .buttonStyle(FieldActionButtonStyle())
-            .accessibilityIdentifier("home.existingRooms")
+    // MARK: - Primary surfaces
 
-            Button {
-                path.append(.newRoomScan)
-            } label: {
-                PrimaryActionLabel(
-                    kicker: "CAPTURE",
-                    title: "New Room Scan",
-                    detail: "Check capability, then explicitly start a live scan or review the deterministic fixture.",
-                    symbol: "viewfinder",
-                    accent: AppPalette.amberOnDark,
-                    surface: AppPalette.captureBlack
-                )
+    /// Compact width stacks the two surfaces with content-driven heights.
+    /// Regular width composes them asymmetrically, Rooms dominant, per the
+    /// design spec's two-column instruction.
+    private var primaryActions: some View {
+        Group {
+            if horizontalSizeClass == .regular {
+                HStack(alignment: .top, spacing: 20) {
+                    roomsSurface
+                    scanSurface
+                        .frame(maxWidth: 340)
+                }
+            } else {
+                VStack(spacing: 14) {
+                    roomsSurface
+                    scanSurface
+                }
             }
-            .buttonStyle(FieldActionButtonStyle())
-            .accessibilityIdentifier("home.newRoomScan")
         }
     }
 
+    private var roomsSurface: some View {
+        Button {
+            path.append(.existingRooms)
+        } label: {
+            RoomsLibrarySurface(
+                roomCount: activeRoomCount,
+                thumbnailData: mostRecentRoomThumbnailData
+            )
+        }
+        .buttonStyle(FieldActionButtonStyle())
+        .accessibilityIdentifier("home.existingRooms")
+    }
+
+    private var scanSurface: some View {
+        Button {
+            path.append(.newRoomScan)
+        } label: {
+            PrimaryActionLabel(
+                kicker: "CAPTURE",
+                title: "Scan a room",
+                detail: scanCapabilitySummary,
+                symbol: "viewfinder",
+                accent: AppPalette.amberOnDark,
+                surface: AppPalette.captureBlack
+            )
+        }
+        .buttonStyle(FieldActionButtonStyle())
+        .accessibilityIdentifier("home.newRoomScan")
+    }
+
+    private var scanCapabilitySummary: String {
+        environment.capabilityProvider.supportStatus.canStartLiveCapture
+            ? "Live RoomPlan capture is available on this device."
+            : "Deterministic fixture review only — no live capture on this device."
+    }
+
+    private var activeRoomCount: Int {
+        environment.libraryController.summaries.filter { !$0.archived }.count
+    }
+
+    private var mostRecentRoomSummary: RoomProjectSummary? {
+        environment.libraryController.summaries
+            .filter { !$0.archived }
+            .max { $0.lastRevisedDate < $1.lastRevisedDate }
+    }
+
+    private var mostRecentRoomThumbnailData: Data? {
+        guard let projectID = mostRecentRoomSummary?.projectID else { return nil }
+        return environment.libraryController.thumbnailData(for: projectID)
+    }
+
+    // MARK: - Footer
+
     private var footer: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "ruler")
-            Text("Measurements are estimates, not survey-grade evidence.")
+        VStack(alignment: .leading, spacing: 6) {
+            Label(
+                "Room packages stay local unless you explicitly start private backup.",
+                systemImage: "lock.shield"
+            )
+            Label(
+                "Measurements are estimates, not survey-grade evidence.",
+                systemImage: "ruler"
+            )
         }
         .font(AppTypography.measurement)
         .foregroundStyle(AppPalette.mutedInk)
@@ -214,6 +294,15 @@ struct HomeView: View {
         }
     }
 
+    private var capabilityChipWord: String {
+        switch environment.capabilityProvider.supportStatus {
+        case .captureAvailable:
+            return "READY"
+        case .fixtureMode:
+            return "FIXTURE"
+        }
+    }
+
     private var supportAccent: Color {
         switch environment.capabilityProvider.supportStatus {
         case .captureAvailable:
@@ -221,6 +310,48 @@ struct HomeView: View {
         case .fixtureMode:
             return AppPalette.amber
         }
+    }
+}
+
+/// The dominant Rooms surface: an actual cached room image (or floor-plan-
+/// derived fallback via `RoomThumbnailView`), a live room count, and a
+/// chevron — never the headline paragraph the prior design used.
+private struct RoomsLibrarySurface: View {
+    let roomCount: Int
+    let thumbnailData: Data?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            RoomThumbnailView(
+                data: thumbnailData,
+                fallbackSymbol: "square.stack.3d.up.fill",
+                accessibilityIdentifier: "home.existingRooms.thumbnail",
+                sideLength: 64,
+                emptyBackgroundColor: AppPalette.captureBlack.opacity(0.5)
+            )
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("LIBRARY")
+                    .font(AppTypography.measurement)
+                    .tracking(1.4)
+                    .foregroundStyle(AppPalette.blueprintOnDark)
+                Text("Rooms")
+                    .font(AppTypography.section)
+                    .foregroundStyle(AppPalette.primaryOnDark)
+                Text(roomCount == 1 ? "1 room" : "\(roomCount) rooms")
+                    .font(AppTypography.callout)
+                    .foregroundStyle(AppPalette.mutedOnDark)
+            }
+
+            Spacer(minLength: 4)
+
+            Image(systemName: "chevron.right")
+                .font(AppTypography.calloutEmphasized)
+                .foregroundStyle(AppPalette.primaryOnDark)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppPalette.graphite, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 

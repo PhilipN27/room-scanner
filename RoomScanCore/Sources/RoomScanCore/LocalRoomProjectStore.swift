@@ -920,6 +920,96 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    // MARK: - Hero cache (derived data)
+
+    /// Reads the store-owned derived hero snapshot, or nil when absent or
+    /// unreadable — a corrupt or stale hero cache is simply regenerated, never
+    /// an error. Like `thumbnailData`, this API exposes bytes, not URLs.
+    public func heroCache(projectID: String) throws -> RoomMeshHeroCachePayload? {
+        try validateIdentifier(projectID)
+        let root = try canonicalRootURL()
+        return try withRootLock(root) {
+            _ = try loadLocked(root: root, projectID: projectID)
+            let projectURL = try projectDirectory(root: root, projectID: projectID)
+            let directory = projectURL.appendingPathComponent(
+                RoomMeshHeroCache.directoryName, isDirectory: true
+            )
+            let manifestURL = directory.appendingPathComponent(RoomMeshHeroCache.manifestFileName)
+            let imageURL = directory.appendingPathComponent(RoomMeshHeroCache.imageFileName)
+            guard
+                (try? isRegularFile(manifestURL)) == true,
+                (try? isRegularFile(imageURL)) == true,
+                let manifest = try? readJSON(
+                    RoomMeshHeroCacheManifest.self, from: manifestURL, root: root
+                ),
+                let imageData = try? Data(contentsOf: imageURL)
+            else {
+                return nil
+            }
+            return RoomMeshHeroCachePayload(manifest: manifest, imageData: imageData)
+        }
+    }
+
+    /// Publishes a regenerated hero snapshot. The image is written before the
+    /// manifest so a crash between the two leaves a cache that fails
+    /// validation and regenerates, never a manifest describing missing bytes.
+    public func publishHeroCache(
+        projectID: String,
+        manifest: RoomMeshHeroCacheManifest,
+        imageData: Data
+    ) throws {
+        try validateIdentifier(projectID)
+        let root = try canonicalRootURL()
+        try withRootLock(root) {
+            _ = try loadLocked(root: root, projectID: projectID)
+            let projectURL = try projectDirectory(root: root, projectID: projectID)
+            let directory = projectURL.appendingPathComponent(
+                RoomMeshHeroCache.directoryName, isDirectory: true
+            )
+            try assertNoSymbolicLinks(root: root, through: directory)
+            do {
+                try fileManager.createDirectory(
+                    at: directory, withIntermediateDirectories: true
+                )
+                try imageData.write(
+                    to: directory.appendingPathComponent(RoomMeshHeroCache.imageFileName),
+                    options: .atomic
+                )
+            } catch {
+                throw RoomProjectStoreError.storageFailure(
+                    "Unable to write the room hero snapshot."
+                )
+            }
+            try writeJSON(
+                manifest,
+                to: directory.appendingPathComponent(RoomMeshHeroCache.manifestFileName),
+                root: root
+            )
+        }
+    }
+
+    /// Removes the derived hero cache; absent is success, not failure.
+    public func invalidateHeroCache(projectID: String) throws {
+        try validateIdentifier(projectID)
+        let root = try canonicalRootURL()
+        try withRootLock(root) {
+            _ = try loadLocked(root: root, projectID: projectID)
+            let projectURL = try projectDirectory(root: root, projectID: projectID)
+            let directory = projectURL.appendingPathComponent(
+                RoomMeshHeroCache.directoryName, isDirectory: true
+            )
+            guard pathExists(directory) else { return }
+            try assertNoSymbolicLinks(root: root, through: directory)
+            do {
+                try fileManager.removeItem(at: directory)
+            } catch {
+                throw RoomProjectStoreError.storageFailure(
+                    "Unable to remove the room hero cache."
+                )
+            }
+        }
+    }
+
     @discardableResult
     public func updateMetadata(
         projectID: String,

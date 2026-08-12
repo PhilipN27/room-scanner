@@ -90,8 +90,7 @@ struct RevisionInspectView: View {
                 Button("Restore as new revision") {
                     Task { await restore() }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppPalette.primaryAction)
+                .buttonStyle(InstrumentButtonStyle(role: .primary))
                 .accessibilityIdentifier("revision.restore.\(revision.manifest.revisionID)")
             }
             .padding(24)

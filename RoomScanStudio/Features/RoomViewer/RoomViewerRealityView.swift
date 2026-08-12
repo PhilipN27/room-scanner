@@ -12,9 +12,16 @@ struct RoomViewerRealityView: UIViewRepresentable {
     let scenePlan: RoomViewerScenePlan
     let camera: RoomViewerCamera
     let visibility: RoomViewerVisibility
+    /// Real UIKit gesture recognizers (installed below) translate touches
+    /// into pure camera actions dispatched back to the owning view's
+    /// reducer call — the same one-finger/two-finger/pinch split used by
+    /// `SplatCameraController`'s installGestures, so orbit-only pan/zoom is
+    /// enforced by disabling the recognizer, not by hoping every call site
+    /// remembers to guard.
+    let onCameraAction: (RoomViewerCameraAction) -> Void
 
     func makeCoordinator() -> RoomViewerRealityCoordinator {
-        RoomViewerRealityCoordinator()
+        RoomViewerRealityCoordinator(onCameraAction: onCameraAction)
     }
 
     func makeUIView(context: Context) -> ARView {
@@ -25,6 +32,7 @@ struct RoomViewerRealityView: UIViewRepresentable {
         )
         view.backgroundColor = .black
         context.coordinator.install(on: view)
+        context.coordinator.installGestures(on: view)
         context.coordinator.render(
             scenePlan: scenePlan,
             camera: camera,
@@ -34,6 +42,7 @@ struct RoomViewerRealityView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: ARView, context: Context) {
+        context.coordinator.updateCameraMode(camera.mode)
         context.coordinator.render(
             scenePlan: scenePlan,
             camera: camera,
@@ -43,7 +52,7 @@ struct RoomViewerRealityView: UIViewRepresentable {
 }
 
 @MainActor
-final class RoomViewerRealityCoordinator {
+final class RoomViewerRealityCoordinator: NSObject {
     private let anchor = AnchorEntity(world: .zero)
     private let perspectiveCamera = PerspectiveCamera()
     private let structuralRoot = Entity()
@@ -53,6 +62,14 @@ final class RoomViewerRealityCoordinator {
     private let photoRoot = Entity()
     private var installed = false
     private var lastScenePlan: RoomViewerScenePlan?
+    private let onCameraAction: (RoomViewerCameraAction) -> Void
+    private var cameraMode: RoomViewerCameraMode = .orbit
+    private weak var twoFingerPanRecognizer: UIPanGestureRecognizer?
+    private weak var pinchRecognizer: UIPinchGestureRecognizer?
+
+    init(onCameraAction: @escaping (RoomViewerCameraAction) -> Void) {
+        self.onCameraAction = onCameraAction
+    }
 
     func install(on view: ARView) {
         guard !installed else { return }
@@ -64,6 +81,63 @@ final class RoomViewerRealityCoordinator {
         anchor.addChild(photoRoot)
         view.scene.addAnchor(anchor)
         installed = true
+    }
+
+    /// One-finger drag always dispatches `.orbit`: in orbit mode the
+    /// reducer both turns and recomputes the orbit position, and in walk
+    /// mode the same action turns the head (yaw/pitch) in place without
+    /// moving — a look-drag, not a fly. Two-finger pan and pinch are
+    /// orbit-only and are disabled entirely (not merely no-op'd) in walk
+    /// mode via `updateCameraMode`, so they never contend with the walk
+    /// joystick or look-drag for touches.
+    func installGestures(on view: ARView) {
+        let look = UIPanGestureRecognizer(target: self, action: #selector(handleOneFingerPan(_:)))
+        look.maximumNumberOfTouches = 1
+        view.addGestureRecognizer(look)
+
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleTwoFingerPan(_:)))
+        pan.minimumNumberOfTouches = 2
+        pan.maximumNumberOfTouches = 2
+        view.addGestureRecognizer(pan)
+        twoFingerPanRecognizer = pan
+
+        let zoom = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        view.addGestureRecognizer(zoom)
+        pinchRecognizer = zoom
+    }
+
+    func updateCameraMode(_ mode: RoomViewerCameraMode) {
+        cameraMode = mode
+        let orbitOnly = mode == .orbit
+        twoFingerPanRecognizer?.isEnabled = orbitOnly
+        pinchRecognizer?.isEnabled = orbitOnly
+    }
+
+    @objc private func handleOneFingerPan(_ recognizer: UIPanGestureRecognizer) {
+        let translation = recognizer.translation(in: recognizer.view)
+        recognizer.setTranslation(.zero, in: recognizer.view)
+        onCameraAction(.orbit(
+            yawDeltaRadians: Double(translation.x) * 0.003,
+            pitchDeltaRadians: Double(translation.y) * 0.003
+        ))
+    }
+
+    @objc private func handleTwoFingerPan(_ recognizer: UIPanGestureRecognizer) {
+        guard cameraMode == .orbit else { return }
+        let translation = recognizer.translation(in: recognizer.view)
+        recognizer.setTranslation(.zero, in: recognizer.view)
+        onCameraAction(.pan(delta: RoomPoint3D(
+            x: Double(translation.x) * 0.004,
+            y: 0,
+            z: Double(translation.y) * 0.004
+        )))
+    }
+
+    @objc private func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+        guard cameraMode == .orbit else { return }
+        let incrementalScale = recognizer.scale
+        recognizer.scale = 1
+        onCameraAction(.zoom(deltaMeters: Double(1 - incrementalScale) * 0.4))
     }
 
     func render(

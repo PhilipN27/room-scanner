@@ -72,6 +72,10 @@ public enum RoomViewerCameraAction: Sendable, Equatable {
     case orbit(yawDeltaRadians: Double, pitchDeltaRadians: Double)
     case zoom(deltaMeters: Double)
     case pan(delta: RoomPoint3D)
+    /// One display-linked walk tick. `localX`/`localZ` are the transient
+    /// joystick axes (right/forward, radially clamped to unit magnitude);
+    /// they are dispatched per frame and never stored in the camera state.
+    case move(localX: Double, localZ: Double, deltaTime: Double)
     case orbitMode
     case firstPerson
     case reset
@@ -152,6 +156,15 @@ public struct RoomViewerCamera: Codable, Sendable, Equatable {
 }
 
 public enum RoomViewerCameraReducer {
+    /// Matches SplatCameraController so semantic walk and photoreal walk
+    /// cover ground at the same rate.
+    public static let walkSpeedMetersPerSecond = 1.6
+    /// A stalled or backgrounded frame reports a huge delta; capping it keeps
+    /// the camera from teleporting on resume.
+    public static let maximumMoveDeltaTime = 0.1
+    /// Joystick magnitudes at or below this are treated as a resting thumb.
+    public static let moveDeadZone = 0.1
+
     public static func reduce(
         _ camera: RoomViewerCamera,
         action: RoomViewerCameraAction
@@ -173,28 +186,56 @@ public enum RoomViewerCameraReducer {
             guard deltaMeters.isFinite else {
                 throw RoomViewerCameraError.nonFiniteInput
             }
-            if next.mode == .firstPerson {
-                // A smaller orbit-distance delta is a forward no-clip motion
-                // in first person. The renderer derives look direction from
-                // yaw/pitch, not from the stale orbit target.
-                next.position = adding(
-                    camera.position,
-                    scaling(firstPersonForward(for: camera), -deltaMeters)
-                )
-            } else {
-                next.distanceMeters = min(
-                    RoomViewerCamera.maximumDistanceMeters,
-                    max(RoomViewerCamera.minimumDistanceMeters, camera.distanceMeters + deltaMeters)
-                )
-                next.position = orbitPosition(for: next)
+            // Walk mode moves only through .move (yaw-only, constant eye
+            // height); a pitch-following zoom would let the camera dive or
+            // climb, so zoom is orbit-only.
+            guard camera.mode == .orbit else {
+                return camera
             }
+            next.distanceMeters = min(
+                RoomViewerCamera.maximumDistanceMeters,
+                max(RoomViewerCamera.minimumDistanceMeters, camera.distanceMeters + deltaMeters)
+            )
+            next.position = orbitPosition(for: next)
             next.preset = .custom
         case let .pan(delta):
             guard delta.isFinite else {
                 throw RoomViewerCameraError.nonFiniteInput
             }
+            guard camera.mode == .orbit else {
+                return camera
+            }
             next.pan = adding(camera.pan, delta)
             next.position = adding(camera.position, delta)
+            next.preset = .custom
+        case let .move(localX, localZ, deltaTime):
+            guard
+                localX.isFinite, localZ.isFinite,
+                deltaTime.isFinite, deltaTime >= 0
+            else {
+                throw RoomViewerCameraError.nonFiniteInput
+            }
+            guard camera.mode == .firstPerson else {
+                return camera
+            }
+            let magnitude = (localX * localX + localZ * localZ).squareRoot()
+            guard magnitude > moveDeadZone else {
+                return camera
+            }
+            let scale = magnitude > 1 ? 1 / magnitude : 1
+            let dt = min(deltaTime, maximumMoveDeltaTime)
+            // Walking is yaw-only and holds eye height: looking down while
+            // moving must not descend, because this is a walk, not a fly.
+            let forwardX = -sin(camera.yawRadians)
+            let forwardZ = -cos(camera.yawRadians)
+            let rightX = cos(camera.yawRadians)
+            let rightZ = -sin(camera.yawRadians)
+            let step = walkSpeedMetersPerSecond * dt * scale
+            next.position = RoomPoint3D(
+                x: camera.position.x + (rightX * localX + forwardX * localZ) * step,
+                y: camera.position.y,
+                z: camera.position.z + (rightZ * localX + forwardZ * localZ) * step
+            )
             next.preset = .custom
         case .orbitMode:
             next.mode = .orbit
@@ -266,18 +307,6 @@ public enum RoomViewerCameraReducer {
         RoomPoint3D(x: lhs.x + rhs.x, y: lhs.y + rhs.y, z: lhs.z + rhs.z)
     }
 
-    private static func scaling(_ point: RoomPoint3D, _ scalar: Double) -> RoomPoint3D {
-        RoomPoint3D(x: point.x * scalar, y: point.y * scalar, z: point.z * scalar)
-    }
-
-    private static func firstPersonForward(for camera: RoomViewerCamera) -> RoomPoint3D {
-        let horizontal = cos(camera.pitchRadians)
-        return RoomPoint3D(
-            x: -sin(camera.yawRadians) * horizontal,
-            y: sin(camera.pitchRadians),
-            z: -cos(camera.yawRadians) * horizontal
-        )
-    }
 }
 
 /// A pure description of the semantic renderer inputs. It contains no meshes,

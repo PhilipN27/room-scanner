@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 enum RoomCaptureBundleTrainingExport {
     static let transformsFileName = "transforms.json"
     static let depthSubdirectoryName = "depth"
-    static let coloredMeshFileName = "scene-mesh-colored.ply"
+    static let coloredMeshFileName = RoomMeshPhotorealCache.legacyColoredMeshFileName
 
     enum ExportError: LocalizedError {
         case bundleMissing
@@ -219,8 +219,9 @@ enum RoomCaptureBundleTrainingExport {
             )
         }
 
-        // The bundle itself, verbatim. Entry paths that cannot be represented
-        // are skipped rather than failing the whole export.
+        // The bundle itself, verbatim — except derived cache artifacts, which
+        // are replaceable app data, not capture evidence. Entry paths that
+        // cannot be represented are skipped rather than failing the export.
         var plyEntryPath: String?
         if let enumerator = fileManager.enumerator(
             at: bundleDirectory,
@@ -228,6 +229,9 @@ enum RoomCaptureBundleTrainingExport {
         ) {
             for case let fileURL as URL in enumerator {
                 guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
+                    continue
+                }
+                guard !RoomMeshPhotorealCache.isDerivedCacheFile(fileURL.lastPathComponent) else {
                     continue
                 }
                 guard
@@ -241,14 +245,26 @@ enum RoomCaptureBundleTrainingExport {
                         mediaType: Self.mediaType(forPath: relativePath)
                     )
                 )
-                // Prefer the colored mesh as splat seed points; the plain
-                // scene mesh is the fallback.
-                if relativePath == coloredMeshFileName {
-                    plyEntryPath = relativePath
-                } else if relativePath == RoomCaptureBundleLibrary.sceneMeshFileName, plyEntryPath == nil {
+                if relativePath == RoomCaptureBundleLibrary.sceneMeshFileName {
                     plyEntryPath = relativePath
                 }
             }
+        }
+        // The colored mesh is derived data and therefore filtered above, but
+        // it re-enters explicitly: it is the deliberate splat-seed training
+        // input, preferred over the raw scene mesh. Only a top-level file can
+        // take this role, so the entry path is the bare file name.
+        let coloredSeedURL = bundleDirectory.appendingPathComponent(coloredMeshFileName)
+        if fileManager.fileExists(atPath: coloredSeedURL.path),
+           let seedEntryPath = try? RoomExportEntryPath(coloredMeshFileName) {
+            inputs.append(
+                RoomZIPInput(
+                    sourceURL: coloredSeedURL,
+                    entryPath: seedEntryPath,
+                    mediaType: Self.mediaType(forPath: coloredMeshFileName)
+                )
+            )
+            plyEntryPath = coloredMeshFileName
         }
 
         let transformsData = try makeTransformsJSON(

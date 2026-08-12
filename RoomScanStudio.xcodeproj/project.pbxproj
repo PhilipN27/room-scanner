@@ -69,6 +69,7 @@
 		7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */; };
 		7A000000000000000000000D /* RoomCaptureBundleTrainingExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */; };
 		7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */; };
+		7B00000000000000000000A1 /* SplatCameraControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B00000000000000000000A2 /* SplatCameraControllerTests.swift */; };
 		DCBA00000000000000000003 /* RoomEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000003 /* RoomEditorView.swift */; };
 		DCBA00000000000000000004 /* RoomViewerEditorAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */; };
 		E40000000000000000000001 /* RoomCaptureCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */; };
@@ -142,6 +143,7 @@
 		7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleDepthTests.swift; sourceTree = "<group>"; };
 		7A000000000000000000000E /* RoomCaptureBundleTrainingExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleTrainingExport.swift; sourceTree = "<group>"; };
 		7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureBundleTrainingExportTests.swift; sourceTree = "<group>"; };
+		7B00000000000000000000A2 /* SplatCameraControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatCameraControllerTests.swift; sourceTree = "<group>"; };
 		ABCD00000000000000000003 /* RoomEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomEditorView.swift; sourceTree = "<group>"; };
 		ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomViewerEditorAppTests.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
@@ -331,6 +333,7 @@
 				7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */,
 				7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */,
 				7C0000000000000000000002 /* RoomMeshColoringJobTests.swift */,
+				7B00000000000000000000A2 /* SplatCameraControllerTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -695,6 +698,7 @@
 				7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */,
 				7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */,
 				7C0000000000000000000001 /* RoomMeshColoringJobTests.swift in Sources */,
+				7B00000000000000000000A1 /* SplatCameraControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

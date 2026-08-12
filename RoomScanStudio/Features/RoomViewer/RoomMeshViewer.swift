@@ -1,5 +1,6 @@
 import ImageIO
 import MetalKit
+import QuartzCore
 import RoomScanCore
 import SwiftUI
 
@@ -1203,7 +1204,7 @@ final class RoomMeshRenderCoordinator: NSObject, MTKViewDelegate {
     private var sampleCount = 1
     private var indexCount = 0
     private var drawableSize: CGSize = .zero
-    private var lastFrameTimestamp: Date?
+    private var lastFrameTimestamp: CFTimeInterval?
 
     init(camera: SplatCameraController) {
         self.camera = camera
@@ -1403,9 +1404,11 @@ final class RoomMeshRenderCoordinator: NSObject, MTKViewDelegate {
             let renderPassDescriptor = view.currentRenderPassDescriptor
         else { return }
 
-        let now = Date()
+        // A monotonic clock (not wall-clock Date, which can jump) feeds
+        // tick()'s own delta cap; see SplatCameraController.tick(deltaTime:).
+        let now = CACurrentMediaTime()
         if let lastFrameTimestamp {
-            camera.tick(deltaTime: Float(now.timeIntervalSince(lastFrameTimestamp)))
+            camera.tick(deltaTime: Float(now - lastFrameTimestamp))
         }
         lastFrameTimestamp = now
 
@@ -1491,6 +1494,7 @@ struct RoomMeshViewerScreen: View {
         appliesSplatUpAxisCalibration: false
     )
     @ObservedObject private var loader: RoomMeshColoringJobCoordinator
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         projectID: String,
@@ -1541,6 +1545,11 @@ struct RoomMeshViewerScreen: View {
         }
         .onDisappear {
             loader.detach(projectID: projectID)
+            camera.moveInput = .zero
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            camera.moveInput = .zero
         }
     }
 
@@ -1746,5 +1755,351 @@ struct RoomMeshViewerScreen: View {
             )
             .ignoresSafeArea(edges: .bottom)
         )
+    }
+}
+
+// MARK: - Hero snapshot (offscreen)
+
+/// Renders the colored mesh once, offscreen, from the deterministic
+/// three-quarter hero framing — the room-profile hero image. Pure function of
+/// its input: same colored result, same bytes, so the store cache can key on
+/// upstream identity alone.
+enum RoomMeshHeroRenderer {
+    static let pixelWidth = 800
+    static let pixelHeight = 600
+
+    static func renderPNG(result: RoomMeshColoredResult) throws -> Data {
+        guard
+            let device = MTLCreateSystemDefaultDevice(),
+            let queue = device.makeCommandQueue()
+        else {
+            throw RoomMeshViewerError.metalUnavailable
+        }
+
+        let library = try device.makeLibrary(source: RoomMeshShaderSource.source, options: nil)
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = library.makeFunction(name: "room_mesh_vertex")
+        descriptor.fragmentFunction = library.makeFunction(name: "room_mesh_textured_fragment")
+        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+        descriptor.depthAttachmentPixelFormat = .depth32Float
+        // Single-sample: no resolve step, and byte-stable output for the cache.
+        descriptor.rasterSampleCount = 1
+
+        let vertexDescriptor = MTLVertexDescriptor()
+        vertexDescriptor.attributes[0].format = .float3
+        vertexDescriptor.attributes[0].offset = 0
+        vertexDescriptor.attributes[0].bufferIndex = 0
+        vertexDescriptor.attributes[1].format = .float3
+        vertexDescriptor.attributes[1].offset = 12
+        vertexDescriptor.attributes[1].bufferIndex = 0
+        vertexDescriptor.attributes[2].format = .uchar4Normalized
+        vertexDescriptor.attributes[2].offset = 24
+        vertexDescriptor.attributes[2].bufferIndex = 0
+        vertexDescriptor.attributes[3].format = .float2
+        vertexDescriptor.attributes[3].offset = 28
+        vertexDescriptor.attributes[3].bufferIndex = 0
+        vertexDescriptor.attributes[4].format = .float
+        vertexDescriptor.attributes[4].offset = 36
+        vertexDescriptor.attributes[4].bufferIndex = 0
+        vertexDescriptor.layouts[0].stride = 40
+        descriptor.vertexDescriptor = vertexDescriptor
+        let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+
+        let depthDescriptor = MTLDepthStencilDescriptor()
+        depthDescriptor.depthCompareFunction = .less
+        depthDescriptor.isDepthWriteEnabled = true
+        guard let depthState = device.makeDepthStencilState(descriptor: depthDescriptor) else {
+            throw RoomMeshViewerError.metalUnavailable
+        }
+
+        // Same 40-byte vertex layout as the live viewer's coordinator; the
+        // two must agree with the vertex descriptor above byte-for-byte.
+        let mesh = result.photorealMesh
+        var vertexBytes = [UInt8]()
+        vertexBytes.reserveCapacity(mesh.vertices.count * 40)
+        for index in mesh.vertices.indices {
+            let vertex = mesh.vertices[index]
+            withUnsafeBytes(of: vertex.x.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            withUnsafeBytes(of: vertex.y.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            withUnsafeBytes(of: vertex.z.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            let normal = index < mesh.normals.count ? mesh.normals[index] : SIMD3<Float>(0, 0, 0)
+            withUnsafeBytes(of: normal.x.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            withUnsafeBytes(of: normal.y.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            withUnsafeBytes(of: normal.z.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            let color = index < mesh.fallbackColors.count
+                ? mesh.fallbackColors[index]
+                : RoomMeshKeyframeColorizer.uncoloredGray
+            vertexBytes.append(contentsOf: [color.x, color.y, color.z, 255])
+            let uv = index < mesh.uvs.count ? mesh.uvs[index] : .zero
+            withUnsafeBytes(of: uv.x.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            withUnsafeBytes(of: uv.y.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+            let valid: Float = index < mesh.textureValid.count && mesh.textureValid[index] > 0 ? 1 : 0
+            withUnsafeBytes(of: valid.bitPattern.littleEndian) { vertexBytes.append(contentsOf: $0) }
+        }
+        guard
+            !mesh.vertices.isEmpty,
+            mesh.faces.count >= 3,
+            let vertexBuffer = device.makeBuffer(bytes: vertexBytes, length: vertexBytes.count),
+            let indexBuffer = device.makeBuffer(
+                bytes: mesh.faces,
+                length: mesh.faces.count * MemoryLayout<UInt32>.size
+            )
+        else {
+            throw RoomMeshViewerError.meshUnreadable("empty or degenerate mesh")
+        }
+
+        let atlasTexture: MTLTexture
+        if let atlasPNG = result.atlasPNG {
+            atlasTexture = try MTKTextureLoader(device: device).newTexture(
+                data: atlasPNG,
+                options: [
+                    .SRGB: true,
+                    .origin: MTKTextureLoader.Origin.topLeft,
+                    .textureUsage: MTLTextureUsage.shaderRead.rawValue,
+                    .textureStorageMode: MTLStorageMode.shared.rawValue,
+                ]
+            )
+        } else {
+            let blackDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba8Unorm_srgb, width: 1, height: 1, mipmapped: false
+            )
+            blackDescriptor.usage = .shaderRead
+            guard let black = device.makeTexture(descriptor: blackDescriptor) else {
+                throw RoomMeshViewerError.metalUnavailable
+            }
+            var pixel: UInt32 = 0xFF00_0000
+            black.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, withBytes: &pixel, bytesPerRow: 4)
+            atlasTexture = black
+        }
+        let samplerDescriptor = MTLSamplerDescriptor()
+        samplerDescriptor.magFilter = .linear
+        samplerDescriptor.minFilter = .linear
+        samplerDescriptor.sAddressMode = .clampToEdge
+        samplerDescriptor.tAddressMode = .clampToEdge
+        guard let sampler = device.makeSamplerState(descriptor: samplerDescriptor) else {
+            throw RoomMeshViewerError.metalUnavailable
+        }
+
+        let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm_srgb, width: pixelWidth, height: pixelHeight, mipmapped: false
+        )
+        colorDescriptor.usage = [.renderTarget]
+        colorDescriptor.storageMode = .shared
+        let depthTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .depth32Float, width: pixelWidth, height: pixelHeight, mipmapped: false
+        )
+        depthTextureDescriptor.usage = [.renderTarget]
+        depthTextureDescriptor.storageMode = .private
+        guard
+            let colorTexture = device.makeTexture(descriptor: colorDescriptor),
+            let depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)
+        else {
+            throw RoomMeshViewerError.metalUnavailable
+        }
+
+        let framing = RoomMeshHeroFraming.make(
+            boundsMin: result.boundsMin,
+            boundsMax: result.boundsMax,
+            aspectRatio: Float(pixelWidth) / Float(pixelHeight)
+        )
+        let view = lookAt(eye: framing.eye, target: framing.target)
+        let projection = SplatMatrices.perspective(
+            fovyRadians: RoomMeshHeroFraming.verticalFieldOfViewRadians,
+            aspectRatio: Float(pixelWidth) / Float(pixelHeight),
+            nearZ: 0.05,
+            farZ: 200
+        )
+        var uniforms = projection * view
+
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = colorTexture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        // Linear clear that gamma-encodes to the graphite hero surface tone.
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0.010, green: 0.012, blue: 0.012, alpha: 1)
+        pass.depthAttachment.texture = depthTexture
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.storeAction = .dontCare
+        pass.depthAttachment.clearDepth = 1
+
+        guard
+            let commandBuffer = queue.makeCommandBuffer(),
+            let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass)
+        else {
+            throw RoomMeshViewerError.metalUnavailable
+        }
+        encoder.setRenderPipelineState(pipeline)
+        encoder.setDepthStencilState(depthState)
+        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        encoder.setVertexBytes(&uniforms, length: MemoryLayout<simd_float4x4>.size, index: 1)
+        encoder.setFragmentTexture(atlasTexture, index: 0)
+        encoder.setFragmentSamplerState(sampler, index: 0)
+        encoder.drawIndexedPrimitives(
+            type: .triangle,
+            indexCount: mesh.faces.count,
+            indexType: .uint32,
+            indexBuffer: indexBuffer,
+            indexBufferOffset: 0
+        )
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+
+        var bgra = [UInt8](repeating: 0, count: pixelWidth * pixelHeight * 4)
+        bgra.withUnsafeMutableBytes { buffer in
+            colorTexture.getBytes(
+                buffer.baseAddress!,
+                bytesPerRow: pixelWidth * 4,
+                from: MTLRegionMake2D(0, 0, pixelWidth, pixelHeight),
+                mipmapLevel: 0
+            )
+        }
+        var rgba = [UInt8](repeating: 0, count: bgra.count)
+        for pixel in stride(from: 0, to: bgra.count, by: 4) {
+            rgba[pixel] = bgra[pixel + 2]
+            rgba[pixel + 1] = bgra[pixel + 1]
+            rgba[pixel + 2] = bgra[pixel]
+            rgba[pixel + 3] = bgra[pixel + 3]
+        }
+        guard let png = RoomMeshBundleLoader.encodePNG(rgba: rgba, width: pixelWidth, height: pixelHeight) else {
+            throw RoomMeshViewerError.meshUnreadable("hero PNG encoding failed")
+        }
+        return png
+    }
+
+    private static func lookAt(eye: SIMD3<Float>, target: SIMD3<Float>) -> simd_float4x4 {
+        let forward = simd_normalize(target - eye)
+        let right = simd_normalize(simd_cross(forward, SIMD3<Float>(0, 1, 0)))
+        let up = simd_cross(right, forward)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(right.x, up.x, -forward.x, 0),
+            SIMD4<Float>(right.y, up.y, -forward.y, 0),
+            SIMD4<Float>(right.z, up.z, -forward.z, 0),
+            SIMD4<Float>(
+                -simd_dot(right, eye),
+                -simd_dot(up, eye),
+                simd_dot(forward, eye),
+                1
+            )
+        ))
+    }
+}
+
+// MARK: - Hero pipeline
+
+/// Orchestrates the room-profile hero: a store-cached mesh snapshot when the
+/// upstream colored cache still matches, a real floor-plan projection from
+/// the head payload otherwise. Never the retired fake pattern, and never a
+/// synchronous colorization — snapshots are only generated when the colored
+/// cache already exists.
+enum RoomMeshHeroPipeline {
+    struct UpstreamIdentity {
+        var photorealManifest: RoomMeshPhotorealCacheManifest
+        var coloredMeshSHA256: String
+        var atlasSHA256: String?
+    }
+
+    /// Reads the CURRENT derived colored-mesh identity from the capture
+    /// bundle; nil when no valid colored cache exists.
+    static func currentIdentity(forProject projectID: String) -> UpstreamIdentity? {
+        guard
+            let directory = RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID),
+            let manifestData = try? Data(contentsOf: directory.appendingPathComponent(
+                RoomMeshPhotorealCache.manifestFileName
+            )),
+            let manifest = try? RoomJSONCoding.makeDecoder().decode(
+                RoomMeshPhotorealCacheManifest.self, from: manifestData
+            ),
+            let meshData = try? Data(contentsOf: directory.appendingPathComponent(
+                RoomMeshPhotorealCache.meshFileName
+            ))
+        else {
+            return nil
+        }
+        let atlasData = try? Data(contentsOf: directory.appendingPathComponent(
+            RoomMeshPhotorealCache.atlasFileName
+        ))
+        return UpstreamIdentity(
+            photorealManifest: manifest,
+            coloredMeshSHA256: RoomSHA256.hexDigest(of: meshData),
+            atlasSHA256: atlasData.map(RoomSHA256.hexDigest(of:))
+        )
+    }
+
+    /// Fast path for profile load: cached snapshot if still valid, else a
+    /// floor plan rendered from the head revision's semantic snapshot.
+    /// Deliberately NOT MainActor: identity hashing and floor-plan rendering
+    /// are file IO + CPU work; only the store/controller hops touch main.
+    static func fastHeroState(
+        projectID: String,
+        package: RoomProjectPackage,
+        controller: RoomLibraryController
+    ) async -> RoomHeroMediaState {
+        if
+            let identity = currentIdentity(forProject: projectID),
+            let cached = try? await controller.heroCache(projectID: projectID),
+            RoomMeshHeroCache.isValid(
+                cached.manifest,
+                photorealManifest: identity.photorealManifest,
+                coloredMeshSHA256: identity.coloredMeshSHA256,
+                atlasSHA256: identity.atlasSHA256,
+                pixelWidth: RoomMeshHeroRenderer.pixelWidth,
+                pixelHeight: RoomMeshHeroRenderer.pixelHeight,
+                // The store already enforced file existence when it read the
+                // payload; only identity is re-checked here.
+                fileExists: { _ in true }
+            ),
+            let image = UIImage(data: cached.imageData)
+        {
+            return .snapshot(image)
+        }
+        let headID = package.manifest.headRevisionID
+        let payload = package.revisions.first { $0.manifest.revisionID == headID }?.payload
+            ?? package.revisions.last?.payload
+        if
+            let snapshot = payload?.semanticSnapshot,
+            let png = try? RoomThumbnailRenderer.pngData(
+                for: snapshot,
+                size: CGSize(
+                    width: RoomMeshHeroRenderer.pixelWidth / 2,
+                    height: RoomMeshHeroRenderer.pixelHeight / 2
+                )
+            ),
+            let image = UIImage(data: png)
+        {
+            return .floorPlan(image)
+        }
+        return .unavailable
+    }
+
+    /// Renders and publishes a hero from a colored result that is ALREADY in
+    /// memory (the colored-mesh viewer just loaded it) — hero generation adds
+    /// only transient render buffers, never a second full mesh load. This is
+    /// the only generation path; the profile itself never loads the mesh.
+    static func publishHero(
+        from result: RoomMeshColoredResult,
+        projectID: String,
+        controller: RoomLibraryController
+    ) async -> RoomHeroMediaState? {
+        guard
+            let png = try? RoomMeshHeroRenderer.renderPNG(result: result),
+            let identity = currentIdentity(forProject: projectID),
+            let image = UIImage(data: png)
+        else {
+            return nil
+        }
+        let manifest = RoomMeshHeroCacheManifest(
+            heroAlgorithmVersion: RoomMeshHeroCache.algorithmVersion,
+            photorealManifest: identity.photorealManifest,
+            coloredMeshSHA256: identity.coloredMeshSHA256,
+            atlasSHA256: identity.atlasSHA256,
+            pixelWidth: RoomMeshHeroRenderer.pixelWidth,
+            pixelHeight: RoomMeshHeroRenderer.pixelHeight,
+            colorSpaceTag: "sRGB"
+        )
+        try? await controller.publishHeroCache(
+            projectID: projectID, manifest: manifest, imageData: png
+        )
+        return .snapshot(image)
     }
 }

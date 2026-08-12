@@ -217,8 +217,17 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["viewer.firstPerson"].waitForExistence(timeout: 5))
         app.buttons["viewer.firstPerson"].tap()
         XCTAssertTrue(app.staticTexts["viewer.noClipDisclosure"].waitForExistence(timeout: 5))
+
+        // Visibility toggles moved into the Layers popover in the full-screen
+        // viewer rebuild; they no longer sit inline in the chrome.
+        XCTAssertTrue(app.buttons["viewer.layers"].waitForExistence(timeout: 5))
+        app.buttons["viewer.layers"].tap()
         XCTAssertTrue(app.switches["viewer.visibility.structural"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.switches["viewer.visibility.objects"].waitForExistence(timeout: 5))
+        app.swipeUp() // dismiss the popover before reaching the bottom tray
+
+        // The orbit-only Reset/Top/Front/Side tray only shows in orbit mode.
+        app.buttons["viewer.orbit"].tap()
         XCTAssertTrue(app.buttons["viewer.top"].waitForExistence(timeout: 5))
         app.buttons["viewer.top"].tap()
     }

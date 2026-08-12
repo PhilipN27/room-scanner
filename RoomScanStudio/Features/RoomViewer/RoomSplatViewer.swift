@@ -1,5 +1,6 @@
 import MetalKit
 import MetalSplatter
+import QuartzCore
 import SplatIO
 import SwiftUI
 import UniformTypeIdentifiers
@@ -88,7 +89,24 @@ final class SplatCameraController: ObservableObject {
         case firstPerson = "First person"
     }
 
-    @Published var mode: Mode = .orbit
+    /// Below this joystick/axis magnitude a resting thumb reads as zero.
+    /// Matches `RoomViewerCameraReducer.moveDeadZone` in RoomScanCore.
+    static let moveDeadZone: Float = 0.1
+    /// A stalled or backgrounded frame reports a huge delta; capping it
+    /// keeps the camera from teleporting on resume. Matches
+    /// `RoomViewerCameraReducer.maximumMoveDeltaTime`.
+    static let maximumMoveDeltaTime: Float = 0.1
+
+    @Published var mode: Mode = .orbit {
+        didSet {
+            guard oldValue != mode else { return }
+            // A mode switch is the only place gesture interpretation
+            // changes; clearing here (rather than at each call site) makes
+            // "stale walk input after switching to orbit" structurally
+            // impossible instead of relying on every caller to remember.
+            moveInput = .zero
+        }
+    }
 
     /// Most 3D GS PLY files are captured y-down and need the flip below;
     /// ARKit-space scene meshes are already y-up and pass identity.
@@ -148,12 +166,34 @@ final class SplatCameraController: ObservableObject {
     }
 
     /// Advances first-person movement; called once per rendered frame.
+    /// Normalizes diagonal input radially (a per-axis clamp upstream would
+    /// otherwise let a joystick corner move at up to √2× walk speed), drops
+    /// sub-dead-zone input, and caps `deltaTime` so a stalled or
+    /// backgrounded frame cannot teleport the camera on resume.
     func tick(deltaTime: Float) {
-        guard mode == .firstPerson, moveInput != .zero else { return }
+        guard mode == .firstPerson, deltaTime.isFinite, deltaTime >= 0 else { return }
+        let magnitude = simd_length(moveInput)
+        guard magnitude > Self.moveDeadZone else { return }
+        let scale = magnitude > 1 ? 1 / magnitude : 1
+        let clampedInput = moveInput * scale
+        let dt = min(deltaTime, Self.maximumMoveDeltaTime)
         let forward = SIMD3<Float>(-sin(lookYaw), 0, -cos(lookYaw))
         let right = SIMD3<Float>(cos(lookYaw), 0, -sin(lookYaw))
-        let velocity = (forward * moveInput.y + right * moveInput.x) * walkSpeedMetersPerSecond
-        position += velocity * deltaTime
+        let velocity = (forward * clampedInput.y + right * clampedInput.x) * walkSpeedMetersPerSecond
+        position += velocity * dt
+    }
+
+    /// Clamps a raw joystick drag translation to a circle of the given
+    /// radius. A naive per-axis clamp (`min(max(x, -r), r)` on each axis
+    /// independently) bounds the thumb to a *square*, letting a diagonal
+    /// drag reach `radius * √2` — that both looks wrong (thumb escapes the
+    /// dial) and, upstream, fed `tick(deltaTime:)` a diagonal magnitude
+    /// above 1 before its own normalization was added.
+    static func radiallyClampedJoystickOffset(_ translation: CGSize, radius: CGFloat) -> CGSize {
+        let magnitude = (translation.width * translation.width + translation.height * translation.height).squareRoot()
+        guard magnitude > radius, magnitude > 0 else { return translation }
+        let scale = radius / magnitude
+        return CGSize(width: translation.width * scale, height: translation.height * scale)
     }
 
     var viewMatrix: simd_float4x4 {
@@ -254,7 +294,7 @@ final class SplatRenderCoordinator: NSObject, MTKViewDelegate {
     private var commandQueue: MTLCommandQueue?
     private var renderer: SplatRenderer?
     private var drawableSize: CGSize = .zero
-    private var lastFrameTimestamp: Date?
+    private var lastFrameTimestamp: CFTimeInterval?
     private let inFlightSemaphore = DispatchSemaphore(value: 3)
 
     init(camera: SplatCameraController) {
@@ -349,9 +389,11 @@ final class SplatRenderCoordinator: NSObject, MTKViewDelegate {
             let drawable = view.currentDrawable
         else { return }
 
-        let now = Date()
+        // A monotonic clock (not wall-clock Date, which can jump) feeds
+        // tick()'s own delta cap; see SplatCameraController.tick(deltaTime:).
+        let now = CACurrentMediaTime()
         if let lastFrameTimestamp {
-            camera.tick(deltaTime: Float(now.timeIntervalSince(lastFrameTimestamp)))
+            camera.tick(deltaTime: Float(now - lastFrameTimestamp))
         }
         lastFrameTimestamp = now
 
@@ -428,6 +470,7 @@ struct RoomSplatViewerScreen: View {
 
     @StateObject private var camera = SplatCameraController()
     @State private var loadState: LoadState = .loading
+    @Environment(\.scenePhase) private var scenePhase
 
     private enum LoadState {
         case loading
@@ -514,6 +557,13 @@ struct RoomSplatViewerScreen: View {
         .background(Color.black.ignoresSafeArea())
         .navigationTitle("Photoreal room")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            camera.moveInput = .zero
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            camera.moveInput = .zero
+        }
     }
 }
 
@@ -540,12 +590,13 @@ struct SplatWalkJoystick: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    let clampedX = min(max(value.translation.width, -radius), radius)
-                    let clampedY = min(max(value.translation.height, -radius), radius)
-                    thumbOffset = CGSize(width: clampedX, height: clampedY)
+                    thumbOffset = SplatCameraController.radiallyClampedJoystickOffset(
+                        value.translation,
+                        radius: radius
+                    )
                     camera.moveInput = SIMD2(
-                        Float(clampedX / radius),
-                        Float(-clampedY / radius)
+                        Float(thumbOffset.width / radius),
+                        Float(-thumbOffset.height / radius)
                     )
                 }
                 .onEnded { _ in

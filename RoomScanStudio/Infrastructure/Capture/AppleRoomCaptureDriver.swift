@@ -626,37 +626,23 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         )
     }
 
+    /// Draws the real top-down `RoomFloorPlanProjection` of the reviewed
+    /// semantic snapshot instead of a fake rectangle pattern, so a stored
+    /// thumbnail always reflects actual captured geometry. Same 640x360 PNG
+    /// output path/schema as before — only the drawing changed.
     private func writeProjectThumbnail(
         for snapshot: RoomSemanticSnapshot,
         workspace: RoomCaptureScratchWorkspace
     ) throws -> RoomAssetInput {
         let destination = try RoomRelativePath("thumbnails/thumbnail.png")
         let sourceURL = workspace.directoryURL.appendingPathComponent("roomplan-thumbnail.png")
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 360))
-        let image = renderer.image { rendererContext in
-            let context = rendererContext.cgContext
-            UIColor.black.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 640, height: 360))
-            context.setLineWidth(3)
-            let elements = snapshot.structuralElements + snapshot.objectElements
-            for (index, element) in elements.enumerated() {
-                let inset = CGFloat(28 + (index % 5) * 18)
-                let width = max(64, 584 - inset * 0.7)
-                let height = max(42, 70 + CGFloat(index % 3) * 24)
-                let rect = CGRect(
-                    x: inset,
-                    y: 34 + CGFloat(index % 4) * 72,
-                    width: width,
-                    height: height
-                )
-                (element.mobility == .structural
-                    ? UIColor.systemCyan
-                    : UIColor.systemOrange
-                ).setStroke()
-                context.stroke(rect)
-            }
-        }
-        guard let png = image.pngData(), !png.isEmpty else {
+        let png: Data
+        do {
+            png = try RoomThumbnailRenderer.pngData(
+                for: snapshot,
+                size: CGSize(width: 640, height: 360)
+            )
+        } catch {
             throw AppleRoomCaptureDriverError.thumbnailWriteFailed
         }
         try png.write(to: sourceURL, options: .atomic)
@@ -1257,4 +1243,93 @@ private enum AppleRoomCaptureDriverError: LocalizedError {
             return "Processing failed at step '\(step)': \(detail)"
         }
     }
+}
+
+/// Draws the real top-down semantic-box projection with the fixed dark
+/// field-instrument palette (captureBlack background, cyan structural
+/// strokes, amber object fills). Shared by every site that must show a room
+/// preview derived from real geometry instead of the retired fake rectangle
+/// pattern: capture-time thumbnail generation (this driver and
+/// `SimulatedRoomCaptureDriver`) and payload-derived library previews in
+/// `ExistingRoomsView` for legacy packages whose stored thumbnail still
+/// holds the old pattern.
+enum RoomThumbnailRenderer {
+    static let captureBlack = UIColor(red: 0.025, green: 0.03, blue: 0.03, alpha: 1)
+    static let structuralStroke = UIColor(red: 0.35, green: 0.84, blue: 0.93, alpha: 1)
+    static let objectFill = UIColor(red: 0.98, green: 0.69, blue: 0.27, alpha: 0.45)
+    static let objectStroke = UIColor(red: 0.98, green: 0.69, blue: 0.27, alpha: 1)
+
+    /// Builds the projection from a semantic snapshot and encodes it as PNG.
+    /// Throws when the snapshot contains geometry `RoomFloorPlanProjection`
+    /// cannot render (non-finite or out-of-range transforms) rather than
+    /// silently falling back to the retired fake pattern.
+    static func pngData(for snapshot: RoomSemanticSnapshot, size: CGSize) throws -> Data {
+        let projection = try RoomFloorPlanProjection.make(from: snapshot)
+        guard let png = projectionImage(from: projection, size: size).pngData(), !png.isEmpty else {
+            throw RoomThumbnailRendererError.encodingFailed
+        }
+        return png
+    }
+
+    /// Pure drawing entry point: renders an already-computed projection. Used
+    /// directly by display sites (e.g. a library row preview) that already
+    /// hold a `RoomFloorPlanProjection` and only need a bitmap, not a PNG.
+    static func projectionImage(from projection: RoomFloorPlanProjection, size: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = true
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let context = rendererContext.cgContext
+            captureBlack.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+
+            let inset = CGRect(origin: .zero, size: size)
+                .insetBy(dx: size.width * 0.08, dy: size.height * 0.08)
+            let boundsWidth = max(projection.bounds.width, 0.01)
+            let boundsHeight = max(projection.bounds.height, 0.01)
+            let scale = min(inset.width / boundsWidth, inset.height / boundsHeight)
+            context.setLineWidth(max(1.5, size.width / 220))
+
+            for item in projection.items {
+                let path = polygonPath(for: item, projection: projection, inset: inset, scale: scale)
+                context.addPath(path)
+                if item.isStructural {
+                    UIColor.clear.setFill()
+                    structuralStroke.setStroke()
+                    context.drawPath(using: .stroke)
+                } else {
+                    objectFill.setFill()
+                    objectStroke.setStroke()
+                    context.drawPath(using: .fillStroke)
+                }
+            }
+        }
+    }
+
+    private static func polygonPath(
+        for item: RoomFloorPlanItem,
+        projection: RoomFloorPlanProjection,
+        inset: CGRect,
+        scale: CGFloat
+    ) -> CGPath {
+        let points = item.corners.map { point -> CGPoint in
+            CGPoint(
+                x: inset.minX + CGFloat(point.x - projection.bounds.minimum.x) * scale,
+                y: inset.maxY - CGFloat(point.y - projection.bounds.minimum.y) * scale
+            )
+        }
+        let path = CGMutablePath()
+        if let first = points.first {
+            path.move(to: first)
+            for point in points.dropFirst() {
+                path.addLine(to: point)
+            }
+            path.closeSubpath()
+        }
+        return path
+    }
+}
+
+enum RoomThumbnailRendererError: Error, Sendable, Equatable {
+    case encodingFailed
 }

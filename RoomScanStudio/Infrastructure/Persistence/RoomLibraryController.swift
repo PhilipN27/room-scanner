@@ -19,6 +19,10 @@ final class RoomLibraryController: ObservableObject {
         indexContext = modelContainer.map(ModelContext.init)
     }
 
+    /// Known risk, accepted 2026-08-11: concurrent calls are not coordinated.
+    /// Authoritative package data is safe (the store is an actor), but an
+    /// older refresh finishing after a newer one can leave derived summaries,
+    /// thumbnails, or the index temporarily stale until the next refresh.
     func refreshLibrary() async {
         do {
             let listing = try await store.listProjectListing(includeArchived: true)
@@ -229,6 +233,26 @@ final class RoomLibraryController: ObservableObject {
 
     func thumbnailData(for projectID: String) -> Data? {
         thumbnailDataByProjectID[projectID]
+    }
+
+    // Store-owned derived hero cache passthroughs: the UI receives bytes,
+    // never package URLs.
+    func heroCache(projectID: String) async throws -> RoomMeshHeroCachePayload? {
+        try await store.heroCache(projectID: projectID)
+    }
+
+    func publishHeroCache(
+        projectID: String,
+        manifest: RoomMeshHeroCacheManifest,
+        imageData: Data
+    ) async throws {
+        try await store.publishHeroCache(
+            projectID: projectID, manifest: manifest, imageData: imageData
+        )
+    }
+
+    func invalidateHeroCache(projectID: String) async throws {
+        try await store.invalidateHeroCache(projectID: projectID)
     }
 
     private func loadThumbnails(

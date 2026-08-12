@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import UIKit
 import XCTest
 import RoomScanCore
 @testable import RoomScanStudio
@@ -99,6 +100,151 @@ final class RoomScanStudioTests: XCTestCase {
         XCTAssertEqual(saved?.projectID, "simulated-project-001")
         let summaries = try await store.listSummaries(includeArchived: true)
         XCTAssertEqual(summaries.count, 1)
+    }
+
+    /// Round-2 design finding: the fake rectangle-pattern thumbnail must die
+    /// at both ends. `SimulatedRoomCaptureDriver` previously wrote a fixed
+    /// 1x1 transparent pixel regardless of its fixture geometry; it must now
+    /// draw the real `RoomFloorPlanProjection` of its own deterministic
+    /// wall+table snapshot, and still be byte-for-byte deterministic since
+    /// that snapshot's geometry never varies by attempt.
+    func testSimulatedCaptureDriverThumbnailIsDeterministicRealFloorPlanGeometryNotOldFixedPixel() async throws {
+        let oldFixedPixelPNG = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9JLC8AAAAASUVORK5CYII="
+        ))
+
+        func makeThumbnailPNG(attemptID: String) async throws -> Data {
+            let scratchContainer = temporaryRoot()
+            defer { try? FileManager.default.removeItem(at: scratchContainer) }
+            let workspaceFactory = RoomCaptureScratchWorkspaceFactory(
+                rootURL: scratchContainer.appendingPathComponent("capture-scratch", isDirectory: true)
+            )
+            let attempt = RoomCaptureAttemptToken(attemptID)
+            let workspace = try workspaceFactory.makeWorkspace(for: attempt)
+            defer { try? workspaceFactory.cleanup(workspace) }
+
+            let driver = SimulatedRoomCaptureDriver()
+            try await driver.start(attempt: attempt, workspace: workspace)
+            try await driver.stop(attempt: attempt)
+            let prepared = try await driver.process(attempt: attempt, workspace: workspace)
+
+            let thumbnailAsset = try XCTUnwrap(
+                prepared.commit.assets.first { $0.scope == .project }
+            )
+            return try Data(contentsOf: thumbnailAsset.sourceURL)
+        }
+
+        let firstRunPNG = try await makeThumbnailPNG(attemptID: "thumbnail-determinism-attempt-a")
+        let secondRunPNG = try await makeThumbnailPNG(attemptID: "thumbnail-determinism-attempt-b")
+
+        // Real geometry, not the old fixed pixel.
+        XCTAssertNotEqual(firstRunPNG, oldFixedPixelPNG)
+        XCTAssertGreaterThan(firstRunPNG.count, oldFixedPixelPNG.count)
+        let image = try XCTUnwrap(UIImage(data: firstRunPNG))
+        XCTAssertEqual(image.size, CGSize(width: 640, height: 360))
+
+        // Frame-rate/attempt independent: same fixed fixture geometry must
+        // still produce byte-identical PNGs across separate runs.
+        XCTAssertEqual(firstRunPNG, secondRunPNG)
+    }
+
+    /// Pure geometry oracle for the shared drawing routine both capture
+    /// drivers and the library's payload-derived preview now use: a
+    /// structural item's projected edge draws in the cyan instrument stroke,
+    /// an object item's projected interior fills in amber, and untouched
+    /// canvas stays the fixed captureBlack background — never the retired
+    /// fake rectangle pattern.
+    func testRoomThumbnailRendererDrawsStructuralAndObjectGeometryAtProjectedPositions() throws {
+        let projection = RoomFloorPlanProjection(
+            items: [
+                RoomFloorPlanItem(
+                    id: "wall-001",
+                    kind: "wall",
+                    label: "Wall",
+                    center: RoomFloorPlanPoint(x: 2, y: 1.5),
+                    widthMeters: 2,
+                    depthMeters: 1,
+                    isStructural: true,
+                    corners: [
+                        RoomFloorPlanPoint(x: 1, y: 1),
+                        RoomFloorPlanPoint(x: 3, y: 1),
+                        RoomFloorPlanPoint(x: 3, y: 2),
+                        RoomFloorPlanPoint(x: 1, y: 2),
+                    ]
+                ),
+                RoomFloorPlanItem(
+                    id: "table-001",
+                    kind: "table",
+                    label: "Table",
+                    center: RoomFloorPlanPoint(x: 7, y: 7),
+                    widthMeters: 2,
+                    depthMeters: 2,
+                    isStructural: false,
+                    corners: [
+                        RoomFloorPlanPoint(x: 6, y: 6),
+                        RoomFloorPlanPoint(x: 8, y: 6),
+                        RoomFloorPlanPoint(x: 8, y: 8),
+                        RoomFloorPlanPoint(x: 6, y: 8),
+                    ]
+                ),
+            ],
+            bounds: RoomFloorPlanBounds(
+                minimum: RoomFloorPlanPoint(x: 0, y: 0),
+                maximum: RoomFloorPlanPoint(x: 10, y: 10)
+            )
+        )
+        let size = CGSize(width: 640, height: 360)
+        let image = RoomThumbnailRenderer.projectionImage(from: projection, size: size)
+
+        // Background sample, well outside the 8% inset margin: pure captureBlack.
+        let background = try samplePixel(in: image, x: 10, y: 10)
+        XCTAssertLessThan(background.r, 20)
+        XCTAssertLessThan(background.g, 20)
+        XCTAssertLessThan(background.b, 20)
+
+        // Object fill sample: center of the table's projected rect (world
+        // (7,7) -> canvas ~(263, 120) using the renderer's own inset/scale
+        // math), well inside the fill so antialiasing at the edge can't
+        // affect it. Amber fill/stroke: red channel clearly dominant.
+        let objectFillSample = try samplePixel(in: image, x: 263, y: 120)
+        XCTAssertGreaterThan(objectFillSample.r, background.r + 30)
+        XCTAssertGreaterThan(objectFillSample.r, objectFillSample.b)
+
+        // Structural stroke sample: on the wall's projected bottom edge
+        // (world (2,1) -> canvas ~(112, 301)). Cyan stroke: blue/green
+        // clearly dominant over red.
+        let structuralStrokeSample = try samplePixel(in: image, x: 112, y: 301)
+        XCTAssertGreaterThan(structuralStrokeSample.b, background.b + 30)
+        XCTAssertGreaterThan(structuralStrokeSample.b, structuralStrokeSample.r)
+    }
+
+    /// Reads a single pixel's RGBA bytes from `image` at top-left-origin
+    /// pixel coordinates `(x, y)`. `UIImage.draw(at:)` first crops/positions
+    /// the source using UIKit's own (already-correct) top-left orientation
+    /// convention, so this sidesteps CGContext's bottom-up flip; the final
+    /// 1x1 read then uses an explicit RGBA byte order so the result doesn't
+    /// depend on the platform's native pixel format.
+    private func samplePixel(in image: UIImage, x: Int, y: Int) throws -> (r: Int, g: Int, b: Int, a: Int) {
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = 1
+        let cropped = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1), format: format).image { _ in
+            image.draw(at: CGPoint(x: -CGFloat(x), y: -CGFloat(y)))
+        }
+        let cgImage = try XCTUnwrap(cropped.cgImage)
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try XCTUnwrap(CGContext(
+            data: &pixel,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (Int(pixel[0]), Int(pixel[1]), Int(pixel[2]), Int(pixel[3]))
     }
 
     func testMockRoomFixtureDecodesAllSevenDocumentsAndSpatialPhotoMarkerAssets() throws {

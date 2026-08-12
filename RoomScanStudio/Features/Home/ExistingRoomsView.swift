@@ -18,6 +18,7 @@ struct ExistingRoomsView: View {
     @ObservedObject var meshColoringCoordinator: RoomMeshColoringJobCoordinator
     let privacyPolicyURL: URL?
     @State private var filter: LibraryFilter = .active
+    @StateObject private var previewCache = RoomFloorPlanPreviewCache()
 
     private var filteredSummaries: [RoomProjectSummary] {
         controller.summaries.filter { summary in
@@ -146,7 +147,9 @@ struct ExistingRoomsView: View {
                     } label: {
                         RoomLibraryRow(
                             summary: summary,
-                            thumbnailData: controller.thumbnailData(for: summary.projectID)
+                            thumbnailData: controller.thumbnailData(for: summary.projectID),
+                            controller: controller,
+                            previewCache: previewCache
                         )
                     }
                     .buttonStyle(.plain)
@@ -160,6 +163,8 @@ struct ExistingRoomsView: View {
 private struct RoomLibraryRow: View {
     let summary: RoomProjectSummary
     let thumbnailData: Data?
+    let controller: RoomLibraryController
+    let previewCache: RoomFloorPlanPreviewCache
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -167,7 +172,18 @@ private struct RoomLibraryRow: View {
                 data: thumbnailData,
                 fallbackSymbol: summary.archived ? "archivebox.fill" : "square.stack.3d.up.fill",
                 accessibilityIdentifier: "library.thumbnail.\(summary.projectID)",
-                sideLength: 56
+                sideLength: 56,
+                derivedPreview: RoomFloorPlanPreviewRequest(
+                    projectID: summary.projectID,
+                    cache: previewCache,
+                    load: {
+                        await RoomFloorPlanPreviewRequest.loadFromPackage(
+                            controller: controller,
+                            projectID: summary.projectID,
+                            size: CGSize(width: 224, height: 224)
+                        )
+                    }
+                )
             )
 
             VStack(alignment: .leading, spacing: 5) {
@@ -201,15 +217,28 @@ private struct RoomLibraryRow: View {
     }
 }
 
+/// A payload-derived floor-plan preview always takes priority over the
+/// stored thumbnail bytes, which prevents legacy packages captured before
+/// the real-geometry thumbnail pipeline from ever surfacing the retired
+/// fake rectangle pattern. `derivedPreview` is optional so existing call
+/// sites that only have stored thumbnail bytes keep compiling unchanged.
 struct RoomThumbnailView: View {
     let data: Data?
     let fallbackSymbol: String
     let accessibilityIdentifier: String
     let sideLength: CGFloat
+    var derivedPreview: RoomFloorPlanPreviewRequest? = nil
+    var emptyBackgroundColor: Color = AppPalette.paperShadow.opacity(0.42)
+
+    @State private var derivedImage: UIImage?
 
     var body: some View {
         Group {
-            if let data, let image = UIImage(data: data) {
+            if let derivedImage {
+                Image(uiImage: derivedImage)
+                    .resizable()
+                    .scaledToFill()
+            } else if let data, let image = UIImage(data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -218,12 +247,72 @@ struct RoomThumbnailView: View {
                     .font(AppTypography.symbol)
                     .foregroundStyle(AppPalette.blueprint)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(AppPalette.paperShadow.opacity(0.42))
+                    .background(emptyBackgroundColor)
             }
         }
         .frame(width: sideLength, height: sideLength)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .accessibilityLabel(data == nil ? "No room thumbnail" : "Room thumbnail")
+        .accessibilityLabel(derivedImage != nil || data != nil ? "Room thumbnail" : "No room thumbnail")
         .accessibilityIdentifier(accessibilityIdentifier)
+        .task(id: derivedPreview?.projectID) {
+            guard let derivedPreview else { return }
+            if let cached = derivedPreview.cache.cachedImage(for: derivedPreview.projectID) {
+                derivedImage = cached
+                return
+            }
+            guard let image = await derivedPreview.load() else { return }
+            derivedPreview.cache.store(image, for: derivedPreview.projectID)
+            derivedImage = image
+        }
+    }
+}
+
+/// In-memory cache of payload-derived floor-plan previews, keyed by project
+/// ID. Rows in `ExistingRoomsView`'s `LazyVStack` share one instance so
+/// scrolling a project's row off-screen and back does not reload its
+/// package or recompute its projection.
+@MainActor
+final class RoomFloorPlanPreviewCache: ObservableObject {
+    private var imagesByProjectID: [String: UIImage] = [:]
+
+    func cachedImage(for projectID: String) -> UIImage? {
+        imagesByProjectID[projectID]
+    }
+
+    func store(_ image: UIImage, for projectID: String) {
+        imagesByProjectID[projectID] = image
+    }
+}
+
+/// Bundles the identity, shared cache, and loader `RoomThumbnailView` needs
+/// to prefer a payload-derived floor-plan preview over stored thumbnail
+/// bytes.
+struct RoomFloorPlanPreviewRequest {
+    let projectID: String
+    let cache: RoomFloorPlanPreviewCache
+    let load: () async -> UIImage?
+
+    /// Loads the head revision's semantic snapshot from the package store
+    /// and renders it with the same dark instrument styling the capture
+    /// drivers now use, so the row preview is always real geometry —
+    /// never the stored PNG's possibly-legacy fake pattern.
+    static func loadFromPackage(
+        controller: RoomLibraryController,
+        projectID: String,
+        size: CGSize
+    ) async -> UIImage? {
+        guard let package = try? await controller.loadPackage(projectID: projectID) else {
+            return nil
+        }
+        let headRevision = package.revisions.first {
+            $0.manifest.revisionID == package.manifest.headRevisionID
+        } ?? package.revisions.last
+        guard
+            let headRevision,
+            let projection = try? RoomFloorPlanProjection.make(from: headRevision.payload.semanticSnapshot)
+        else {
+            return nil
+        }
+        return RoomThumbnailRenderer.projectionImage(from: projection, size: size)
     }
 }

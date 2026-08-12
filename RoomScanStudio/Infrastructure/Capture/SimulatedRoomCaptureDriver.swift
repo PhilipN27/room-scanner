@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import RoomScanCore
 
@@ -111,9 +112,17 @@ final class SimulatedRoomCaptureDriver: RoomCaptureDriving {
 
         let thumbnailRelativePath = try RoomRelativePath("thumbnails/thumbnail.png")
         let thumbnailSource = workspace.directoryURL.appendingPathComponent("thumbnail.png")
-        try deterministicPNG.write(to: thumbnailSource, options: .atomic)
-
+        // The fixture geometry in `makeSnapshot` is fixed regardless of
+        // attempt, so this remains byte-for-byte deterministic across runs
+        // while drawing the same real floor-plan projection the real
+        // RoomPlan-backed driver now draws (never the retired fake pattern).
         let snapshot = makeSnapshot(attempt: attempt)
+        let thumbnailPNG = try RoomThumbnailRenderer.pngData(
+            for: snapshot,
+            size: CGSize(width: 640, height: 360)
+        )
+        try thumbnailPNG.write(to: thumbnailSource, options: .atomic)
+
         let payload = RoomRevisionPayload(
             semanticSnapshot: snapshot,
             annotations: [],

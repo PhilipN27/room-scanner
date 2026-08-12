@@ -48,8 +48,14 @@ final class AppEnvironment: ObservableObject {
         let usesIsolatedUIEnvironment = arguments.contains("--ui-testing")
         let jobRecordStore: RoomMeshColoringJobRecordStore
         if usesIsolatedUIEnvironment {
+            // Process-scoped for the same reason as the project/scratch
+            // roots above: a fixed name would let a second app instance on
+            // the same simulator delete this instance's active job record.
             let isolatedJobURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("RoomScanStudio-UI-MeshJob", isDirectory: true)
+                    .appendingPathComponent(
+                        "RoomScanStudio-UI-MeshJob-\(ProcessInfo.processInfo.processIdentifier)",
+                        isDirectory: true
+                    )
                     .appendingPathComponent("active-job.json")
             if arguments.contains("--reset-local-store") {
                 try? FileManager.default.removeItem(at: isolatedJobURL)
@@ -156,6 +162,23 @@ final class AppEnvironment: ObservableObject {
             store: store,
             modelContainer: indexBootstrap.container
         )
+        // Hero snapshots piggyback on the colored-mesh viewer's load, the one
+        // moment the colored result is already resident — the profile never
+        // loads a mesh just to render its hero image.
+        let heroLibraryController = libraryController
+        let heroPublishGate = HeroPublishGate()
+        meshColoringCoordinator.onColoredResult = { projectID, result in
+            // One hero render at a time: a new room's result cancels and
+            // supersedes any straggler still holding the previous room's
+            // mesh, so peak memory never stacks two rooms.
+            heroPublishGate.task?.cancel()
+            heroPublishGate.task = Task(priority: .utility) {
+                guard !Task.isCancelled else { return }
+                _ = await RoomMeshHeroPipeline.publishHero(
+                    from: result, projectID: projectID, controller: heroLibraryController
+                )
+            }
+        }
         let exportWorkspaceFactory = RoomExportWorkspaceFactory(
             rootURL: RoomExportScratchRootResolver.resolve(
                 arguments: arguments,
@@ -392,7 +415,13 @@ private struct RoomProjectIndexBootstrap {
 }
 
 enum RoomProjectRootResolver {
-    private static let isolatedTestingDirectoryName = "RoomScanStudio-UI-Testing-Projects"
+    // Process-scoped rather than a fixed name: two app instances launched
+    // with `--reset-local-store` against the SAME simulator (e.g. a stray
+    // concurrent test run sharing a device) must never wipe each other's
+    // isolated project data out from under an in-progress test.
+    private static var isolatedTestingDirectoryName: String {
+        "RoomScanStudio-UI-Testing-Projects-\(ProcessInfo.processInfo.processIdentifier)"
+    }
 
     static func resolve(
         arguments: [String],
@@ -451,7 +480,12 @@ enum RoomProjectRootResolver {
 }
 
 enum RoomCaptureScratchRootResolver {
-    private static let isolatedTestingDirectoryName = "RoomScanStudio-UI-Testing-CaptureScratch"
+    // Process-scoped for the same reason as `RoomProjectRootResolver`: a
+    // fixed name is a collision hazard when more than one app instance with
+    // `--reset-local-store` is alive on the same simulator at once.
+    private static var isolatedTestingDirectoryName: String {
+        "RoomScanStudio-UI-Testing-CaptureScratch-\(ProcessInfo.processInfo.processIdentifier)"
+    }
 
     static func resolve(
         arguments: [String],
@@ -508,4 +542,11 @@ enum RoomCaptureScratchRootResolver {
             return
         }
     }
+}
+
+/// Single-slot holder so hero publication is serialized without capturing a
+/// partially-initialized AppEnvironment in its own init.
+@MainActor
+final class HeroPublishGate {
+    var task: Task<Void, Never>?
 }

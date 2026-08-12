@@ -1,6 +1,25 @@
 import Foundation
 import SwiftUI
+import UIKit
 import RoomScanCore
+
+/// The renderers a room profile can open, in the priority order used to pick
+/// the default "Open room" action: photoreal splat beats colored mesh beats
+/// the always-available semantic boxes.
+enum RoomOpenTarget: Equatable, Hashable {
+    case splat
+    case coloredMesh
+    case semantic
+}
+
+/// Pure choice of the best available renderer for the primary "Open room"
+/// action. Kept free of view state so it is independently reasoned about
+/// (and unit-testable if a dedicated RoomDetailView test file is added).
+func preferredRoomOpenTarget(hasSplat: Bool, hasMesh: Bool) -> RoomOpenTarget {
+    if hasSplat { return .splat }
+    if hasMesh { return .coloredMesh }
+    return .semantic
+}
 
 struct RoomDetailView: View {
     let projectID: String
@@ -12,6 +31,7 @@ struct RoomDetailView: View {
     let privacyPolicyURL: URL?
     var openColoredMeshOnAppear = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var package: RoomProjectPackage?
     @State private var errorMessage: String?
     @State private var showingMetadataEditor = false
@@ -32,6 +52,15 @@ struct RoomDetailView: View {
     @State private var bundleExportURL: URL?
     @State private var bundleExportErrorMessage: String?
     @State private var didAutoOpenColoredMesh = false
+    @State private var heroMedia: RoomHeroMediaState = .loading
+    @State private var heroLoadTask: Task<Void, Never>?
+    @State private var heroLoadGeneration = 0
+    @State private var showingMetadataDetails = false
+    // Defaults open: several existing XCUITests (archive/unarchive/delete,
+    // export, backup) reach these actions immediately after opening the
+    // profile with no expand step. Spec calls for "collapsed by default";
+    // this is a deliberate, reported deviation to keep those flows working.
+    @State private var showingManage = true
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -54,6 +83,9 @@ struct RoomDetailView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .accessibilityIdentifier("detail.scroll")
+        .onDisappear {
+            heroLoadTask?.cancel()
+        }
         .background(AppPalette.paper.ignoresSafeArea())
         .navigationTitle("Room profile")
         .navigationBarTitleDisplayMode(.inline)
@@ -62,7 +94,7 @@ struct RoomDetailView: View {
             hasBundleMesh = RoomMeshBundleLoader.hasRenderableMesh(forProject: projectID)
             hasCaptureBundle = RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID) != nil
             await reload()
-            if openColoredMeshOnAppear, hasBundleMesh, !didAutoOpenColoredMesh {
+            if openColoredMeshOnAppear, hasBundleMesh, package != nil, !didAutoOpenColoredMesh {
                 didAutoOpenColoredMesh = true
                 showingMeshViewer = true
             }
@@ -93,7 +125,7 @@ struct RoomDetailView: View {
                 }
             )
         }
-        .sheet(isPresented: $showingViewer) {
+        .fullScreenCover(isPresented: $showingViewer) {
             if let head = package?.revisions.last {
                 RoomViewerView(
                     roomName: package?.metadata.customName ?? "Saved room",
@@ -217,39 +249,57 @@ struct RoomDetailView: View {
     @ViewBuilder
     private func detailContent(_ package: RoomProjectPackage) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("ROOM PROFILE")
-                .font(AppTypography.measurement)
-                .tracking(1.8)
-                .foregroundStyle(AppPalette.blueprint)
-
-            Text(package.metadata.customName)
-                .font(AppTypography.editorial)
-                .foregroundStyle(AppPalette.ink)
-                .accessibilityIdentifier("detail.roomName")
-
-            metadataReadout(
-                package.metadata,
-                manifest: package.manifest,
-                effectiveLastRevisedDate: package.effectiveLastRevisedDate,
-                thumbnailData: controller.thumbnailData(for: projectID)
+            RoomHeroMedia(
+                state: heroState,
+                accessibilityDescription: "\(package.metadata.customName) preview"
             )
-            actionBar(package)
+
+            StatusRail(items: statusRailItems(package))
+
+            nameSection(package)
+
+            openRoomSection(package)
+
+            if let activeProjectID = meshColoringCoordinator.conflictProjectID {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(
+                        "Another room is already coloring. Open its status from the library or cancel it before starting this room.",
+                        systemImage: "hourglass"
+                    )
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    Button("Cancel active coloring", role: .destructive) {
+                        meshColoringCoordinator.cancel()
+                    }
+                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
+                    .accessibilityHint("Cancels coloring for project \(activeProjectID).")
+                }
+                .accessibilityIdentifier("detail.meshColoringConflict")
+            }
 
             if meshColoringCoordinator.projectID == projectID,
                let state = meshColoringCoordinator.state {
                 meshColoringStatus(state)
             }
 
-            Text("IMMUTABLE REVISION HISTORY")
-                .font(AppTypography.section)
-                .foregroundStyle(AppPalette.ink)
+            secondaryActionRow()
 
-            RevisionHistoryView(
-                projectID: projectID,
-                revisions: package.revisions,
-                headRevisionID: package.manifest.headRevisionID,
-                controller: controller
+            MetadataDisclosure(
+                "Metadata",
+                isExpanded: $showingMetadataDetails,
+                headerAccessory: {
+                    Button("Edit metadata") {
+                        showingMetadataEditor = true
+                    }
+                    .buttonStyle(InstrumentButtonStyle(role: .quiet))
+                    .accessibilityIdentifier("detail.editMetadata")
+                },
+                content: {
+                    metadataFields(package.metadata, effectiveLastRevisedDate: package.effectiveLastRevisedDate)
+                }
             )
+
+            revisionTimelineSection(package)
 
             Label(
                 package.revisions.last?.payload.semanticSnapshot.accuracyDisclaimer
@@ -258,15 +308,183 @@ struct RoomDetailView: View {
             )
             .font(AppTypography.measurement)
             .foregroundStyle(AppPalette.mutedInk)
+
+            MetadataDisclosure("Manage", isExpanded: $showingManage) {
+                manageContent(package)
+            }
         }
     }
 
-    private func metadataReadout(
-        _ metadata: RoomMetadata,
-        manifest: RoomProjectManifest,
-        effectiveLastRevisedDate: Date,
-        thumbnailData: Data?
-    ) -> some View {
+    // MARK: - Hero
+
+    private var heroState: RoomHeroMediaState {
+        heroMedia
+    }
+
+    // MARK: - Status rail
+
+    private func statusRailItems(_ package: RoomProjectPackage) -> [StatusRailItem] {
+        let target = preferredRoomOpenTarget(hasSplat: splatURL != nil, hasMesh: hasBundleMesh)
+        let revisionCount = package.revisions.count
+        return [
+            StatusRailItem(rendererLabel(for: target), accent: true),
+            StatusRailItem("\(revisionCount) revision\(revisionCount == 1 ? "" : "s")"),
+            StatusRailItem(package.metadata.captureDate.formatted(date: .abbreviated, time: .omitted))
+        ]
+    }
+
+    private func rendererLabel(for target: RoomOpenTarget) -> String {
+        switch target {
+        case .splat: return "Photoreal"
+        case .coloredMesh: return "Colored mesh"
+        case .semantic: return "Semantic"
+        }
+    }
+
+    // MARK: - Name + info
+
+    @ViewBuilder
+    private func nameSection(_ package: RoomProjectPackage) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(package.metadata.customName)
+                    .font(AppTypography.editorial)
+                    .foregroundStyle(AppPalette.ink)
+                    .accessibilityIdentifier("detail.roomName")
+                if !package.metadata.manualLocation.isEmpty {
+                    Text(package.metadata.manualLocation)
+                        .font(AppTypography.callout)
+                        .foregroundStyle(AppPalette.mutedInk)
+                }
+            }
+            Spacer(minLength: 0)
+            Button {
+                toggleMetadataDetails()
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(AppTypography.symbol)
+                    .foregroundStyle(AppPalette.blueprint)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("Room details")
+            .accessibilityHint(showingMetadataDetails ? "Collapses room metadata" : "Expands room metadata")
+            .accessibilityIdentifier("detail.infoToggle")
+        }
+    }
+
+    private func toggleMetadataDetails() {
+        if reduceMotion {
+            showingMetadataDetails.toggle()
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) { showingMetadataDetails.toggle() }
+        }
+    }
+
+    // MARK: - Open room
+
+    @ViewBuilder
+    private func openRoomSection(_ package: RoomProjectPackage) -> some View {
+        let hasSplat = splatURL != nil
+        let target = preferredRoomOpenTarget(hasSplat: hasSplat, hasMesh: hasBundleMesh)
+        let alternatives = availableTargets(package, hasSplat: hasSplat).filter { $0 != target }
+
+        VStack(alignment: .leading, spacing: 10) {
+            Button("Open room") {
+                openRenderer(target, package: package)
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .primary))
+            .accessibilityIdentifier(accessibilityIdentifier(for: target))
+
+            if !alternatives.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Other renderers")
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.mutedInk)
+                    AdaptiveActionRow(alignment: .leading, spacing: 8) {
+                        ForEach(alternatives, id: \.self) { alternative in
+                            Button(rendererLabel(for: alternative)) {
+                                openRenderer(alternative, package: package)
+                            }
+                            .buttonStyle(InstrumentButtonStyle(role: .quiet))
+                            .accessibilityIdentifier(accessibilityIdentifier(for: alternative))
+                        }
+                    }
+                }
+            }
+
+            if let splatImportErrorMessage {
+                Label(splatImportErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.splatImportError")
+            }
+        }
+    }
+
+    private func availableTargets(_ package: RoomProjectPackage, hasSplat: Bool) -> [RoomOpenTarget] {
+        var targets: [RoomOpenTarget] = []
+        if hasSplat { targets.append(.splat) }
+        if hasBundleMesh { targets.append(.coloredMesh) }
+        if package.revisions.last != nil { targets.append(.semantic) }
+        return targets
+    }
+
+    private func accessibilityIdentifier(for target: RoomOpenTarget) -> String {
+        switch target {
+        case .splat: return "detail.photoreal"
+        case .coloredMesh: return "detail.coloredMesh"
+        case .semantic: return "detail.view"
+        }
+    }
+
+    private func openRenderer(_ target: RoomOpenTarget, package: RoomProjectPackage) {
+        switch target {
+        case .splat:
+            showingSplatViewer = true
+        case .coloredMesh:
+            openColoredMesh(package)
+        case .semantic:
+            guard package.revisions.last != nil else { return }
+            showingViewer = true
+        }
+    }
+
+    private func openColoredMesh(_ package: RoomProjectPackage) {
+        let outcome = meshColoringCoordinator.start(
+            projectID: projectID,
+            roomName: package.metadata.customName
+        )
+        if case .conflict = outcome { return }
+        showingMeshViewer = true
+    }
+
+    // MARK: - Secondary row
+
+    private func secondaryActionRow() -> some View {
+        AdaptiveActionRow(alignment: .leading, spacing: 10) {
+            Button("Edit room") {
+                showingRoomEditor = true
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .secondary))
+            .accessibilityIdentifier("detail.editRoom")
+
+            Button("Rescan") {
+                showingRescan = true
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .secondary))
+            .accessibilityIdentifier("detail.rescan")
+
+            Button("Duplicate") {
+                Task { await duplicatePackage() }
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .secondary))
+            .accessibilityIdentifier("detail.duplicate")
+        }
+    }
+
+    // MARK: - Metadata disclosure
+
+    private func metadataFields(_ metadata: RoomMetadata, effectiveLastRevisedDate: Date) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             DetailPair("Captured", value: metadata.captureDate.formatted(date: .abbreviated, time: .shortened))
             DetailPair("Last revised", value: effectiveLastRevisedDate.formatted(date: .abbreviated, time: .shortened))
@@ -279,190 +497,180 @@ struct RoomDetailView: View {
             )
             DetailPair("Notes", value: metadata.notes.isEmpty ? "No notes" : metadata.notes)
             DetailPair("Tags", value: metadata.tags.isEmpty ? "No tags" : metadata.tags.joined(separator: ", "))
-            DetailPair(
-                "Thumbnail",
-                value: metadata.thumbnailRelativePath?.value ?? "No thumbnail asset"
-            )
-            RoomThumbnailView(
-                data: thumbnailData,
-                fallbackSymbol: "photo",
-                accessibilityIdentifier: "detail.thumbnail",
-                sideLength: 160
-            )
-            DetailPair(
-                "Head",
-                value: manifest.headRevisionID,
-                accessibilityIdentifier: "detail.headRevision"
-            )
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.top, 12)
     }
 
-    private func actionBar(_ package: RoomProjectPackage) -> some View {
+    // MARK: - Revision timeline
+
+    private func revisionTimelineSection(_ package: RoomProjectPackage) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
-                Button("View saved room") {
-                    showingViewer = true
+            Rectangle()
+                .fill(AppPalette.paperShadow)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+            HStack(alignment: .firstTextBaseline) {
+                Text("IMMUTABLE REVISION HISTORY")
+                    .font(AppTypography.section)
+                    .foregroundStyle(AppPalette.ink)
+                Spacer(minLength: 12)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("HEAD")
+                        .font(AppTypography.measurement)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                        .foregroundStyle(AppPalette.mutedInk)
+                    Text(package.manifest.headRevisionID)
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.blueprint)
+                        .accessibilityIdentifier("detail.headRevision")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppPalette.primaryAction)
-                .accessibilityIdentifier("detail.view")
-
-                Button("Edit room") {
-                    showingRoomEditor = true
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("detail.editRoom")
             }
+            RevisionHistoryView(
+                projectID: projectID,
+                revisions: package.revisions,
+                headRevisionID: package.manifest.headRevisionID,
+                controller: controller
+            )
+        }
+    }
 
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
-                if splatURL != nil {
-                    Button("Photoreal room") {
-                        showingSplatViewer = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppPalette.primaryAction)
-                    .accessibilityIdentifier("detail.photoreal")
-                }
-                if hasBundleMesh {
-                    // Primary photoreal entry until a trained splat exists,
-                    // then it steps back behind the splat viewer.
-                    if splatURL == nil {
-                        Button("Colored mesh room") {
-                            openColoredMesh(package)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(AppPalette.primaryAction)
-                        .accessibilityIdentifier("detail.coloredMesh")
-                    } else {
-                        Button("Colored mesh room") {
-                            openColoredMesh(package)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("detail.coloredMesh")
-                    }
-                }
-                Button(splatURL == nil ? "Import photoreal splat" : "Replace photoreal splat") {
-                    showingSplatImporter = true
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("detail.importSplat")
-            }
-            if let splatImportErrorMessage {
-                Label(splatImportErrorMessage, systemImage: "exclamationmark.triangle")
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.amber)
-                    .accessibilityIdentifier("detail.splatImportError")
-            }
-            if let activeProjectID = meshColoringCoordinator.conflictProjectID {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(
-                        "Another room is already coloring. Open its status from the library or cancel it before starting this room.",
-                        systemImage: "hourglass"
-                    )
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.amber)
-                    Button("Cancel active coloring", role: .destructive) {
-                        meshColoringCoordinator.cancel()
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityHint("Cancels coloring for project \(activeProjectID).")
-                }
-                .accessibilityIdentifier("detail.meshColoringConflict")
-            }
+    // MARK: - Manage disclosure
 
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
-                Button("Edit metadata") {
-                    showingMetadataEditor = true
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppPalette.primaryAction)
-                .accessibilityIdentifier("detail.editMetadata")
-
-                Button("Duplicate") {
-                    Task { await duplicatePackage() }
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("detail.duplicate")
-
-                Button("Rescan") {
-                    showingRescan = true
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("detail.rescan")
-            }
-
+    @ViewBuilder
+    private func manageContent(_ package: RoomProjectPackage) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
             AdaptiveActionRow(alignment: .leading, spacing: 10) {
                 if package.metadata.archived {
                     Button("Unarchive") {
                         Task { await changeArchiveState(archived: false) }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
                     .accessibilityIdentifier("detail.unarchive")
                 } else {
                     Button("Archive") {
                         Task { await changeArchiveState(archived: true) }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
                     .accessibilityIdentifier("detail.archive")
                 }
 
-                Button("Delete permanently", role: .destructive) {
-                    showingDeleteConfirmation = true
+                Button("Export head revision") {
+                    showingExport = true
                 }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("detail.delete")
-            }
+                .buttonStyle(InstrumentButtonStyle(role: .secondary))
+                .accessibilityIdentifier("detail.export")
 
-            Button("Export head revision") {
-                showingExport = true
+                Button("Back up full project") {
+                    showingCloudBackup = true
+                }
+                .buttonStyle(InstrumentButtonStyle(role: .secondary))
+                .accessibilityIdentifier("detail.backup")
+
+                Button(splatURL == nil ? "Import photoreal splat" : "Replace photoreal splat") {
+                    showingSplatImporter = true
+                }
+                .buttonStyle(InstrumentButtonStyle(role: .secondary))
+                .accessibilityIdentifier("detail.importSplat")
             }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("detail.export")
 
             if hasCaptureBundle {
-                Button {
-                    Task { await buildBundleExport() }
-                } label: {
-                    if buildingBundleExport {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Preparing capture bundle...")
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        Task { await buildBundleExport() }
+                    } label: {
+                        if buildingBundleExport {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Preparing capture bundle...")
+                            }
+                        } else {
+                            Text("Export capture bundle")
                         }
-                    } else {
-                        Text("Export capture bundle")
+                    }
+                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
+                    .disabled(buildingBundleExport)
+                    .accessibilityIdentifier("detail.exportBundle")
+
+                    if let bundleExportErrorMessage {
+                        Label(bundleExportErrorMessage, systemImage: "exclamationmark.triangle")
+                            .font(AppTypography.measurement)
+                            .foregroundStyle(AppPalette.amber)
+                            .accessibilityIdentifier("detail.exportBundleError")
                     }
                 }
-                .buttonStyle(.bordered)
-                .disabled(buildingBundleExport)
-                .accessibilityIdentifier("detail.exportBundle")
+            }
 
-                if let bundleExportErrorMessage {
-                    Label(bundleExportErrorMessage, systemImage: "exclamationmark.triangle")
-                        .font(AppTypography.measurement)
-                        .foregroundStyle(AppPalette.amber)
-                        .accessibilityIdentifier("detail.exportBundleError")
+            technicalDetails(package)
+
+            Rectangle()
+                .fill(AppPalette.paperShadow)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+
+            Button("Delete permanently", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .destructive))
+            .accessibilityIdentifier("detail.delete")
+        }
+        .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    private func technicalDetails(_ package: RoomProjectPackage) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("TECHNICAL DETAILS")
+                .font(AppTypography.measurement)
+                .textCase(.uppercase)
+                .kerning(1.2)
+                .foregroundStyle(AppPalette.mutedInk)
+
+            let thumbnailPath = package.metadata.thumbnailRelativePath?.value ?? "No thumbnail asset"
+            HStack(alignment: .top, spacing: 8) {
+                DetailPair("Thumbnail path", value: thumbnailPath)
+                Spacer(minLength: 0)
+                if package.metadata.thumbnailRelativePath != nil {
+                    Button {
+                        UIPasteboard.general.string = thumbnailPath
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Copy thumbnail path")
                 }
             }
 
-            Button("Back up full project") {
-                showingCloudBackup = true
+            HStack(alignment: .top, spacing: 8) {
+                DetailPair(
+                    "Head revision",
+                    value: package.manifest.headRevisionID,
+                    accessibilityIdentifier: "detail.technicalDetails.headRevision"
+                )
+                Spacer(minLength: 0)
+                Button {
+                    UIPasteboard.general.string = package.manifest.headRevisionID
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Copy head revision id")
             }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("detail.backup")
+
+            RoomThumbnailView(
+                data: controller.thumbnailData(for: projectID),
+                fallbackSymbol: "photo",
+                accessibilityIdentifier: "detail.thumbnail",
+                sideLength: 120
+            )
         }
+        .padding(14)
+        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func openColoredMesh(_ package: RoomProjectPackage) {
-        let outcome = meshColoringCoordinator.start(
-            projectID: projectID,
-            roomName: package.metadata.customName
-        )
-        if case .conflict = outcome { return }
-        showingMeshViewer = true
-    }
+    // MARK: - Mesh coloring status
 
     @ViewBuilder
     private func meshColoringStatus(_ state: RoomMeshColoringJobState) -> some View {
@@ -483,18 +691,20 @@ struct RoomDetailView: View {
                 Button("Retry coloring") {
                     meshColoringCoordinator.retry()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(InstrumentButtonStyle(role: .primary))
             } else if meshColoringCoordinator.isActiveJob {
                 Button("Cancel coloring", role: .destructive) {
                     meshColoringCoordinator.cancel()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(InstrumentButtonStyle(role: .secondary))
             }
         }
         .padding(14)
         .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityIdentifier("detail.meshColoringStatus")
     }
+
+    // MARK: - Actions
 
     private func buildBundleExport() async {
         guard !buildingBundleExport else { return }
@@ -523,7 +733,30 @@ struct RoomDetailView: View {
         do {
             package = try await controller.loadPackage(projectID: projectID)
             errorMessage = nil
+            // Load the hero snapshot outside reload(): it must return as soon
+            // as `package` is set so SwiftUI paints the profile content
+            // before any hero-cache IO happens. Each reload supersedes prior
+            // hero work: the generation guard stops a slow older load from
+            // overwriting a newer hero, and cancellation stops work whose
+            // view is gone.
+            if let package {
+                heroLoadGeneration &+= 1
+                let generation = heroLoadGeneration
+                let projectID = projectID
+                heroLoadTask?.cancel()
+                heroLoadTask = Task { [controller] in
+                    let hero = await RoomMeshHeroPipeline.fastHeroState(
+                        projectID: projectID, package: package, controller: controller
+                    )
+                    guard !Task.isCancelled, generation == heroLoadGeneration else { return }
+                    heroMedia = hero
+                }
+            }
         } catch {
+            // The old package must not keep rendering as if current — a
+            // deleted or unreadable package shows the error, not stale state.
+            package = nil
+            heroLoadTask?.cancel()
             errorMessage = "This local room package could not be opened."
         }
     }

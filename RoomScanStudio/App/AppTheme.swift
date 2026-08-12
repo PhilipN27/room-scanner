@@ -69,6 +69,229 @@ enum AppTypography {
     static let symbol = Font.system(.title3, design: .default, weight: .semibold)
 }
 
+/// The four action roles of the redesigned instrument language. Exactly one
+/// `.primary` should appear per screen region; `.destructive` is reserved for
+/// permanent-loss actions and is never mixed into a row of peers.
+enum InstrumentButtonRole {
+    case primary
+    case secondary
+    case quiet
+    case destructive
+}
+
+struct InstrumentButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var role: InstrumentButtonRole = .secondary
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(AppTypography.bodyEmphasized)
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .frame(minHeight: 44)
+            .background(background)
+            .overlay(border)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+
+    private var foreground: Color {
+        switch role {
+        case .primary: Color.white
+        case .secondary: AppPalette.ink
+        case .quiet: AppPalette.blueprint
+        case .destructive: Color(uiColor: .systemRed)
+        }
+    }
+
+    @ViewBuilder private var background: some View {
+        switch role {
+        case .primary:
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppPalette.primaryAction)
+        case .secondary:
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(AppPalette.raisedSurface)
+        case .quiet, .destructive:
+            Color.clear
+        }
+    }
+
+    @ViewBuilder private var border: some View {
+        switch role {
+        case .secondary, .destructive:
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(AppPalette.paperShadow, lineWidth: 1)
+        case .primary, .quiet:
+            EmptyView()
+        }
+    }
+}
+
+/// A compact mono rail of real facts (renderer kind, revision count, capture
+/// date). Values are supplied by callers from live data — the rail never
+/// invents or decorates.
+struct StatusRailItem: Identifiable {
+    let id: String
+    let label: String
+    var accent: Bool = false
+
+    init(_ label: String, accent: Bool = false) {
+        self.id = label
+        self.label = label
+        self.accent = accent
+    }
+}
+
+struct StatusRail: View {
+    let items: [StatusRailItem]
+
+    // A fact rail is not an action row: it stays horizontal on iPhone
+    // portrait (AdaptiveActionRow would stack it), overflowing to a plain
+    // vertical list — without divider ticks — only when it truly cannot fit.
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(AppPalette.paperShadow)
+                            .frame(width: 1, height: 12)
+                            .accessibilityHidden(true)
+                    }
+                    label(for: item)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(items) { item in
+                    label(for: item)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func label(for item: StatusRailItem) -> some View {
+        Text(item.label)
+            .font(AppTypography.measurement)
+            .textCase(.uppercase)
+            .kerning(1.2)
+            .foregroundStyle(item.accent ? AppPalette.blueprint : AppPalette.mutedInk)
+    }
+}
+
+/// The "i" affordance: a titled, hairline-ruled disclosure that keeps
+/// secondary detail out of the primary reading order until asked for.
+struct MetadataDisclosure<Header: View, Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var isExpanded: Bool
+    private let title: String
+    private let headerAccessory: Header
+    private let content: Content
+
+    init(
+        _ title: String,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder headerAccessory: () -> Header = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        _isExpanded = isExpanded
+        self.headerAccessory = headerAccessory()
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(AppPalette.paperShadow)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+            HStack(spacing: 10) {
+                Button {
+                    if reduceMotion {
+                        isExpanded.toggle()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(AppTypography.measurement)
+                            .textCase(.uppercase)
+                            .kerning(1.2)
+                            .foregroundStyle(AppPalette.mutedInk)
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppPalette.blueprint)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title)
+                .accessibilityHint(isExpanded ? "Collapses the section" : "Expands the section")
+                Spacer(minLength: 0)
+                headerAccessory
+            }
+            if isExpanded {
+                content
+                    .padding(.bottom, 12)
+                    .transition(reduceMotion ? .identity : .opacity)
+            }
+        }
+    }
+}
+
+/// Hero media for a room profile: a rendered mesh snapshot when one exists,
+/// a real floor-plan projection otherwise — never the legacy fake pattern.
+enum RoomHeroMediaState: Equatable {
+    case loading
+    case snapshot(UIImage)
+    case floorPlan(UIImage)
+    case unavailable
+}
+
+struct RoomHeroMedia: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let state: RoomHeroMediaState
+    var accessibilityDescription: String
+
+    var body: some View {
+        ZStack {
+            AppPalette.graphite
+            switch state {
+            case .loading:
+                ProgressView()
+                    .tint(AppPalette.blueprintOnDark)
+            case let .snapshot(image), let .floorPlan(image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case .unavailable:
+                VStack(spacing: 8) {
+                    Image(systemName: "cube.transparent")
+                        .font(.largeTitle)
+                        .foregroundStyle(AppPalette.mutedOnDark)
+                    Text("No preview available")
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.mutedOnDark)
+                }
+            }
+        }
+        .aspectRatio(4.0 / 3.0, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: state)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+    }
+}
+
 /// Reuses the same actions in a horizontal layout when they fit and a
 /// scroll-friendly vertical layout at accessibility Dynamic Type sizes. The
 /// vertical variant gives each action the available row width.

@@ -1,28 +1,34 @@
 import SwiftUI
 import RoomScanCore
 
-private enum RoomViewerInputMode: String, CaseIterable, Identifiable {
-    case orbit
-    case pan
-
-    var id: String { rawValue }
-}
-
-/// Saved-room inspection only. The black viewport contains normalized semantic
-/// bounding boxes, not captured mesh/USDZ geometry and not a live AR camera.
+/// Saved-room inspection only. The full-bleed viewport contains normalized
+/// semantic bounding boxes, not captured mesh/USDZ geometry and not a live
+/// AR camera. Presented as a `fullScreenCover` by the room profile screen;
+/// this view owns its own Close control and has no inner NavigationStack.
 @MainActor
 struct RoomViewerView: View {
     let roomName: String
     let payload: RoomRevisionPayload
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var camera = RoomViewerCamera.defaultState
     @State private var visibility = RoomViewerVisibility()
-    @State private var inputMode: RoomViewerInputMode = .orbit
-    @State private var previousDragTranslation: CGSize = .zero
-    @State private var previousMagnificationScale: CGFloat = 1
     @State private var selectedElementID: String?
     @State private var errorMessage: String?
+    @State private var showingLayers = false
+
+    // Walk-mode joystick: a transient view-layer vector, never persisted in
+    // the Codable RoomViewerCamera. `moveInput` is dispatched to the
+    // reducer's `.move` action once per display-linked tick while
+    // `joystickEngaged`; both are cleared on gesture end, mode change,
+    // disappear, and scene deactivation so a stale drag can never keep
+    // walking after the reason it started is gone.
+    @State private var moveInput: CGVector = .zero
+    @State private var joystickEngaged = false
+    @State private var lastMoveTick: TimeInterval?
 
     private var scenePlan: RoomViewerScenePlan {
         RoomViewerScenePlan(payload: payload)
@@ -33,218 +39,272 @@ struct RoomViewerView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("SAVED ROOM / VIEWER")
+        ZStack {
+            viewerCanvas
+                .ignoresSafeArea()
+
+            walkTicker
+
+            VStack(spacing: 0) {
+                header
+                Spacer(minLength: 0)
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
                         .font(AppTypography.measurement)
-                        .tracking(1.8)
-                        .foregroundStyle(AppPalette.blueprint)
-
-                    Text(roomName)
-                        .font(AppTypography.editorial)
-                        .foregroundStyle(AppPalette.ink)
-                        .accessibilityIdentifier("viewer.title")
-
-                    viewerCanvas
-                    cameraControls
-                    visibilityControls
-                    selectionPanel
-
-                    Label(
-                        payload.semanticSnapshot.accuracyDisclaimer,
-                        systemImage: "ruler"
-                    )
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.mutedInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("viewer.disclaimer")
-
-                    if camera.isNoClip {
-                        Label(
-                            "First-person is no-clip inspection. Semantic boxes are not collision or survey geometry.",
-                            systemImage: "figure.walk"
-                        )
-                        .font(AppTypography.measurement)
-                        .foregroundStyle(AppPalette.amber)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("viewer.noClipDisclosure")
-                    }
-
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .font(AppTypography.measurement)
-                            .foregroundStyle(AppPalette.amber)
-                            .accessibilityIdentifier("viewer.error")
-                    }
+                        .foregroundStyle(AppPalette.amberOnDark)
+                        .padding(.horizontal, 16)
+                        .accessibilityIdentifier("viewer.error")
                 }
-                .padding(24)
-                .frame(maxWidth: 960, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .background(AppPalette.paper.ignoresSafeArea())
-            .navigationTitle("Saved room")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
-                        .accessibilityIdentifier("viewer.close")
-                }
+                bottomChrome
             }
         }
+        .background(AppPalette.captureBlack.ignoresSafeArea())
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: camera.mode)
+        .onChange(of: camera.mode) { _, newMode in
+            guard newMode != .firstPerson else { return }
+            clearWalkInput()
+        }
+        .onChange(of: joystickEngaged) { _, engaged in
+            // TimelineView pauses the instant `engaged` goes false, so
+            // tickMove's own "not engaged" branch (which nils this out)
+            // never runs again — without this, a stale timestamp survives
+            // to the next drag and its first tick measures a multi-second
+            // gap instead of one frame.
+            guard !engaged else { return }
+            lastMoveTick = nil
+        }
+        .onDisappear {
+            clearWalkInput()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            clearWalkInput()
+        }
     }
+
+    // MARK: - Top chrome
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ViewerChrome(
+                onClose: { dismiss() },
+                primaryModeLabel: "Orbit",
+                secondaryModeLabel: "Walk",
+                isPrimaryModeActive: camera.mode == .orbit,
+                onSelectPrimaryMode: { apply(.orbitMode) },
+                onSelectSecondaryMode: { apply(.firstPerson) },
+                trailing: { layersButton }
+            )
+
+            Text(roomName)
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedOnDark)
+                .accessibilityIdentifier("viewer.title")
+
+            Text("SEMANTIC BOXES / NOT SURVEY GEOMETRY")
+                .font(AppTypography.measurement)
+                .tracking(1.0)
+                .foregroundStyle(AppPalette.mutedOnDark)
+                .accessibilityIdentifier("viewer.disclaimer")
+
+            if camera.isNoClip {
+                Label(
+                    "Walk is no-clip inspection. Semantic boxes are not collision or survey geometry.",
+                    systemImage: "figure.walk"
+                )
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.amberOnDark)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("viewer.noClipDisclosure")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .background(
+            LinearGradient(
+                colors: [.black.opacity(0.65), .black.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var layersButton: some View {
+        Button {
+            showingLayers = true
+        } label: {
+            Image(systemName: "square.3.layers.3d")
+                .font(AppTypography.symbol)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(AppPalette.primaryOnDark)
+        .accessibilityIdentifier("viewer.layers")
+        .accessibilityLabel("Layers")
+        .accessibilityHint("Choose which semantic layers are visible.")
+        .popover(isPresented: $showingLayers) {
+            layersPopoverContent
+        }
+    }
+
+    private var layersPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("VISIBLE LAYERS")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedInk)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+            Toggle("Structure", isOn: $visibility.structural)
+                .accessibilityIdentifier("viewer.visibility.structural")
+            Toggle("Objects", isOn: $visibility.objects)
+                .accessibilityIdentifier("viewer.visibility.objects")
+            Toggle("Measurements", isOn: $visibility.measurements)
+                .accessibilityIdentifier("viewer.visibility.measurements")
+            Toggle("Annotations", isOn: $visibility.annotations)
+                .accessibilityIdentifier("viewer.visibility.annotations")
+            Toggle("Photo markers", isOn: $visibility.photos)
+                .accessibilityIdentifier("viewer.visibility.photos")
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+        .tint(AppPalette.blueprint)
+        .frame(minWidth: 260)
+        .presentationCompactAdaptation(.popover)
+    }
+
+    // MARK: - Canvas
 
     private var viewerCanvas: some View {
         RoomViewerRealityView(
             scenePlan: scenePlan,
             camera: camera,
-            visibility: visibility
+            visibility: visibility,
+            onCameraAction: apply
         )
-        .frame(minHeight: 320)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(alignment: .topLeading) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(camera.mode == .orbit ? "ORBIT INSPECTION" : "FIRST-PERSON / NO-CLIP")
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.blueprintOnDark)
-                Text("Semantic bounding boxes only")
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.mutedOnDark)
-            }
-            .padding(14)
-        }
-        .background(AppPalette.captureBlack, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .gesture(DragGesture(minimumDistance: 1).onChanged { value in
-            // SwiftUI reports gesture values cumulatively. Feed the pure
-            // reducer only the delta since the last update to avoid applying
-            // the whole drag repeatedly and overshooting the camera.
-            let delta = CGSize(
-                width: value.translation.width - previousDragTranslation.width,
-                height: value.translation.height - previousDragTranslation.height
-            )
-            previousDragTranslation = value.translation
-            switch inputMode {
-            case .orbit:
-                apply(.orbit(
-                    yawDeltaRadians: Double(delta.width) * 0.003,
-                    pitchDeltaRadians: Double(delta.height) * 0.003
-                ))
-            case .pan:
-                apply(.pan(delta: RoomPoint3D(
-                    x: Double(delta.width) * 0.004,
-                    y: 0,
-                    z: Double(delta.height) * 0.004
-                )))
-            }
-        }.onEnded { _ in
-            previousDragTranslation = .zero
-        })
-        .simultaneousGesture(MagnificationGesture().onChanged { value in
-            let incrementalScale = value / previousMagnificationScale
-            previousMagnificationScale = value
-            apply(.zoom(deltaMeters: Double(1 - incrementalScale) * 0.4))
-        }.onEnded { _ in
-            previousMagnificationScale = 1
-        })
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Saved room semantic viewer")
-        .accessibilityValue("\(scenePlan.structuralElements.count) structural elements and \(scenePlan.objectElements.count) objects in \(camera.mode == .orbit ? "orbit" : "first-person no-clip") mode")
-        .accessibilityHint("Shows semantic bounding boxes only. Measurements are estimates, not survey geometry.")
+        .accessibilityValue("\(scenePlan.structuralElements.count) structural elements and \(scenePlan.objectElements.count) objects in \(camera.mode == .orbit ? "orbit" : "walk") mode")
+        .accessibilityHint("Shows semantic bounding boxes only. Measurements are estimates, not survey geometry. One finger drags to look or orbit; two fingers pan and pinch zooms in orbit mode.")
         .accessibilityIdentifier("viewer.canvas")
     }
 
-    private var cameraControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("CAMERA")
-                .font(AppTypography.measurement)
-                .foregroundStyle(AppPalette.blueprint)
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
-                Button("Orbit") {
-                    inputMode = .orbit
-                    apply(.orbitMode)
+    /// A hidden, display-linked tick that advances the walk camera while the
+    /// joystick is engaged. Paused whenever there is nothing to advance, so
+    /// it costs nothing in orbit mode or with an idle thumb.
+    private var walkTicker: some View {
+        TimelineView(.animation(paused: !(camera.mode == .firstPerson && joystickEngaged))) { timeline in
+            Color.clear
+                .onChange(of: timeline.date) { _, newDate in
+                    tickMove(at: newDate)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(inputMode == .orbit ? AppPalette.primaryAction : AppPalette.mutedInk)
-                .accessibilityIdentifier("viewer.orbit")
+        }
+        .frame(width: 0, height: 0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 
-                Button("Pan") {
-                    inputMode = .pan
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("viewer.pan")
+    private func tickMove(at date: Date) {
+        guard camera.mode == .firstPerson, joystickEngaged else {
+            lastMoveTick = nil
+            return
+        }
+        let now = date.timeIntervalSinceReferenceDate
+        defer { lastMoveTick = now }
+        guard let lastMoveTick else { return }
+        apply(.move(localX: moveInput.dx, localZ: moveInput.dy, deltaTime: now - lastMoveTick))
+    }
 
-                Button("First person") {
-                    apply(.firstPerson)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("viewer.firstPerson")
+    private func clearWalkInput() {
+        joystickEngaged = false
+        moveInput = .zero
+        lastMoveTick = nil
+    }
 
-                Button("Reset") {
-                    apply(.reset)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("viewer.reset")
+    // MARK: - Bottom chrome
+
+    @ViewBuilder
+    private var bottomChrome: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !elements.isEmpty {
+                selectionDrawer
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
+            switch camera.mode {
+            case .orbit:
+                orbitTray
+                    .transition(reduceMotion ? .identity : .opacity)
+            case .firstPerson:
+                walkControls
+                    .transition(reduceMotion ? .identity : .opacity)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+        .padding(.top, 10)
+        .background(
+            LinearGradient(
+                colors: [.black.opacity(0), .black.opacity(0.65)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    /// A plain horizontal row, not `AdaptiveActionRow` — that component
+    /// stacks vertically at `.compact` horizontal size class, which is every
+    /// iPhone in portrait, turning this into four full-width rows over the
+    /// full-bleed renderer. The spec calls for a single compact tray; the
+    /// scroll view keeps it reachable at accessibility Dynamic Type sizes
+    /// instead of wrapping.
+    private var orbitTray: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                Button("Reset") { apply(.reset) }
+                    .buttonStyle(.bordered)
+                    .tint(AppPalette.mutedOnDark)
+                    .accessibilityIdentifier("viewer.reset")
                 Button("Top") { apply(.top) }
                     .buttonStyle(.bordered)
+                    .tint(AppPalette.mutedOnDark)
                     .accessibilityIdentifier("viewer.top")
                 Button("Front") { apply(.front) }
                     .buttonStyle(.bordered)
+                    .tint(AppPalette.mutedOnDark)
                     .accessibilityIdentifier("viewer.front")
                 Button("Side") { apply(.side) }
                     .buttonStyle(.bordered)
+                    .tint(AppPalette.mutedOnDark)
                     .accessibilityIdentifier("viewer.side")
             }
+            .frame(minHeight: 44)
         }
-        .padding(16)
-        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var visibilityControls: some View {
+    private var walkControls: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            RoomViewerWalkJoystick(
+                moveInput: $moveInput,
+                engaged: $joystickEngaged,
+                onDirectionalStep: { localX, localZ in
+                    apply(.move(
+                        localX: localX,
+                        localZ: localZ,
+                        deltaTime: RoomViewerCameraReducer.maximumMoveDeltaTime
+                    ))
+                }
+            )
+            Text("Drag to look. Use the joystick to walk.")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedOnDark)
+                .padding(.bottom, 8)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var selectionDrawer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("VISIBLE ROOTS")
-                .font(AppTypography.measurement)
-                .foregroundStyle(AppPalette.blueprint)
-            Toggle("Structure", isOn: Binding(
-                get: { visibility.structural },
-                set: { visibility.structural = $0 }
-            ))
-            .accessibilityIdentifier("viewer.visibility.structural")
-            Toggle("Objects", isOn: Binding(
-                get: { visibility.objects },
-                set: { visibility.objects = $0 }
-            ))
-            .accessibilityIdentifier("viewer.visibility.objects")
-            Toggle("Measurements", isOn: Binding(
-                get: { visibility.measurements },
-                set: { visibility.measurements = $0 }
-            ))
-            .accessibilityIdentifier("viewer.visibility.measurements")
-            Toggle("Annotations", isOn: Binding(
-                get: { visibility.annotations },
-                set: { visibility.annotations = $0 }
-            ))
-            .accessibilityIdentifier("viewer.visibility.annotations")
-            Toggle("Photo markers", isOn: Binding(
-                get: { visibility.photos },
-                set: { visibility.photos = $0 }
-            ))
-            .accessibilityIdentifier("viewer.visibility.photos")
-        }
-        .font(AppTypography.bodyEmphasized)
-        .tint(AppPalette.blueprint)
-        .padding(16)
-        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var selectionPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("SEMANTIC ITEMS")
-                .font(AppTypography.measurement)
-                .foregroundStyle(AppPalette.blueprint)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(elements) { element in
@@ -252,24 +312,32 @@ struct RoomViewerView: View {
                             selectedElementID = element.id
                         }
                         .buttonStyle(.bordered)
-                        .tint(selectedElementID == element.id ? AppPalette.blueprint : AppPalette.mutedInk)
+                        .tint(selectedElementID == element.id ? AppPalette.blueprintOnDark : AppPalette.mutedOnDark)
                         .accessibilityIdentifier("viewer.selection.\(element.id)")
                     }
                 }
             }
+
             if let selected = elements.first(where: { $0.id == selectedElementID }) {
-                Text("\(selected.kind.uppercased()) / \(selected.dimensionsMeters.width, specifier: "%.2f") x \(selected.dimensionsMeters.height, specifier: "%.2f") x \(selected.dimensionsMeters.depth, specifier: "%.2f") m")
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.ink)
-                    .accessibilityIdentifier("viewer.selectedDetail")
-            } else {
-                Text("Select a semantic item to inspect its normalized dimensions.")
-                    .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.mutedInk)
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(selected.kind.uppercased()) / \(selected.dimensionsMeters.width, specifier: "%.2f") x \(selected.dimensionsMeters.height, specifier: "%.2f") x \(selected.dimensionsMeters.depth, specifier: "%.2f") m")
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.primaryOnDark)
+                        .accessibilityIdentifier("viewer.selectedDetail")
+                    Spacer(minLength: 8)
+                    Button {
+                        selectedElementID = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppPalette.mutedOnDark)
+                    .accessibilityLabel("Dismiss selection detail")
+                }
             }
         }
-        .padding(16)
-        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(12)
+        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func apply(_ action: RoomViewerCameraAction) {
@@ -279,5 +347,125 @@ struct RoomViewerView: View {
         } catch {
             errorMessage = "The viewer ignored an invalid camera input."
         }
+    }
+}
+
+/// Safe-area-aware overlay chrome shared by the full-screen renderer
+/// screens: a labeled Close affordance, a two-mode switcher, and a trailing
+/// accessory slot (Layers here; the pattern is available to the mesh/splat
+/// screens without forcing their existing dark toolbars to adopt it).
+struct ViewerChrome<Trailing: View>: View {
+    let onClose: () -> Void
+    let primaryModeLabel: String
+    let secondaryModeLabel: String
+    let isPrimaryModeActive: Bool
+    let onSelectPrimaryMode: () -> Void
+    let onSelectSecondaryMode: () -> Void
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Button(action: onClose) {
+                Label("Close", systemImage: "chevron.left")
+                    .font(AppTypography.bodyEmphasized)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppPalette.primaryOnDark)
+            .accessibilityIdentifier("viewer.close")
+            .accessibilityLabel("Close viewer")
+
+            Spacer(minLength: 4)
+
+            modeSwitcher
+
+            Spacer(minLength: 4)
+
+            trailing()
+        }
+    }
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 2) {
+            modeButton(primaryModeLabel, isActive: isPrimaryModeActive, identifier: "viewer.orbit", action: onSelectPrimaryMode)
+            modeButton(secondaryModeLabel, isActive: !isPrimaryModeActive, identifier: "viewer.firstPerson", action: onSelectSecondaryMode)
+        }
+        .padding(3)
+        .background(.white.opacity(0.1), in: Capsule())
+    }
+
+    private func modeButton(
+        _ title: String,
+        isActive: Bool,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppTypography.measurement)
+                .textCase(.uppercase)
+                .kerning(1.0)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isActive ? AppPalette.captureBlack : AppPalette.mutedOnDark)
+        .background(isActive ? AppPalette.blueprintOnDark : Color.clear, in: Capsule())
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+}
+
+/// Bottom-leading virtual joystick for the semantic viewer's walk mode.
+/// Shares its radial-clamp math with `SplatCameraController` (the same
+/// shape used by the colored-mesh and splat Metal viewers) so a diagonal
+/// drag cannot exceed the dial's radius, and exposes four named
+/// accessibility actions as a directional alternative for VoiceOver and
+/// Switch Control, which cannot perform a continuous drag gesture.
+struct RoomViewerWalkJoystick: View {
+    @Binding var moveInput: CGVector
+    @Binding var engaged: Bool
+    let onDirectionalStep: (_ localX: Double, _ localZ: Double) -> Void
+
+    @State private var thumbOffset: CGSize = .zero
+    private let radius: CGFloat = 56
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.12))
+                .frame(width: radius * 2, height: radius * 2)
+            Circle()
+                .fill(.white.opacity(0.35))
+                .frame(width: 46, height: 46)
+                .offset(thumbOffset)
+        }
+        .contentShape(Circle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    thumbOffset = SplatCameraController.radiallyClampedJoystickOffset(
+                        value.translation,
+                        radius: radius
+                    )
+                    engaged = true
+                    moveInput = CGVector(
+                        dx: thumbOffset.width / radius,
+                        dy: -thumbOffset.height / radius
+                    )
+                }
+                .onEnded { _ in
+                    thumbOffset = .zero
+                    engaged = false
+                    moveInput = .zero
+                }
+        )
+        .accessibilityElement()
+        .accessibilityLabel("Walk joystick")
+        .accessibilityHint("Drag to walk through the room. Four walk actions are also available directly.")
+        .accessibilityAction(named: "Walk forward") { onDirectionalStep(0, -1) }
+        .accessibilityAction(named: "Walk backward") { onDirectionalStep(0, 1) }
+        .accessibilityAction(named: "Strafe left") { onDirectionalStep(-1, 0) }
+        .accessibilityAction(named: "Strafe right") { onDirectionalStep(1, 0) }
     }
 }
