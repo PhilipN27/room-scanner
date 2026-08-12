@@ -11,11 +11,21 @@ struct HomeView: View {
     }
 
     @ObservedObject var environment: AppEnvironment
+    /// Observed directly: `AppEnvironment` holds the controller as a plain
+    /// `let` and never republishes its changes, so a view that only observes
+    /// the environment renders the room count once (empty, "0 rooms") and
+    /// goes stale — library refreshes, saves, and deletes never reach it.
+    @ObservedObject private var libraryController: RoomLibraryController
     @State private var path: [Route] = []
     @State private var showingCloudBackup = false
     @State private var capabilityDetailExpanded = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(environment: AppEnvironment) {
+        self.environment = environment
+        _libraryController = ObservedObject(wrappedValue: environment.libraryController)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -277,24 +287,19 @@ struct HomeView: View {
             : "Deterministic fixture review only — no live capture on this device."
     }
 
-    /// The user-facing room total. Bundled fixtures (the mock room, the
-    /// simulated-capture room) carry a "fixture" tag when saved and are
-    /// deliberately excluded: only rooms the user actually captured count.
     private var activeRoomCount: Int {
-        environment.libraryController.summaries
-            .filter { !$0.archived && !$0.tags.contains("fixture") }
-            .count
+        HomeRoomCount.userVisibleCount(of: libraryController.summaries)
     }
 
     private var mostRecentRoomSummary: RoomProjectSummary? {
-        environment.libraryController.summaries
+        libraryController.summaries
             .filter { !$0.archived }
             .max { $0.lastRevisedDate < $1.lastRevisedDate }
     }
 
     private var mostRecentRoomThumbnailData: Data? {
         guard let projectID = mostRecentRoomSummary?.projectID else { return nil }
-        return environment.libraryController.thumbnailData(for: projectID)
+        return libraryController.thumbnailData(for: projectID)
     }
 
     // MARK: - Footer
@@ -339,6 +344,18 @@ struct HomeView: View {
         case .fixtureMode:
             return AppPalette.amber
         }
+    }
+}
+
+/// Pure count rule for the Rooms surface, kept out of view state so it is
+/// unit-testable. Bundled fixtures (the mock room, the simulated-capture
+/// room) carry a "fixture" tag when saved and are deliberately excluded:
+/// only rooms the user actually captured count toward the total.
+enum HomeRoomCount {
+    static func userVisibleCount(of summaries: [RoomProjectSummary]) -> Int {
+        summaries
+            .filter { !$0.archived && !$0.tags.contains("fixture") }
+            .count
     }
 }
 

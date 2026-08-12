@@ -465,6 +465,44 @@ final class RoomScanStudioTests: XCTestCase {
         XCTAssertEqual(reloaded.manifest.revisionIDs, ["revision-001", "revision-002"])
     }
 
+    /// The Rooms surface counts only rooms the user actually captured:
+    /// fixture-tagged packages (mock review, simulated capture) and archived
+    /// rooms are excluded, real captures and manual saves count.
+    func testHomeRoomCountExcludesFixtureTaggedAndArchivedRooms() {
+        func summary(
+            id: String,
+            tags: [String],
+            archived: Bool = false
+        ) -> RoomProjectSummary {
+            RoomProjectSummary(
+                projectID: id,
+                customName: id,
+                captureDate: Date(timeIntervalSince1970: 1_704_067_200),
+                lastRevisedDate: Date(timeIntervalSince1970: 1_704_067_200),
+                manualLocation: "",
+                tags: tags,
+                thumbnailRelativePath: nil,
+                archived: archived,
+                headRevisionID: "revision-001"
+            )
+        }
+
+        XCTAssertEqual(HomeRoomCount.userVisibleCount(of: []), 0)
+
+        let mockRoom = summary(id: "mock", tags: ["fixture", "phase-0"])
+        let simulatedRoom = summary(id: "sim", tags: ["simulated", "fixture"])
+        let realCapture = summary(id: "real", tags: ["roomplan"])
+        let untaggedRoom = summary(id: "untagged", tags: [])
+        let archivedCapture = summary(id: "archived", tags: ["roomplan"], archived: true)
+
+        XCTAssertEqual(
+            HomeRoomCount.userVisibleCount(
+                of: [mockRoom, simulatedRoom, realCapture, untaggedRoom, archivedCapture]
+            ),
+            2
+        )
+    }
+
     func testPrivacyPolicyURLResolverAcceptsOnlyConfiguredCredentialFreeHTTPSURLs() throws {
         XCTAssertNil(PrivacyPolicyURLResolver.resolve(rawValue: nil))
         XCTAssertNil(PrivacyPolicyURLResolver.resolve(rawValue: ""))
