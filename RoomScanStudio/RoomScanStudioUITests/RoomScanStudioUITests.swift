@@ -78,7 +78,11 @@ final class RoomScanStudioUITests: XCTestCase {
         saveMockRoom(in: app)
 
         app.buttons["library.project.ui-project-001"].tap()
+        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
+        app.buttons["detail.infoToggle"].tap()
+        XCTAssertTrue(app.buttons["detail.editMetadata"].waitForExistence(timeout: 5))
         app.buttons["detail.editMetadata"].tap()
+        XCTAssertTrue(app.textFields["metadata.roomName"].waitForExistence(timeout: 5))
         app.textFields["metadata.roomName"].tap()
         app.textFields["metadata.roomName"].typeText(" Updated")
         app.buttons["metadata.save"].tap()
@@ -92,14 +96,29 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 5))
 
         app.buttons["library.project.ui-project-001"].tap()
+        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
+        app.buttons["detail.infoToggle"].tap()
+        XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 5))
         app.buttons["detail.archive"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["library.showArchived"].tap()
         XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 5))
         app.buttons["library.project.ui-project-001"].tap()
+        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
+        app.buttons["detail.infoToggle"].tap()
+        XCTAssertTrue(app.buttons["detail.unarchive"].waitForExistence(timeout: 5))
         app.buttons["detail.unarchive"].tap()
+        // Unarchiving dismisses the info panel; reopen it to confirm the
+        // room now offers Archive again, then close it to reach Delete on
+        // the base page.
+        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
+        app.buttons["detail.infoToggle"].tap()
         XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 5))
-        app.buttons["detail.delete"].tap()
+        app.buttons["detail.infoPanel.close"].tap()
+        let deleteButton = app.buttons["detail.delete"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
+        scrollIntoView(deleteButton, in: app.scrollViews["detail.scroll"])
+        deleteButton.tap()
         let deleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
         XCTAssertTrue(deleteConfirmation.waitForExistence(timeout: 2))
         deleteConfirmation.tap()
@@ -108,7 +127,10 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 2))
 
         app.buttons["library.project.ui-project-002"].tap()
-        app.buttons["detail.delete"].tap()
+        let duplicateDelete = app.buttons["detail.delete"]
+        XCTAssertTrue(duplicateDelete.waitForExistence(timeout: 5))
+        scrollIntoView(duplicateDelete, in: app.scrollViews["detail.scroll"])
+        duplicateDelete.tap()
         let duplicateDeleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
         XCTAssertTrue(duplicateDeleteConfirmation.waitForExistence(timeout: 2))
         duplicateDeleteConfirmation.tap()
@@ -466,9 +488,11 @@ final class RoomScanStudioUITests: XCTestCase {
         saveMockRoom(in: app)
         app.buttons["library.project.ui-project-001"].tap()
         XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
+        app.buttons["detail.infoToggle"].tap()
         let detailBackup = app.buttons["detail.backup"]
         XCTAssertTrue(detailBackup.waitForExistence(timeout: 5))
-        scrollIntoView(detailBackup, in: app)
+        scrollIntoView(detailBackup, in: app.scrollViews["detail.infoPanel.scroll"])
         XCTAssertTrue(detailBackup.isHittable)
         detailBackup.tap()
         XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))

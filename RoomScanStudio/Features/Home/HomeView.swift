@@ -21,7 +21,7 @@ struct HomeView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    topRail
+                    titleMasthead
                     if let bootstrapMessage = environment.bootstrapMessage {
                         bootstrapReadout(bootstrapMessage)
                     }
@@ -121,22 +121,46 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Top rail
+    // MARK: - Masthead
 
-    private var topRail: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
+    /// Centered app masthead: the app name set large in the serif editorial
+    /// voice, framed by hairline rules, with the capability chip beneath it.
+    private var titleMasthead: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 8) {
                 Text("ROOM / FIELD")
                     .font(AppTypography.measurement)
-                    .tracking(2)
+                    .tracking(3)
                     .foregroundStyle(AppPalette.blueprint)
-                Spacer(minLength: 8)
-                capabilityChip
+                Text("Room Scan Studio")
+                    .font(AppTypography.display)
+                    .foregroundStyle(AppPalette.ink)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("home.appTitle")
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(AppPalette.paperShadow)
+                        .frame(height: 1)
+                    Image(systemName: "viewfinder")
+                        .font(.caption)
+                        .foregroundStyle(AppPalette.blueprint)
+                    Rectangle()
+                        .fill(AppPalette.paperShadow)
+                        .frame(height: 1)
+                }
+                .frame(maxWidth: 260)
+                .accessibilityHidden(true)
             }
+            .frame(maxWidth: .infinity)
+
+            capabilityChip
+
             if capabilityDetailExpanded {
                 capabilityDetail
             }
         }
+        .padding(.top, 4)
     }
 
     /// Compact icon + one-word chip. Tapping expands the full capability
@@ -253,8 +277,13 @@ struct HomeView: View {
             : "Deterministic fixture review only — no live capture on this device."
     }
 
+    /// The user-facing room total. Bundled fixtures (the mock room, the
+    /// simulated-capture room) carry a "fixture" tag when saved and are
+    /// deliberately excluded: only rooms the user actually captured count.
     private var activeRoomCount: Int {
-        environment.libraryController.summaries.filter { !$0.archived }.count
+        environment.libraryController.summaries
+            .filter { !$0.archived && !$0.tags.contains("fixture") }
+            .count
     }
 
     private var mostRecentRoomSummary: RoomProjectSummary? {

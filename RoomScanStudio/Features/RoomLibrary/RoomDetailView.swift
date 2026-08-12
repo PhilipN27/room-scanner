@@ -31,7 +31,6 @@ struct RoomDetailView: View {
     let privacyPolicyURL: URL?
     var openColoredMeshOnAppear = false
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var package: RoomProjectPackage?
     @State private var errorMessage: String?
     @State private var showingMetadataEditor = false
@@ -55,12 +54,9 @@ struct RoomDetailView: View {
     @State private var heroMedia: RoomHeroMediaState = .loading
     @State private var heroLoadTask: Task<Void, Never>?
     @State private var heroLoadGeneration = 0
-    @State private var showingMetadataDetails = false
-    // Defaults open: several existing XCUITests (archive/unarchive/delete,
-    // export, backup) reach these actions immediately after opening the
-    // profile with no expand step. Spec calls for "collapsed by default";
-    // this is a deliberate, reported deviation to keep those flows working.
-    @State private var showingManage = true
+    @State private var showingInfoPanel = false
+    @State private var pendingInfoAction: RoomInfoPanelAction?
+    @State private var showingOpenRoomChoices = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -101,6 +97,22 @@ struct RoomDetailView: View {
         }
         .onChange(of: controller.summaries) {
             Task { await reload() }
+        }
+        .sheet(isPresented: $showingInfoPanel, onDismiss: {
+            runPendingInfoAction()
+        }) {
+            if let package {
+                RoomInfoPanel(
+                    metadata: package.metadata,
+                    effectiveLastRevisedDate: package.effectiveLastRevisedDate,
+                    hasCaptureBundle: hasCaptureBundle,
+                    hasSplat: splatURL != nil,
+                    onAction: { action in
+                        pendingInfoAction = action
+                        showingInfoPanel = false
+                    }
+                )
+            }
         }
         .sheet(isPresented: $showingMetadataEditor, onDismiss: {
             Task { await reload() }
@@ -282,23 +294,6 @@ struct RoomDetailView: View {
                 meshColoringStatus(state)
             }
 
-            secondaryActionRow()
-
-            MetadataDisclosure(
-                "Metadata",
-                isExpanded: $showingMetadataDetails,
-                headerAccessory: {
-                    Button("Edit metadata") {
-                        showingMetadataEditor = true
-                    }
-                    .buttonStyle(InstrumentButtonStyle(role: .quiet))
-                    .accessibilityIdentifier("detail.editMetadata")
-                },
-                content: {
-                    metadataFields(package.metadata, effectiveLastRevisedDate: package.effectiveLastRevisedDate)
-                }
-            )
-
             revisionTimelineSection(package)
 
             Label(
@@ -309,9 +304,35 @@ struct RoomDetailView: View {
             .font(AppTypography.measurement)
             .foregroundStyle(AppPalette.mutedInk)
 
-            MetadataDisclosure("Manage", isExpanded: $showingManage) {
-                manageContent(package)
+            technicalDetails(package)
+
+            if buildingBundleExport {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Preparing capture bundle...")
+                        .font(AppTypography.measurement)
+                        .foregroundStyle(AppPalette.mutedInk)
+                }
+                .accessibilityIdentifier("detail.exportBundleProgress")
             }
+
+            if let bundleExportErrorMessage {
+                Label(bundleExportErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.exportBundleError")
+            }
+
+            Rectangle()
+                .fill(AppPalette.paperShadow)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+
+            Button("Delete permanently", role: .destructive) {
+                showingDeleteConfirmation = true
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .destructive))
+            .accessibilityIdentifier("detail.delete")
         }
     }
 
@@ -359,7 +380,7 @@ struct RoomDetailView: View {
             }
             Spacer(minLength: 0)
             Button {
-                toggleMetadataDetails()
+                showingInfoPanel = true
             } label: {
                 Image(systemName: "info.circle")
                     .font(AppTypography.symbol)
@@ -367,16 +388,32 @@ struct RoomDetailView: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
             .accessibilityLabel("Room details")
-            .accessibilityHint(showingMetadataDetails ? "Collapses room metadata" : "Expands room metadata")
+            .accessibilityHint("Shows room metadata and management actions.")
             .accessibilityIdentifier("detail.infoToggle")
         }
     }
 
-    private func toggleMetadataDetails() {
-        if reduceMotion {
-            showingMetadataDetails.toggle()
-        } else {
-            withAnimation(.easeOut(duration: 0.18)) { showingMetadataDetails.toggle() }
+    /// Routes the info panel's chosen action after its sheet has fully
+    /// dismissed — presenting the follow-up sheet (metadata editor, export,
+    /// backup, file importer) while the panel is still up would fail.
+    private func runPendingInfoAction() {
+        guard let action = pendingInfoAction else { return }
+        pendingInfoAction = nil
+        switch action {
+        case .editMetadata:
+            showingMetadataEditor = true
+        case .archive:
+            Task { await changeArchiveState(archived: true) }
+        case .unarchive:
+            Task { await changeArchiveState(archived: false) }
+        case .exportHeadRevision:
+            showingExport = true
+        case .backUpProject:
+            showingCloudBackup = true
+        case .importSplat:
+            showingSplatImporter = true
+        case .exportCaptureBundle:
+            Task { await buildBundleExport() }
         }
     }
 
@@ -386,30 +423,47 @@ struct RoomDetailView: View {
     private func openRoomSection(_ package: RoomProjectPackage) -> some View {
         let hasSplat = splatURL != nil
         let target = preferredRoomOpenTarget(hasSplat: hasSplat, hasMesh: hasBundleMesh)
-        let alternatives = availableTargets(package, hasSplat: hasSplat).filter { $0 != target }
+        let targets = availableTargets(package, hasSplat: hasSplat)
 
         VStack(alignment: .leading, spacing: 10) {
-            Button("Open room") {
-                openRenderer(target, package: package)
-            }
-            .buttonStyle(InstrumentButtonStyle(role: .primary))
-            .accessibilityIdentifier(accessibilityIdentifier(for: target))
-
-            if !alternatives.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Other renderers")
-                        .font(AppTypography.measurement)
-                        .foregroundStyle(AppPalette.mutedInk)
-                    AdaptiveActionRow(alignment: .leading, spacing: 8) {
-                        ForEach(alternatives, id: \.self) { alternative in
-                            Button(rendererLabel(for: alternative)) {
-                                openRenderer(alternative, package: package)
-                            }
-                            .buttonStyle(InstrumentButtonStyle(role: .quiet))
-                            .accessibilityIdentifier(accessibilityIdentifier(for: alternative))
+            // Open room leads; Edit room, Rescan, and Duplicate sit to its
+            // right, wrapping to a second line only when width demands it.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    openRoomButton(target: target, targets: targets, package: package)
+                    editRoomButton
+                    rescanButton
+                    duplicateButton
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    openRoomButton(target: target, targets: targets, package: package)
+                        .frame(maxWidth: .infinity)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            editRoomButton
+                            rescanButton
+                            duplicateButton
+                        }
+                        VStack(alignment: .leading, spacing: 10) {
+                            editRoomButton.frame(maxWidth: .infinity, alignment: .leading)
+                            rescanButton.frame(maxWidth: .infinity, alignment: .leading)
+                            duplicateButton.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
+            }
+            .confirmationDialog(
+                "How do you want to view this room?",
+                isPresented: $showingOpenRoomChoices,
+                titleVisibility: .visible
+            ) {
+                ForEach(targets, id: \.self) { choice in
+                    Button(rendererLabel(for: choice)) {
+                        openRenderer(choice, package: package)
+                    }
+                    .accessibilityIdentifier(accessibilityIdentifier(for: choice))
+                }
+                Button("Cancel", role: .cancel) {}
             }
 
             if let splatImportErrorMessage {
@@ -419,6 +473,51 @@ struct RoomDetailView: View {
                     .accessibilityIdentifier("detail.splatImportError")
             }
         }
+    }
+
+    /// When more than one renderer exists, Open room asks which to use; with
+    /// a single renderer it opens directly and keeps that renderer's
+    /// accessibility identifier so existing automation still finds it.
+    private func openRoomButton(
+        target: RoomOpenTarget,
+        targets: [RoomOpenTarget],
+        package: RoomProjectPackage
+    ) -> some View {
+        Button("Open room") {
+            if targets.count > 1 {
+                showingOpenRoomChoices = true
+            } else {
+                openRenderer(target, package: package)
+            }
+        }
+        .buttonStyle(InstrumentButtonStyle(role: .primary))
+        .accessibilityIdentifier(
+            targets.count > 1 ? "detail.openRoom" : accessibilityIdentifier(for: target)
+        )
+    }
+
+    private var editRoomButton: some View {
+        Button("Edit room") {
+            showingRoomEditor = true
+        }
+        .buttonStyle(InstrumentButtonStyle(role: .secondary))
+        .accessibilityIdentifier("detail.editRoom")
+    }
+
+    private var rescanButton: some View {
+        Button("Rescan") {
+            showingRescan = true
+        }
+        .buttonStyle(InstrumentButtonStyle(role: .secondary))
+        .accessibilityIdentifier("detail.rescan")
+    }
+
+    private var duplicateButton: some View {
+        Button("Duplicate") {
+            Task { await duplicatePackage() }
+        }
+        .buttonStyle(InstrumentButtonStyle(role: .secondary))
+        .accessibilityIdentifier("detail.duplicate")
     }
 
     private func availableTargets(_ package: RoomProjectPackage, hasSplat: Bool) -> [RoomOpenTarget] {
@@ -458,49 +557,6 @@ struct RoomDetailView: View {
         showingMeshViewer = true
     }
 
-    // MARK: - Secondary row
-
-    private func secondaryActionRow() -> some View {
-        AdaptiveActionRow(alignment: .leading, spacing: 10) {
-            Button("Edit room") {
-                showingRoomEditor = true
-            }
-            .buttonStyle(InstrumentButtonStyle(role: .secondary))
-            .accessibilityIdentifier("detail.editRoom")
-
-            Button("Rescan") {
-                showingRescan = true
-            }
-            .buttonStyle(InstrumentButtonStyle(role: .secondary))
-            .accessibilityIdentifier("detail.rescan")
-
-            Button("Duplicate") {
-                Task { await duplicatePackage() }
-            }
-            .buttonStyle(InstrumentButtonStyle(role: .secondary))
-            .accessibilityIdentifier("detail.duplicate")
-        }
-    }
-
-    // MARK: - Metadata disclosure
-
-    private func metadataFields(_ metadata: RoomMetadata, effectiveLastRevisedDate: Date) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            DetailPair("Captured", value: metadata.captureDate.formatted(date: .abbreviated, time: .shortened))
-            DetailPair("Last revised", value: effectiveLastRevisedDate.formatted(date: .abbreviated, time: .shortened))
-            DetailPair("Manual location", value: metadata.manualLocation.isEmpty ? "Not recorded" : metadata.manualLocation)
-            DetailPair(
-                "GPS",
-                value: metadata.optionalGPS.map {
-                    "\($0.latitude), \($0.longitude) +/- \($0.horizontalAccuracyMeters)m"
-                } ?? "Not recorded"
-            )
-            DetailPair("Notes", value: metadata.notes.isEmpty ? "No notes" : metadata.notes)
-            DetailPair("Tags", value: metadata.tags.isEmpty ? "No tags" : metadata.tags.joined(separator: ", "))
-        }
-        .padding(.top, 12)
-    }
-
     // MARK: - Revision timeline
 
     private func revisionTimelineSection(_ package: RoomProjectPackage) -> some View {
@@ -535,87 +591,7 @@ struct RoomDetailView: View {
         }
     }
 
-    // MARK: - Manage disclosure
-
-    @ViewBuilder
-    private func manageContent(_ package: RoomProjectPackage) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            AdaptiveActionRow(alignment: .leading, spacing: 10) {
-                if package.metadata.archived {
-                    Button("Unarchive") {
-                        Task { await changeArchiveState(archived: false) }
-                    }
-                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                    .accessibilityIdentifier("detail.unarchive")
-                } else {
-                    Button("Archive") {
-                        Task { await changeArchiveState(archived: true) }
-                    }
-                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                    .accessibilityIdentifier("detail.archive")
-                }
-
-                Button("Export head revision") {
-                    showingExport = true
-                }
-                .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                .accessibilityIdentifier("detail.export")
-
-                Button("Back up full project") {
-                    showingCloudBackup = true
-                }
-                .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                .accessibilityIdentifier("detail.backup")
-
-                Button(splatURL == nil ? "Import photoreal splat" : "Replace photoreal splat") {
-                    showingSplatImporter = true
-                }
-                .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                .accessibilityIdentifier("detail.importSplat")
-            }
-
-            if hasCaptureBundle {
-                VStack(alignment: .leading, spacing: 8) {
-                    Button {
-                        Task { await buildBundleExport() }
-                    } label: {
-                        if buildingBundleExport {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("Preparing capture bundle...")
-                            }
-                        } else {
-                            Text("Export capture bundle")
-                        }
-                    }
-                    .buttonStyle(InstrumentButtonStyle(role: .secondary))
-                    .disabled(buildingBundleExport)
-                    .accessibilityIdentifier("detail.exportBundle")
-
-                    if let bundleExportErrorMessage {
-                        Label(bundleExportErrorMessage, systemImage: "exclamationmark.triangle")
-                            .font(AppTypography.measurement)
-                            .foregroundStyle(AppPalette.amber)
-                            .accessibilityIdentifier("detail.exportBundleError")
-                    }
-                }
-            }
-
-            technicalDetails(package)
-
-            Rectangle()
-                .fill(AppPalette.paperShadow)
-                .frame(height: 1)
-                .accessibilityHidden(true)
-
-            Button("Delete permanently", role: .destructive) {
-                showingDeleteConfirmation = true
-            }
-            .buttonStyle(InstrumentButtonStyle(role: .destructive))
-            .accessibilityIdentifier("detail.delete")
-        }
-        .padding(.top, 12)
-    }
+    // MARK: - Technical details
 
     @ViewBuilder
     private func technicalDetails(_ package: RoomProjectPackage) -> some View {
@@ -790,6 +766,130 @@ struct RoomDetailView: View {
         } catch {
             errorMessage = "The room package could not be deleted."
         }
+    }
+}
+
+/// Actions the info panel can request. The panel only reports the choice;
+/// `RoomDetailView` performs it after the panel sheet dismisses.
+enum RoomInfoPanelAction {
+    case editMetadata
+    case archive
+    case unarchive
+    case exportHeadRevision
+    case backUpProject
+    case importSplat
+    case exportCaptureBundle
+}
+
+/// The "i" panel: room metadata plus the management actions that used to
+/// occupy their own full-width sections on the profile page.
+private struct RoomInfoPanel: View {
+    let metadata: RoomMetadata
+    let effectiveLastRevisedDate: Date
+    let hasCaptureBundle: Bool
+    let hasSplat: Bool
+    let onAction: (RoomInfoPanelAction) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    metadataSection
+                    Rectangle()
+                        .fill(AppPalette.paperShadow)
+                        .frame(height: 1)
+                        .accessibilityHidden(true)
+                    manageSection
+                }
+                .padding(24)
+                .frame(maxWidth: 700, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .accessibilityIdentifier("detail.infoPanel.scroll")
+            .background(AppPalette.paper.ignoresSafeArea())
+            .navigationTitle("Room details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("detail.infoPanel.close")
+                }
+            }
+        }
+    }
+
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("METADATA")
+                    .font(AppTypography.measurement)
+                    .textCase(.uppercase)
+                    .kerning(1.2)
+                    .foregroundStyle(AppPalette.mutedInk)
+                Spacer(minLength: 0)
+                Button("Edit metadata") {
+                    onAction(.editMetadata)
+                }
+                .buttonStyle(InstrumentButtonStyle(role: .quiet))
+                .accessibilityIdentifier("detail.editMetadata")
+            }
+
+            DetailPair("Captured", value: metadata.captureDate.formatted(date: .abbreviated, time: .shortened))
+            DetailPair("Last revised", value: effectiveLastRevisedDate.formatted(date: .abbreviated, time: .shortened))
+            DetailPair("Manual location", value: metadata.manualLocation.isEmpty ? "Not recorded" : metadata.manualLocation)
+            DetailPair(
+                "GPS",
+                value: metadata.optionalGPS.map {
+                    "\($0.latitude), \($0.longitude) +/- \($0.horizontalAccuracyMeters)m"
+                } ?? "Not recorded"
+            )
+            DetailPair("Notes", value: metadata.notes.isEmpty ? "No notes" : metadata.notes)
+            DetailPair("Tags", value: metadata.tags.isEmpty ? "No tags" : metadata.tags.joined(separator: ", "))
+        }
+    }
+
+    private var manageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("MANAGE")
+                .font(AppTypography.measurement)
+                .textCase(.uppercase)
+                .kerning(1.2)
+                .foregroundStyle(AppPalette.mutedInk)
+
+            VStack(alignment: .leading, spacing: 10) {
+                if metadata.archived {
+                    manageButton("Unarchive", action: .unarchive, identifier: "detail.unarchive")
+                } else {
+                    manageButton("Archive", action: .archive, identifier: "detail.archive")
+                }
+                manageButton("Export head revision", action: .exportHeadRevision, identifier: "detail.export")
+                manageButton("Back up full project", action: .backUpProject, identifier: "detail.backup")
+                manageButton(
+                    hasSplat ? "Replace photoreal splat" : "Import photoreal splat",
+                    action: .importSplat,
+                    identifier: "detail.importSplat"
+                )
+                if hasCaptureBundle {
+                    manageButton("Export capture bundle", action: .exportCaptureBundle, identifier: "detail.exportBundle")
+                }
+            }
+        }
+    }
+
+    private func manageButton(
+        _ title: String,
+        action: RoomInfoPanelAction,
+        identifier: String
+    ) -> some View {
+        Button(title) {
+            onAction(action)
+        }
+        .buttonStyle(InstrumentButtonStyle(role: .secondary))
+        .accessibilityIdentifier(identifier)
     }
 }
 

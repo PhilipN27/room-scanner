@@ -59,6 +59,9 @@ enum AppPalette {
 }
 
 enum AppTypography {
+    /// Reserved for the app masthead: one size up from `editorial` so the
+    /// centered app name reads as a nameplate, not just another page title.
+    static let display = Font.system(size: 38, weight: .bold, design: .serif)
     static let editorial = Font.system(.largeTitle, design: .serif, weight: .semibold)
     static let section = Font.system(.headline, design: .serif, weight: .semibold)
     static let measurement = Font.system(.caption, design: .monospaced, weight: .medium)
