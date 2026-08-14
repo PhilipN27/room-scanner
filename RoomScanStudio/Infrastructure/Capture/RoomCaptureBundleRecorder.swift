@@ -17,7 +17,7 @@ import UIKit
 /// tightly packed rows (no stride padding), zlib-compressed; depth is
 /// float32 meters, confidence is uint8 ARConfidenceLevel raw values.
 /// The whole block is optional so version-1 bundles keep decoding.
-struct RoomCaptureBundleFrameDepth: Codable, Equatable {
+struct RoomCaptureBundleFrameDepth: Codable, Equatable, Sendable {
     var fileName: String
     var confidenceFileName: String?
     var width: Int
@@ -26,7 +26,7 @@ struct RoomCaptureBundleFrameDepth: Codable, Equatable {
     var pixelFormat: String
 }
 
-struct RoomCaptureBundleFrame: Codable, Equatable {
+struct RoomCaptureBundleFrame: Codable, Equatable, Sendable {
     var fileName: String
     /// ARKit session timestamp (seconds).
     var timestamp: Double
@@ -45,7 +45,7 @@ struct RoomCaptureBundleFrame: Codable, Equatable {
     var depth: RoomCaptureBundleFrameDepth?
 }
 
-struct RoomCaptureBundleManifest: Codable, Equatable {
+struct RoomCaptureBundleManifest: Codable, Equatable, Sendable {
     static let currentSchemaVersion = 3
 
     var schemaVersion: Int

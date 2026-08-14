@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "roomscan-hosted-api-resource-v1",
+  "contractKind": "hostedAPIResource",
+  "resourceType": "revision",
+  "resourceID": "hosted-revision-001",
+  "workspaceID": "workspace-001",
+  "projectID": "project-001",
+  "revisionID": "revision-001",
+  "version": 1,
+  "lifecycleState": "active",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "expectedHeadRevisionID": "revision-001",
+  "createdAt": "2026-08-12T12:00:00Z",
+  "updatedAt": "2026-08-12T12:01:00Z"
+}

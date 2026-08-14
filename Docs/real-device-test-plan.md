@@ -2,9 +2,12 @@
 
 ## Purpose
 
-These tests are pending physical evidence on one supported LiDAR iPhone and
-one supported LiDAR iPad. They are not satisfied by the deterministic fixture
-or Simulator driver.
+These tests are not satisfied by the deterministic fixture or Simulator
+driver. The owner has accepted Slice 1 orientation behavior on a supported
+LiDAR iPhone. The owner does not currently have an iPad and has waived physical
+iPad acceptance for the present development program; all physical-iPad behavior
+remains explicitly unverified. Device-dependent protocols continue to document
+the evidence required for claims that have not yet been observed.
 
 1. Verify `RoomCaptureSession.isSupported` gates live capture. Verify optional
    scene reconstruction only controls the raw-mesh omission status, never the
@@ -12,9 +15,10 @@ or Simulator driver.
 2. Confirm **Prepare capture** is the first camera-permission trigger and
    **Request GPS** is the first location-permission trigger. Denial must leave
    manual location usable and create no package until explicit Save.
-3. Inspect the black semantic canvas, one injected app-owned ARSession, Stop
-   privacy behavior, processing/retry/discard cleanup, reference-photo quality,
-   and the RoomPlan raw/processed/USDZ evidence byte closure.
+3. Inspect the black semantic canvas, the single `RoomCaptureView`-owned
+   ARSession/RoomCaptureSession chain, Stop privacy behavior,
+   processing/retry/discard cleanup, reference-photo quality, and the RoomPlan
+   raw/processed/USDZ evidence byte closure.
 4. Exercise viewer and editor on saved data at default and accessibility Dynamic
    Type sizes, including no-clip disclosure, save/cancel, and stale-head error.
 5. Test a CloudKit development container only after explicit opt-in and a
@@ -98,7 +102,135 @@ Status: **pending physical-device evidence**. The local availability build and
 injected scheduler tests prove fallback selection and wiring, not operating
 system runtime guarantees.
 
-## Pending named field test: Norwalk YMCA Computer Lab
+## Pending AI redesign platform device gates
+
+These gates apply in the later slices that implement the named behavior. The
+Slice 0 installed-SDK type-check proves API declarations only and cannot satisfy
+any item below.
+
+1. On a supported LiDAR iPhone, capture representative doors,
+   openings, windows, walls, floors, and objects. Compare the saved portable
+   categories/transforms/dimensions with the live RoomPlan result. Exercise the
+   app-owned entry suggestion from scan-start pose and doorway/opening geometry,
+   then prove the user can confirm or replace it with the manual reference-wall
+   fallback before AI export or publication.
+2. On that device, record known camera poses and targets in portrait and
+   landscape. Prove the chosen world/camera convention, intrinsics and image-
+   resolution interpretation, display transform, canonical camera projections,
+   supported mesh reconstruction, depth/confidence formats, poor-tracking
+   behavior, two-phase mesh-then-depth configuration, cancellation, and final
+   session cleanup. Retain source evidence and expected-vs-observed values.
+3. On real Face ID/passcode hardware, exercise success, user/system cancel,
+   authentication failure, biometric lockout, passcode fallback, no-passcode
+   state, background/foreground transitions, enrollment/domain-state change,
+   and MainActor UI handoff. Confirm no biometric material or domain-state value
+   is treated as server identity.
+4. On physical iPhone, share to Files, AirDrop, and one external app.
+   Exercise success, cancellation, activity error, interactive dismissal, and
+   fallback cleanup. Confirm the temporary export lease is released exactly
+   once and that an optional/nil activity type is not used as stronger evidence
+   than UIKit provides.
+
+Status: **Slice 1 local implementation complete; corrected physical-iPhone
+orientation behavior owner-accepted.** Later-slice Face ID and Share Sheet
+behavior is not implemented. Other unobserved device behavior remains open.
+Physical iPad is owner-waived and unverified. Simulator, unit-test, header, and
+successful-build results do not close physical gates.
+
+### Slice 1 spatial truth acceptance
+
+Run this protocol on one supported LiDAR iPhone. Record device model, OS/build,
+app build, room, lighting, device
+orientation, and any tracking interruption. Retain each room-project package,
+the app-owned suggestion inputs, screenshots, and the resulting local spatial
+extension.
+
+1. Begin each scan from a measured pose and capture rooms with (a) one clear
+   door, (b) multiple doors/openings, and (c) no clear entrance. Compare the
+   recorded first finite scan-start transform and saved portable RoomPlan
+   door/opening categories, dimensions, and transforms with the visible room.
+2. For (a) and (b), inspect the suggested entry position, inward direction,
+   evidence label, and confidence before confirmation. Prove it remains
+   `suggested` and fails orientation readiness until an explicit user confirm
+   or correction. Do not interpret the suggestion as a RoomPlan canonical
+   entry.
+3. For (c), select a reference wall and facing direction manually. Confirm the
+   saved orientation is `manual`, points inward in the normalized room, binds
+   the exact immutable revision and coordinate epoch, and passes readiness.
+4. For every case, reopen the project and compare entry, wall, corner, orbit,
+   perspective, and top-down camera records byte-for-byte with the first saved
+   extension. Before saving, compare the default top-down plan with the semantic
+   viewer: doors, windows, walls, and furniture must have the same handedness
+   and relative placement. Exercise Rotate 90° through all four positions,
+   Mirror/Unmirror, and Reset view. Confirm every feature, numbered marker,
+   selection, and inward arrow moves together; no feature changes identity;
+   Reset restores viewer parity. Save a rotated+mirrored presentation, reopen,
+   and confirm the display preference persists while entry position/direction,
+   axes, cameras, captured geometry, measurements, evidence, lineage, revision
+   bytes, and coordinate epoch remain unchanged. Confirm portrait/landscape
+   presentation does not mutate those authoritative values.
+5. Exercise cancel, capture failure, retry, discard, save failure, and a normal
+   save. Confirm the capture session/AR session and scan-start state are cleaned
+   up; no companion state is published before the room revision commits; a
+   companion-write failure does not rewrite or corrupt the committed package.
+6. Inspect walls, doors, windows, openings, floor, ceiling, fixed objects,
+   movable objects, and unknown objects in the saved viewer at default and
+   accessibility Dynamic Type in light and dark mode. Confirm symbol, label,
+   pattern/border, selection treatment, and accessibility description—not color
+   alone—distinguish every role.
+7. Group two independently captured rooms into one property, remove one, and
+   reopen. Confirm only stable project membership is stored and no transform,
+   alignment, doorway connectivity, shared coordinates, or property geometry
+   is inferred or displayed.
+
+The owner accepted corrected Slice 1 orientation behavior on the physical
+LiDAR iPhone. Physical-iPad acceptance is waived for the current development
+program and remains unverified, not passed or failed. Any future iPad run must
+retain its own evidence set and must not be inferred from Simulator evidence.
+
+## Slice 2 live and finish-time quality acceptance
+
+Run the following controlled protocol on one supported LiDAR iPhone. Record the
+device model and OS/build, app build, room and lighting, scan path, tracking
+interruptions, posed-keyframe/evidence counts, expected affected physical
+region, displayed overlay/revisit guidance, Finish summary, saved immutable
+quality report, and reopen/persistence result for each case.
+
+1. Capture a well-lit, sharp, acceptably covered room as the good control.
+   Confirm normal Finish and no fabricated warning or region.
+2. Introduce deliberate motion blur while viewing one known wall/region.
+   Confirm only visual-sharpness guidance identifies that qualitative region
+   and unaffected dimensions remain independent.
+3. Deliberately omit one wall/region. Confirm coverage guidance identifies the
+   missed area without claiming unsupported precision.
+4. Cause a controlled tracking interruption near a known region, then recover.
+   Confirm tracking guidance is separate from sharpness and coverage.
+5. Occlude or ambiguously present a feature. Confirm semantic-identification
+   guidance names the uncertain feature/region only when evidence supports it.
+6. Produce one scan with multiple independent defects. Confirm the structured
+   Finish review retains each dimension, exact reason codes, evidence, and
+   region bindings rather than collapsing them into one score.
+7. Choose Revisit and Cancel in separate weak attempts. Confirm neither path
+   publishes a partial quality report. Then complete a weak attempt, choose
+   explicit Save Anyway, reopen it, and compare the persisted report,
+   acknowledgement, project/revision/epoch bindings, reason codes, evidence,
+   and affected regions with the Finish review.
+
+Use good and bad controls for each case. Pass requires the displayed region to
+correspond to the deliberately affected physical location, unaffected
+dimensions to remain independent, the advisory gate never to reject or delete
+the scan, and the original revision bytes never to be rewritten. Simulator and
+installed-SDK evidence cannot close this protocol.
+
+The owner has waived the physical-iPad Slice 2 protocol. Continue the complete
+iPad Simulator scheme, but record physical-iPad behavior as unverified and make
+no physical-iPad claim.
+
+## Deferred end-of-program field test: Norwalk YMCA Computer Lab
+
+This named example is explicitly deferred until the entire app is complete. It
+is not a Slice 2 acceptance requirement and must not block the generic device
+protocols above.
 
 Run this separately on the chosen LiDAR iPhone and LiDAR iPad. Record device
 model, OS build, app build, room lighting, scan path, and any permission or

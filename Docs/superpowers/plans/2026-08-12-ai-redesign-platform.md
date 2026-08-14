@@ -50,20 +50,20 @@ snapshots. Do not repurpose private CloudKit backup as multi-tenant sync.
 hosted architecture using evidence rather than prematurely coding against a
 vendor.
 
-- [ ] Re-read the master plan, approved design, current architecture/privacy/
+- [x] Re-read the master plan, approved design, current architecture/privacy/
   export/backup docs, repository instructions, and relevant memory.
-- [ ] Inventory current local package, export, backup, capture, and viewer
+- [x] Inventory current local package, export, backup, capture, and viewer
   contracts; identify additive versus migration-requiring fields.
-- [ ] Verify installed Apple SDK APIs used by entry orientation, RoomPlan
+- [x] Verify installed Apple SDK APIs used by entry orientation, RoomPlan
   categories, AR camera poses, depth/confidence, Face ID, and Share Sheet.
-- [ ] Write an architecture decision record comparing at least two viable
+- [x] Write an architecture decision record comparing at least two viable
   U.S.-region service stacks against conditional writes, row/tenant isolation,
   signed object access, encryption, lifecycle deletion, auditability, web
   deployment, email/Apple identity, subscription billing, local development,
   and measured operating cost.
-- [ ] Define versioned schemas for local extensions, hosted API resources,
+- [x] Define versioned schemas for local extensions, hosted API resources,
   AI-ready/Complete packages, working-project sync, and portal snapshots.
-- [ ] Produce a threat model covering cross-tenant access, bearer links, PINs,
+- [x] Produce a threat model covering cross-tenant access, bearer links, PINs,
   session theft, upload validation, malicious archives, operator access,
   deletion, and publication kill switch.
 
@@ -78,17 +78,17 @@ guest launch/capture/export path.
 
 **Outcome:** Add the local data needed by all later packages and portals.
 
-- [ ] Add additive, versioned models for confirmed entry position/direction,
+- [x] Add additive, versioned models for confirmed entry position/direction,
   canonical axes/cameras, orientation source/confidence, property containers,
   redesign permissions, hybrid briefs, and Concept Set provenance.
-- [ ] Preserve backward decoding of every current package and fixture.
-- [ ] Add an orientation review step that suggests but requires confirmation
+- [x] Preserve backward decoding of every current package and fixture.
+- [x] Add an orientation review step that suggests but requires confirmation
   before AI export/publishing; support manual reference-wall fallback.
-- [ ] Generate deterministic entry, wall, corner, orbit, perspective, and
+- [x] Generate deterministic entry, wall, corner, orbit, perspective, and
   top-down camera definitions from normalized room coordinates.
-- [ ] Give walls, doors, windows, openings, floor, ceiling, fixed, movable, and
+- [x] Give walls, doors, windows, openings, floor, ceiling, fixed, movable, and
   unknown elements distinct semantic tokens, legends, and accessibility text.
-- [ ] Add lightweight property grouping without any cross-room transform or
+- [x] Add lightweight property grouping without any cross-room transform or
   doorway inference.
 
 **Oracle:** Old fixtures load unchanged; new schemas round-trip deterministically;
@@ -102,31 +102,51 @@ the focused negative test must fail, then pass after restoration.
 **Rollback:** New fields are optional for legacy viewing; disable new review/UI
 without altering stored legacy projects.
 
+**Slice 1 status (2026-08-13):** Local implementation and Simulator evidence
+are complete. The owner accepted corrected orientation behavior on the
+physical LiDAR iPhone. Physical-iPad acceptance is waived for the current
+program and remains explicitly unverified, not passed or failed.
+
+**Device-discovered correction (2026-08-13):** The top-down review now matches
+the semantic viewer by default and supports presentation-only Rotate 90°,
+Mirror, and Reset with local persistence. Complete iPhone and iPad Simulator
+schemes pass 153/153. The owner accepted the corrected physical-iPhone
+behavior; physical iPad remains waived and unverified.
+
 ## Slice 2: Live and finish-time quality guidance
 
 **Outcome:** Produce honest location-specific scan coaching and a persistent
 four-dimension quality report.
 
-- [ ] Define bounded quality records for sharpness, coverage, tracking, and
+- [x] Define bounded quality records for sharpness, coverage, tracking, and
   semantic identification, each with evidence, affected regions, confidence,
   and stable reason codes.
-- [ ] Reuse existing posed keyframes and frame sharpness analysis to aggregate
+- [x] Reuse existing posed keyframes and frame sharpness analysis to aggregate
   visual quality into room-space regions after bounded per-frame work.
-- [ ] Add lightweight live coaching without decoding or scoring full images on
+- [x] Add lightweight live coaching without decoding or scoring full images on
   the capture hot path.
-- [ ] Add coverage overlays and specific revisit guidance.
-- [ ] Add a recommended Finish gate, structured review summary, and explicit
+- [x] Add coverage overlays and specific revisit guidance.
+- [x] Add a recommended Finish gate, structured review summary, and explicit
   Save Anyway action that records weak regions in the immutable revision.
-- [ ] Export the same report into AI packages and published snapshots.
+- [x] Define one unchanged provider-neutral quality-report carrier for future
+  AI packages and published snapshots. Actual package construction and portal
+  publication remain owned by Slices 3 and 6 respectively.
 
 **Oracle:** Deterministic sharp, blurred, uncovered, low-confidence, and
 tracking-limited fixtures exercise each independent warning; controls prove
 the detector reaches the unsafe paths; Save Anyway persists exact warning
-provenance; supported LiDAR iPhone/iPad sessions deliberately capture good and
-bad controls and visually confirm region mapping.
+provenance; a supported LiDAR iPhone session deliberately captures good and
+bad controls and visually confirms region mapping. The complete iPad Simulator
+scheme remains required; physical-iPad behavior is waived and unverified.
 
 **Rollback:** Quality coaching is advisory and feature-gated; capture/save
 continues with the existing general guidance if localized analysis fails.
+
+**Slice 2 status (2026-08-13):** Implementation, deterministic fixtures,
+mutation controls, and focused iPhone/iPad Simulator UI evidence are complete.
+The controlled physical LiDAR iPhone protocol remains the external acceptance
+gate. Physical iPad is waived and unverified. The Norwalk YMCA example remains
+deferred until the whole application is complete.
 
 ## Slice 3: AI Room Package, disclosure review, and Concept Sets
 

@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "roomscan-ai-room-package-v1",
+  "contractKind": "aiRoomPackage",
+  "packageID": "ai-package-ready-001",
+  "profile": "aiReady",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "artifactPlanSHA256": "6d3fe28812861ca9a9d7518b0a9e5300d22ba9861cdb300842013de7e340545e",
+  "selectionSHA256": "38731f6be89c586800628967f91ecc692613687e7d6aecce11b9932a4a4bf83d",
+  "disclosureReview": {
+    "reviewID": "disclosure-ai-ready",
+    "reviewedAt": "2026-08-12T12:00:00Z",
+    "decision": "approved",
+    "sourceRevisionID": "revision-001",
+    "sourceRevisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "reviewedSelectionSHA256": "38731f6be89c586800628967f91ecc692613687e7d6aecce11b9932a4a4bf83d",
+    "preciseGPSExcluded": true,
+    "rawEvidenceDisclosureAccepted": false,
+    "reviewedArtifactPlanSHA256": "6d3fe28812861ca9a9d7518b0a9e5300d22ba9861cdb300842013de7e340545e"
+  },
+  "artifacts": [
+    {
+      "artifactID": "artifact-normalized-semantics",
+      "artifactClass": "normalizedSemantics",
+      "disposition": "included",
+      "relativePath": "documents/semantic-room.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "byteCount": 1024,
+      "mediaType": "application/json"
+    },
+    {
+      "artifactID": "artifact-orientation",
+      "artifactClass": "orientation",
+      "disposition": "included",
+      "relativePath": "documents/orientation.json",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "byteCount": 512,
+      "mediaType": "application/json"
+    },
+    {
+      "artifactID": "artifact-floor-plan",
+      "artifactClass": "floorPlan",
+      "disposition": "included",
+      "relativePath": "documents/floor-plan.svg",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "byteCount": 2048,
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "artifactID": "artifact-canonical-view",
+      "artifactClass": "canonicalView",
+      "disposition": "included",
+      "relativePath": "images/canonical-entry.jpg",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "byteCount": 4096,
+      "mediaType": "image/jpeg"
+    },
+    {
+      "artifactID": "artifact-reference-image",
+      "artifactClass": "selectedReferenceImage",
+      "disposition": "included",
+      "relativePath": "images/reference-001.jpg",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "byteCount": 4096,
+      "mediaType": "image/jpeg"
+    },
+    {
+      "artifactID": "artifact-materials",
+      "artifactClass": "materials",
+      "disposition": "unavailable",
+      "reasonCode": "not-captured"
+    },
+    {
+      "artifactID": "artifact-quality-report",
+      "artifactClass": "qualityReport",
+      "disposition": "included",
+      "relativePath": "documents/quality.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "byteCount": 768,
+      "mediaType": "application/json"
+    },
+    {
+      "artifactID": "artifact-room-brief",
+      "artifactClass": "roomBrief",
+      "disposition": "included",
+      "relativePath": "documents/room-brief.txt",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "byteCount": 384,
+      "mediaType": "text/plain"
+    },
+    {
+      "artifactID": "artifact-redesign-intent",
+      "artifactClass": "redesignIntent",
+      "disposition": "included",
+      "relativePath": "documents/redesign-intent.json",
+      "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "byteCount": 512,
+      "mediaType": "application/json"
+    },
+    {
+      "artifactID": "artifact-provider-instructions",
+      "artifactClass": "providerInstructions",
+      "disposition": "included",
+      "relativePath": "documents/provider-instructions.txt",
+      "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "byteCount": 256,
+      "mediaType": "text/plain"
+    },
+    {
+      "artifactID": "artifact-mesh",
+      "artifactClass": "mesh",
+      "disposition": "included",
+      "relativePath": "geometry/room.usdz",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "byteCount": 8192,
+      "mediaType": "model/vnd.usdz+zip"
+    },
+    {
+      "artifactID": "artifact-texture",
+      "artifactClass": "texture",
+      "disposition": "included",
+      "relativePath": "textures/room.png",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "byteCount": 4096,
+      "mediaType": "image/png"
+    },
+    {
+      "artifactID": "artifact-concept-attachment",
+      "artifactClass": "conceptAttachment",
+      "disposition": "unavailable",
+      "reasonCode": "no-approved-concept"
+    },
+    {
+      "artifactID": "artifact-raw-rgb",
+      "artifactClass": "rawRGB",
+      "disposition": "excluded",
+      "reasonCode": "profile-default-exclusion"
+    },
+    {
+      "artifactID": "artifact-raw-depth",
+      "artifactClass": "rawDepth",
+      "disposition": "excluded",
+      "reasonCode": "profile-default-exclusion"
+    },
+    {
+      "artifactID": "artifact-raw-confidence",
+      "artifactClass": "rawConfidence",
+      "disposition": "excluded",
+      "reasonCode": "profile-default-exclusion"
+    },
+    {
+      "artifactID": "artifact-diagnostics",
+      "artifactClass": "diagnostics",
+      "disposition": "excluded",
+      "reasonCode": "profile-default-exclusion"
+    }
+  ]
+}

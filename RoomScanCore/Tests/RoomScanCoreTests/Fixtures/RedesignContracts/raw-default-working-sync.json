@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "roomscan-working-project-sync-v1",
+  "contractKind": "workingProjectSync",
+  "operation": "appendRevision",
+  "workspaceID": "workspace-001",
+  "projectID": "project-001",
+  "expectedHostedHeadRevisionID": "revision-001",
+  "proposedRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-002",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "assetPolicy": "workingSet",
+  "conflictPolicy": "preserveBranchesRequireUserResolution",
+  "assets": [
+    {
+      "assetID": "raw-depth-001",
+      "assetClass": "rawDepth",
+      "disposition": "included",
+      "relativePath": "evidence/raw/depth-001.bin",
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "byteCount": 4096,
+      "mediaType": "application/octet-stream"
+    }
+  ]
+}

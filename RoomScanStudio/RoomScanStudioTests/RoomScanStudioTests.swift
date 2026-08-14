@@ -74,6 +74,16 @@ final class RoomScanStudioTests: XCTestCase {
         XCTAssertEqual(prepared.commit.assets.filter { $0.scope == .project }.count, 1)
         XCTAssertFalse(prepared.commit.assets.isEmpty)
         XCTAssertFalse(prepared.commit.draft.revision.semanticSnapshot.accuracyDisclaimer.isEmpty)
+        XCTAssertEqual(prepared.orientationSuggestion?.source, .suggested)
+        XCTAssertEqual(prepared.orientationSuggestion?.evidence.semanticRole, .door)
+        XCTAssertEqual(
+            Set(
+                (prepared.commit.draft.revision.semanticSnapshot.structuralElements
+                    + prepared.commit.draft.revision.semanticSnapshot.objectElements)
+                    .map { RoomSemanticPresentation.role(for: $0) }
+            ),
+            Set(RoomSemanticRole.allCases)
+        )
 
         let root = temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -100,6 +110,138 @@ final class RoomScanStudioTests: XCTestCase {
         XCTAssertEqual(saved?.projectID, "simulated-project-001")
         let summaries = try await store.listSummaries(includeArchived: true)
         XCTAssertEqual(summaries.count, 1)
+    }
+
+    func testSemanticVisualStylesRemainDistinctBeyondColorLabels() {
+        let tokens = RoomSemanticRole.allCases.map(RoomSemanticPresentation.token(for:))
+        XCTAssertEqual(Set(tokens.map(\.symbolName)).count, RoomSemanticRole.allCases.count)
+        XCTAssertEqual(Set(tokens.map(\.materialPattern)).count, RoomSemanticRole.allCases.count)
+
+        let colorDescriptions = RoomSemanticRole.allCases.map {
+            RoomSemanticVisualStyle.color(for: $0).description
+        }
+        XCTAssertEqual(Set(colorDescriptions).count, RoomSemanticRole.allCases.count)
+    }
+
+    func testCoplanarEmbeddedFeaturesRenderOutsideTheirParentWallDepth() {
+        let planar = RoomDimensions(width: 1, height: 2, depth: 0)
+        let wall = RoomSemanticVisualStyle.displaySize(for: planar, role: .wall)
+
+        for role in [RoomSemanticRole.door, .window, .opening] {
+            let embeddedFeature = RoomSemanticVisualStyle.displaySize(for: planar, role: role)
+            XCTAssertGreaterThan(
+                embeddedFeature.z,
+                wall.z,
+                "\(role.rawValue) must project beyond both faces of a coplanar parent wall to avoid angle-dependent z-fighting."
+            )
+            XCTAssertEqual(
+                RoomSemanticVisualStyle.color(for: role).cgColor.alpha,
+                1,
+                accuracy: 0.001,
+                "\(role.rawValue) must use the opaque depth pass instead of angle-dependent transparent-entity sorting."
+            )
+        }
+    }
+
+    func testOrientationReviewPresentationNamesTwoDoorsAndSupportsDeterministicCorrection() throws {
+        let snapshot = RoomSemanticSnapshot(
+            projectID: "project-two-doors",
+            revisionID: "revision-two-doors",
+            units: "meters",
+            accuracyDisclaimer: "Fixture geometry only.",
+            structuralElements: [
+                semanticElement(id: "wall-back", kind: "wall", x: 0, y: 1.2, z: 2, width: 4, height: 2.4),
+                semanticElement(id: "wall-front", kind: "wall", x: 0, y: 1.2, z: -2, width: 4, height: 2.4),
+                semanticElement(id: "closet-door", kind: "door", x: -0.9, y: 1, z: -2, width: 0.7, height: 2),
+                semanticElement(id: "entrance-door", kind: "door", x: 0.4, y: 1, z: -2, width: 0.8, height: 2),
+                semanticElement(id: "floor", kind: "floor", x: 0, y: 0, z: 0, width: 4, height: 0.01, depth: 4),
+            ],
+            objectElements: []
+        )
+
+        let presentation = try RoomOrientationReviewPresentation(snapshot: snapshot)
+
+        XCTAssertEqual(presentation.entryOptions.map(\.title), ["Door 1 of 2", "Door 2 of 2"])
+        XCTAssertEqual(presentation.entryOptions.map(\.featureID), ["closet-door", "entrance-door"])
+        XCTAssertFalse(presentation.title(forEntryFeatureID: "entrance-door").contains("entrance-door"))
+        XCTAssertEqual(presentation.title(forEntryFeatureID: "entrance-door"), "Door 2 of 2")
+
+        let corrected = try presentation.entryReference(featureID: "entrance-door")
+        XCTAssertEqual(corrected.positionMeters, .init(x: 0.4, y: -0.005, z: -2))
+        XCTAssertGreaterThan(corrected.inwardDirection.z, 0)
+        XCTAssertEqual(hypot(corrected.inwardDirection.x, corrected.inwardDirection.z), 1, accuracy: 0.000_001)
+        XCTAssertThrowsError(try presentation.entryReference(featureID: "window-not-an-entry"))
+    }
+
+    func testOrientationPlanDisplayMatchesViewerAndTransformsEveryFeatureTogether() throws {
+        let snapshot = RoomSemanticSnapshot(
+            projectID: "project-plan-transform",
+            revisionID: "revision-plan-transform",
+            units: "meters",
+            accuracyDisclaimer: "Fixture geometry only.",
+            structuralElements: [
+                semanticElement(id: "door", kind: "door", x: 1, y: 1, z: 2, width: 0.8, height: 2),
+                semanticElement(id: "wall", kind: "wall", x: 0, y: 1, z: 0, width: 4, height: 2),
+                semanticElement(id: "floor", kind: "floor", x: 0, y: 0, z: 0, width: 4, height: 0.01, depth: 6),
+            ],
+            objectElements: [
+                semanticElement(id: "bed", kind: "bed", x: -1, y: 0.5, z: -2, width: 1.5, height: 1, depth: 2),
+            ]
+        )
+        let presentation = try RoomOrientationReviewPresentation(snapshot: snapshot)
+        let viewerAligned = RoomOrientationPlanDisplayTransform(
+            projection: presentation.projection,
+            presentation: .viewerAligned
+        )
+        let door = viewerAligned.point(.init(x: 1, y: 2))
+        let bed = viewerAligned.point(.init(x: -1, y: -2))
+
+        XCTAssertGreaterThan(door.y, bed.y, "+Z must render downward to match the semantic viewer.")
+        XCTAssertGreaterThan(door.x, bed.x)
+
+        let rotated = RoomOrientationPlanDisplayTransform(
+            projection: presentation.projection,
+            presentation: .init(quarterTurnsClockwise: 1, isMirroredHorizontally: false)
+        )
+        let rotatedDoor = rotated.point(.init(x: 1, y: 2))
+        let rotatedBed = rotated.point(.init(x: -1, y: -2))
+        XCTAssertLessThan(rotatedDoor.x, rotatedBed.x)
+        XCTAssertGreaterThan(rotatedDoor.y, rotatedBed.y)
+
+        let mirrored = RoomOrientationPlanDisplayTransform(
+            projection: presentation.projection,
+            presentation: .init(quarterTurnsClockwise: 0, isMirroredHorizontally: true)
+        )
+        let mirroredDoor = mirrored.point(.init(x: 1, y: 2))
+        let mirroredBed = mirrored.point(.init(x: -1, y: -2))
+        XCTAssertLessThan(mirroredDoor.x, mirroredBed.x)
+        XCTAssertEqual(mirroredDoor.y, door.y, accuracy: 0.000_001)
+        XCTAssertEqual(mirroredBed.y, bed.y, accuracy: 0.000_001)
+
+        XCTAssertEqual(
+            viewerAligned.worldDirection(fromDisplayed: .init(x: 0, y: -1)),
+            .init(x: 0, y: 0, z: -1)
+        )
+        XCTAssertEqual(
+            rotated.worldDirection(fromDisplayed: .init(x: 0, y: -1)),
+            .init(x: -1, y: 0, z: 0)
+        )
+
+        XCTAssertEqual(presentation.entryOptions.map(\.featureID), ["door"])
+    }
+
+    func testRedesignRootsAreSeparateFromAuthoritativeProjects() {
+        let projects = temporaryRoot().appendingPathComponent("Projects", isDirectory: true)
+        let roots = RoomRedesignLocalRootResolver.resolve(
+            arguments: [],
+            projectRootURL: projects,
+            fileManager: .default
+        )
+        XCTAssertNotEqual(roots.redesign, projects)
+        XCTAssertNotEqual(roots.properties, projects)
+        XCTAssertNotEqual(roots.redesign, roots.properties)
+        XCTAssertEqual(roots.redesign.deletingLastPathComponent(), projects.deletingLastPathComponent())
+        XCTAssertEqual(roots.properties.deletingLastPathComponent(), projects.deletingLastPathComponent())
     }
 
     /// Round-2 design finding: the fake rectangle-pattern thumbnail must die
@@ -539,6 +681,31 @@ final class RoomScanStudioTests: XCTestCase {
             manifest: fixture.manifest,
             metadata: fixture.draft.metadata,
             revisions: [revision]
+        )
+    }
+
+    private func semanticElement(
+        id: String,
+        kind: String,
+        x: Double,
+        y: Double,
+        z: Double,
+        width: Double,
+        height: Double,
+        depth: Double = 0
+    ) -> RoomSemanticElement {
+        RoomSemanticElement(
+            id: id,
+            kind: kind,
+            label: kind.capitalized,
+            dimensionsMeters: .init(width: width, height: height, depth: depth),
+            transform: RoomTransform4x4(columnMajorValues: [
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                x, y, z, 1,
+            ]),
+            mobility: kind == "floor" || kind == "wall" || kind == "door" ? .structural : .unknown
         )
     }
 

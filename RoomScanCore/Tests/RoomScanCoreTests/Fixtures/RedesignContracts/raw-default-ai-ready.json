@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "roomscan-ai-room-package-v1",
+  "contractKind": "aiRoomPackage",
+  "packageID": "ai-package-004",
+  "profile": "aiReady",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "disclosureReview": {
+    "reviewID": "disclosure-004",
+    "reviewedAt": "2026-08-12T12:00:00Z",
+    "decision": "approved",
+    "preciseGPSExcluded": true,
+    "rawEvidenceDisclosureAccepted": true
+  },
+  "artifacts": [
+    {
+      "artifactID": "raw-rgb-001",
+      "artifactClass": "rawRGB",
+      "disposition": "included",
+      "relativePath": "evidence/raw/rgb-001.jpg",
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "byteCount": 4096,
+      "mediaType": "image/jpeg"
+    }
+  ]
+}

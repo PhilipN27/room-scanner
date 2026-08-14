@@ -12,10 +12,19 @@ final class RoomLibraryController: ObservableObject {
     @Published private(set) var indexErrorMessage: String?
 
     private let store: LocalRoomProjectStore
+    private let redesignStore: LocalRoomRedesignStore?
+    private let propertyStore: LocalRoomPropertyStore?
     private let indexContext: ModelContext?
 
-    init(store: LocalRoomProjectStore, modelContainer: ModelContainer?) {
+    init(
+        store: LocalRoomProjectStore,
+        modelContainer: ModelContainer?,
+        redesignStore: LocalRoomRedesignStore? = nil,
+        propertyStore: LocalRoomPropertyStore? = nil
+    ) {
         self.store = store
+        self.redesignStore = redesignStore
+        self.propertyStore = propertyStore
         indexContext = modelContainer.map(ModelContext.init)
     }
 
@@ -55,6 +64,93 @@ final class RoomLibraryController: ObservableObject {
 
     func loadPackage(projectID: String) async throws -> RoomProjectPackage {
         try await store.load(projectID: projectID)
+    }
+
+    func redesignSourceBinding(
+        projectID: String,
+        revisionID: String
+    ) async throws -> RoomRedesignSourceRevision {
+        try await store.redesignSourceRevisionBinding(
+            projectID: projectID,
+            revisionID: revisionID
+        )
+    }
+
+    func redesignState(
+        sourceRevision: RoomRedesignSourceRevision
+    ) async throws -> RoomLocalRedesignExtensionV2? {
+        guard let redesignStore else { return nil }
+        return try await redesignStore.load(sourceRevision: sourceRevision)
+    }
+
+    func saveRedesignState(
+        _ document: RoomLocalRedesignExtensionV2,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) async throws {
+        guard let redesignStore else {
+            throw RoomProjectStoreError.storageFailure("Local redesign companion storage is unavailable.")
+        }
+        try await redesignStore.save(document, expectedSourceRevision: expectedSourceRevision)
+    }
+
+    /// A capture suggestion is additive companion state. It is allowed to be
+    /// saved before review, but the provider-neutral eligibility guard will
+    /// reject it until the user explicitly confirms or replaces it.
+    func saveOrientationSuggestion(
+        _ suggestion: RoomOrientationSuggestion,
+        projectID: String,
+        revisionID: String,
+        snapshot: RoomSemanticSnapshot
+    ) async throws {
+        guard let redesignStore else { return }
+        let binding = try await redesignSourceBinding(projectID: projectID, revisionID: revisionID)
+        guard suggestion.coordinateSpaceEpochID == binding.coordinateSpaceEpochID else {
+            throw RoomProjectStoreError.invalidPackage("Capture orientation suggestion uses another coordinate-space epoch.")
+        }
+        let bounds = try RoomSpatialNormalization.bounds(of: snapshot)
+        let orientation = try RoomCanonicalCameraGenerator.makeOrientation(
+            sourceRevision: binding,
+            input: .init(
+                source: .suggested,
+                confidence: suggestion.confidence,
+                entryPositionMeters: suggestion.entryPositionMeters,
+                inwardDirection: suggestion.inwardDirection,
+                roomBounds: bounds,
+                entryFeatureID: suggestion.evidence.featureID,
+                referenceWallFeatureID: nil,
+                suggestionEvidence: suggestion.evidence
+            )
+        )
+        let document = RoomLocalRedesignExtensionV2(
+            sourceRevision: binding,
+            orientation: orientation,
+            redesignIntent: nil,
+            propertyMembership: nil,
+            conceptMetadata: []
+        )
+        try await redesignStore.save(document, expectedSourceRevision: binding)
+    }
+
+    func properties() async throws -> [RoomPropertyContainerV1] {
+        guard let propertyStore else { return [] }
+        return try await propertyStore.list()
+    }
+
+    func property(containing projectID: String) async throws -> RoomPropertyContainerV1? {
+        guard let propertyStore else { return nil }
+        return try await propertyStore.property(containing: projectID)
+    }
+
+    func saveProperty(_ property: RoomPropertyContainerV1) async throws {
+        guard let propertyStore else {
+            throw RoomProjectStoreError.storageFailure("Local property storage is unavailable.")
+        }
+        try await propertyStore.save(property)
+    }
+
+    func removeProperty(propertyID: String) async throws {
+        guard let propertyStore else { return }
+        try await propertyStore.remove(propertyID: propertyID)
     }
 
     func saveMockDraft(

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "roomscan-local-redesign-extension-v1",
+  "contractKind": "localRedesignExtension",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "orientation": {
+    "source": "confirmed",
+    "confidence": 0.92,
+    "coordinateSpaceEpochID": "epoch-002",
+    "entryPositionMeters": { "x": 0.5, "y": 0, "z": -1.5 },
+    "inwardDirection": { "x": 0, "y": 0, "z": 1 },
+    "canonicalAxes": {
+      "right": { "x": 1, "y": 0, "z": 0 },
+      "up": { "x": 0, "y": 1, "z": 0 },
+      "forward": { "x": 0, "y": 0, "z": 1 }
+    },
+    "canonicalCameras": [
+      {
+        "cameraID": "camera-entry-001",
+        "role": "entry",
+        "positionMeters": { "x": 0.5, "y": 1.6, "z": -1.5 },
+        "targetMeters": { "x": 0.5, "y": 1.4, "z": 1.5 },
+        "fieldOfViewDegrees": 65
+      }
+    ]
+  },
+  "redesignIntent": {
+    "request": "This orientation incorrectly belongs to a different coordinate epoch.",
+    "scope": "stage",
+    "permissions": []
+  },
+  "propertyMembership": {
+    "propertyID": "property-001",
+    "roomProjectIDs": ["project-001"]
+  },
+  "conceptMetadata": []
+}

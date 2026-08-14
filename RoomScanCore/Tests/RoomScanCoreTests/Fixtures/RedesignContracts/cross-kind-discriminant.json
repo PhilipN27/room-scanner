@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "roomscan-ai-room-package-v1",
+  "contractKind": "portalSnapshot",
+  "snapshotID": "snapshot-001",
+  "workspaceID": "workspace-001",
+  "projectID": "project-001",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "publishedAt": "2026-08-12T12:00:00Z",
+  "allowlistedSections": ["semanticLayout"],
+  "assets": [],
+  "branding": { "displayName": "Example Studio" }
+}

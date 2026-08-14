@@ -8,7 +8,7 @@
 
 ## macOS prerequisites
 
-Use a Mac with a current Xcode installation that includes an iOS 17-or-later
+Use a Mac with a current Xcode installation that includes an iOS 18-or-later
 SDK. This repository intentionally has no committed development team,
 provisioning profile, CloudKit entitlement, or container identifier. Resolve the
 local package and use the shared scheme:

@@ -12,6 +12,7 @@ struct RoomViewerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var camera = RoomViewerCamera.defaultState
@@ -99,12 +100,14 @@ struct RoomViewerView: View {
             Text(roomName)
                 .font(AppTypography.measurement)
                 .foregroundStyle(AppPalette.mutedOnDark)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("viewer.title")
 
             Text("SEMANTIC BOXES / NOT SURVEY GEOMETRY")
                 .font(AppTypography.measurement)
                 .tracking(1.0)
                 .foregroundStyle(AppPalette.mutedOnDark)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("viewer.disclaimer")
 
             if camera.isNoClip {
@@ -118,6 +121,10 @@ struct RoomViewerView: View {
                 .accessibilityIdentifier("viewer.noClipDisclosure")
             }
         }
+        // Canvas metadata remains legible at accessibility sizes without
+        // consuming the entire viewport. Primary controls continue to follow
+        // the user's uncapped Dynamic Type setting in `ViewerChrome`.
+        .dynamicTypeSize(.xSmall ... .accessibility1)
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
@@ -181,6 +188,7 @@ struct RoomViewerView: View {
             scenePlan: scenePlan,
             camera: camera,
             visibility: visibility,
+            selectedElementID: selectedElementID,
             onCameraAction: apply
         )
         .accessibilityElement(children: .ignore)
@@ -227,6 +235,7 @@ struct RoomViewerView: View {
     @ViewBuilder
     private var bottomChrome: some View {
         VStack(alignment: .leading, spacing: 12) {
+            semanticLegend
             if !elements.isEmpty {
                 selectionDrawer
             }
@@ -250,6 +259,7 @@ struct RoomViewerView: View {
                 endPoint: .bottom
             )
         )
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// A plain horizontal row, not `AdaptiveActionRow` — that component
@@ -308,19 +318,29 @@ struct RoomViewerView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(elements) { element in
-                        Button(element.label) {
+                        let token = RoomSemanticPresentation.token(for: element)
+                        Button {
                             selectedElementID = element.id
+                        } label: {
+                            Label(element.label, systemImage: token.symbolName)
                         }
                         .buttonStyle(.bordered)
                         .tint(selectedElementID == element.id ? AppPalette.blueprintOnDark : AppPalette.mutedOnDark)
+                        .accessibilityLabel(token.accessibilityDescription(for: element))
+                        .accessibilityAddTraits(selectedElementID == element.id ? .isSelected : [])
                         .accessibilityIdentifier("viewer.selection.\(element.id)")
                     }
                 }
             }
 
             if let selected = elements.first(where: { $0.id == selectedElementID }) {
+                let token = RoomSemanticPresentation.token(for: selected)
                 HStack(alignment: .top, spacing: 8) {
-                    Text("\(selected.kind.uppercased()) / \(selected.dimensionsMeters.width, specifier: "%.2f") x \(selected.dimensionsMeters.height, specifier: "%.2f") x \(selected.dimensionsMeters.depth, specifier: "%.2f") m")
+                    Label {
+                        Text("\(token.displayName.uppercased()) / \(selected.dimensionsMeters.width, specifier: "%.2f") x \(selected.dimensionsMeters.height, specifier: "%.2f") x \(selected.dimensionsMeters.depth, specifier: "%.2f") m")
+                    } icon: {
+                        Image(systemName: token.symbolName)
+                    }
                         .font(AppTypography.measurement)
                         .foregroundStyle(AppPalette.primaryOnDark)
                         .accessibilityIdentifier("viewer.selectedDetail")
@@ -338,6 +358,40 @@ struct RoomViewerView: View {
         }
         .padding(12)
         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var semanticLegend: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8), count: 3),
+            alignment: .leading,
+            spacing: 8
+        ) {
+            ForEach(RoomSemanticRole.allCases, id: \.rawValue) { role in
+                let token = RoomSemanticPresentation.token(for: role)
+                Label(token.displayName, systemImage: token.symbolName)
+                    .font(AppTypography.measurement)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+                    .foregroundStyle(Color(uiColor: RoomSemanticVisualStyle.color(for: role)))
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal, 7)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(style: StrokeStyle(
+                                lineWidth: 1,
+                                dash: token.materialPattern == .dashed ? [3, 2] : []
+                            ))
+                            .foregroundStyle(Color(uiColor: RoomSemanticVisualStyle.color(for: role)))
+                    }
+                    .accessibilityLabel("\(token.displayName), \(token.materialPattern.rawValue) semantic pattern")
+                    .accessibilityIdentifier("viewer.legend.\(role.rawValue)")
+            }
+        }
+        // The complete nine-role legend must remain simultaneously visible;
+        // cap this dense reference key while all interactive controls retain
+        // the user's full accessibility size.
+        .dynamicTypeSize(.xSmall ... .xxxLarge)
+        .accessibilityIdentifier("viewer.semanticLegend")
     }
 
     private func apply(_ action: RoomViewerCameraAction) {
@@ -362,27 +416,41 @@ struct ViewerChrome<Trailing: View>: View {
     let onSelectPrimaryMode: () -> Void
     let onSelectSecondaryMode: () -> Void
     @ViewBuilder var trailing: () -> Trailing
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @ViewBuilder
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Button(action: onClose) {
-                Label("Close", systemImage: "chevron.left")
-                    .font(AppTypography.bodyEmphasized)
-                    .frame(minHeight: 44)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 6) {
+                HStack(alignment: .center, spacing: 8) {
+                    closeButton
+                    Spacer(minLength: 8)
+                    trailing()
+                }
+                modeSwitcher
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(AppPalette.primaryOnDark)
-            .accessibilityIdentifier("viewer.close")
-            .accessibilityLabel("Close viewer")
-
-            Spacer(minLength: 4)
-
-            modeSwitcher
-
-            Spacer(minLength: 4)
-
-            trailing()
+        } else {
+            HStack(alignment: .center, spacing: 8) {
+                closeButton
+                Spacer(minLength: 4)
+                modeSwitcher
+                Spacer(minLength: 4)
+                trailing()
+            }
         }
+    }
+
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Label("Close", systemImage: "chevron.left")
+                .font(AppTypography.bodyEmphasized)
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(AppPalette.primaryOnDark)
+        .accessibilityIdentifier("viewer.close")
+        .accessibilityLabel("Close viewer")
     }
 
     private var modeSwitcher: some View {
@@ -407,6 +475,7 @@ struct ViewerChrome<Trailing: View>: View {
                 .kerning(1.0)
                 .padding(.horizontal, 14)
                 .frame(minHeight: 44)
+                .lineLimit(1)
         }
         .buttonStyle(.plain)
         .foregroundStyle(isActive ? AppPalette.captureBlack : AppPalette.mutedOnDark)

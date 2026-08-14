@@ -255,6 +255,23 @@ public actor LocalRoomProjectStore {
         // Awaiting ID generation happens before the blocking process lock.
         let projectID = await idGenerator.nextProjectID()
         let revisionID = await idGenerator.nextRevisionID()
+        let createdAt = clock.now()
+        let qualityReport: RoomQualityReport?
+        if let assessment = commit.qualityAssessment {
+            qualityReport = try assessment.bind(
+                projectID: projectID,
+                revisionID: revisionID,
+                generatedAt: createdAt,
+                acknowledgement: commit.qualityAcknowledgement
+            )
+        } else {
+            guard commit.qualityAcknowledgement == nil else {
+                throw RoomProjectStoreError.invalidPackage(
+                    "A Save Anyway acknowledgement cannot be persisted without its exact quality assessment."
+                )
+            }
+            qualityReport = nil
+        }
 
         return try withRootLock(root) {
             try writeNewProjectLocked(
@@ -264,10 +281,11 @@ public actor LocalRoomProjectStore {
                 metadata: commit.draft.metadata,
                 payload: commit.draft.revision,
                 reason: .initial,
-                createdAt: clock.now(),
+                createdAt: createdAt,
                 assets: commit.assets,
                 captureEvidence: commit.evidence,
-                evidenceCompatibility: .strict
+                evidenceCompatibility: .strict,
+                qualityReport: qualityReport
             )
         }
     }
@@ -370,6 +388,74 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
         return try withRootLock(root) {
             try loadLocked(root: root, projectID: projectID)
+        }
+    }
+
+    /// Returns an immutable byte binding for additive redesign state. This
+    /// reads the package's exact revision documents and never re-encodes or
+    /// mutates them. Legacy revisions without an app-owned epoch receive a
+    /// stable local fallback scoped to that immutable revision.
+    public func redesignSourceRevisionBinding(
+        projectID: String,
+        revisionID: String
+    ) throws -> RoomRedesignSourceRevision {
+        try validateIdentifier(projectID)
+        try validateIdentifier(revisionID)
+        let root = try canonicalRootURL()
+        return try withRootLock(root) {
+            let package = try loadLocked(root: root, projectID: projectID)
+            guard let revision = package.revisions.first(where: { $0.manifest.revisionID == revisionID }) else {
+                throw RoomProjectStoreError.revisionNotFound(projectID: projectID, revisionID: revisionID)
+            }
+            let revisionURL = try revisionDirectory(
+                root: root,
+                projectID: projectID,
+                revisionID: revisionID
+            )
+            try assertNoSymbolicLinks(root: root, through: revisionURL)
+            let semanticURL = revisionURL.appendingPathComponent("semantic-model.json")
+            let manifestURL = revisionURL.appendingPathComponent("revision.json")
+            guard try isRegularFile(semanticURL), try isRegularFile(manifestURL) else {
+                throw RoomProjectStoreError.invalidPackage("Revision binding documents must be regular files.")
+            }
+
+            let provenanceEpochs = Set(
+                (revision.payload.semanticSnapshot.structuralElements + revision.payload.semanticSnapshot.objectElements)
+                    .compactMap { $0.provenance?.coordinateSpaceEpochID }
+                    .filter { !$0.isEmpty }
+            )
+            if provenanceEpochs.count > 1 {
+                throw RoomProjectStoreError.invalidPackage(
+                    "A revision cannot bind redesign state across inconsistent coordinate-space epochs."
+                )
+            }
+            if let evidenceEpoch = revision.manifest.captureEvidence?.coordinateSpaceEpochID,
+               let provenanceEpoch = provenanceEpochs.first,
+               evidenceEpoch != provenanceEpoch {
+                throw RoomProjectStoreError.invalidPackage(
+                    "Revision evidence and semantic provenance disagree about the coordinate-space epoch."
+                )
+            }
+            let coordinateSpaceEpochID = revision.manifest.captureEvidence?.coordinateSpaceEpochID
+                ?? provenanceEpochs.first
+                ?? revision.manifest.qualityReport?.coordinateSpaceEpochID
+                ?? "legacy-\(revisionID)"
+            if let qualityEpoch = revision.manifest.qualityReport?.coordinateSpaceEpochID,
+               qualityEpoch != coordinateSpaceEpochID {
+                throw RoomProjectStoreError.invalidPackage(
+                    "Revision quality and source evidence disagree about the coordinate-space epoch."
+                )
+            }
+            try validateIdentifier(coordinateSpaceEpochID)
+
+            return RoomRedesignSourceRevision(
+                projectID: projectID,
+                revisionID: revisionID,
+                coordinateSpaceEpochID: coordinateSpaceEpochID,
+                packageSchemaVersion: package.manifest.schemaVersion,
+                semanticSHA256: try RoomSHA256.hexDigest(ofFile: semanticURL),
+                revisionManifestSHA256: try RoomSHA256.hexDigest(ofFile: manifestURL)
+            )
         }
     }
 
@@ -1947,7 +2033,8 @@ public actor LocalRoomProjectStore {
         createdAt: Date,
         assets: [RoomAssetInput],
         captureEvidence: RoomRevisionEvidencePlan?,
-        evidenceCompatibility: RoomRevisionEvidenceCompatibility
+        evidenceCompatibility: RoomRevisionEvidenceCompatibility,
+        qualityReport: RoomQualityReport? = nil
     ) throws -> RoomProjectSummary {
         try validateIdentifier(projectID)
         try validateIdentifier(revisionID)
@@ -1988,7 +2075,8 @@ public actor LocalRoomProjectStore {
             createdAt: createdAt,
             immutable: true,
             captureEvidence: captureEvidence,
-            evidenceCompatibility: evidenceCompatibility
+            evidenceCompatibility: evidenceCompatibility,
+            qualityReport: qualityReport
         )
         let revision = RoomRevisionPackage(
             manifest: revisionManifest,
@@ -3288,6 +3376,31 @@ public actor LocalRoomProjectStore {
         }
         if let captureEvidence = revision.manifest.captureEvidence {
             try validate(evidencePlan: captureEvidence)
+        }
+        if let qualityReport = revision.manifest.qualityReport {
+            let evidenceEpoch = revision.manifest.captureEvidence?.coordinateSpaceEpochID
+            let provenanceEpochs = Set(
+                (revision.payload.semanticSnapshot.structuralElements + revision.payload.semanticSnapshot.objectElements)
+                    .compactMap { $0.provenance?.coordinateSpaceEpochID }
+                    .filter { !$0.isEmpty }
+            )
+            guard provenanceEpochs.count <= 1 else {
+                throw RoomProjectStoreError.invalidPackage(
+                    "A revision cannot bind quality across inconsistent semantic coordinate-space epochs."
+                )
+            }
+            let expectedEpoch = evidenceEpoch ?? provenanceEpochs.first ?? qualityReport.coordinateSpaceEpochID
+            do {
+                try qualityReport.validate(
+                    expectedProjectID: expectedProjectID,
+                    expectedRevisionID: expectedRevisionID,
+                    expectedCoordinateSpaceEpochID: expectedEpoch
+                )
+            } catch {
+                throw RoomProjectStoreError.invalidPackage(
+                    "Revision quality report is malformed or rebound."
+                )
+            }
         }
         _ = try validatedEvidenceCompatibility(
             revision.manifest,

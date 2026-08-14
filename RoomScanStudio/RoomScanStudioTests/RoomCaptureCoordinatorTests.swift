@@ -5,6 +5,108 @@ import RoomScanCore
 
 @MainActor
 final class RoomCaptureCoordinatorTests: XCTestCase {
+    func testWeakFinishIsAdvisoryAndRequiresExactExplicitSaveAnyway() async throws {
+        let assessment = try makeWeakQualityAssessment()
+        let driver = CoordinatorTestDriver(
+            preparedReview: RoomCapturePreparedReview(
+                commit: makeCommit(
+                    snapshot: makeSnapshot(label: "Weak quality"),
+                    qualityAssessment: assessment
+                )
+            )
+        )
+        let configured = makeCoordinator(driver: driver, locationProvider: StaticLocationProvider(result: .denied))
+        defer { try? FileManager.default.removeItem(at: configured.root) }
+
+        configured.coordinator.prepare()
+        await eventually { configured.coordinator.state.phase == .ready }
+        configured.coordinator.start()
+        await eventually { configured.coordinator.state.phase == .scanning }
+        configured.coordinator.stop()
+        await eventually { configured.coordinator.state.phase == .review }
+
+        configured.coordinator.finish()
+        XCTAssertEqual(configured.coordinator.state.phase, .review)
+        XCTAssertTrue(configured.coordinator.finishReviewPresented)
+        var summaries = try await configured.store.listSummaries(includeArchived: true)
+        XCTAssertTrue(summaries.isEmpty)
+
+        configured.coordinator.cancelFinishReview()
+        XCTAssertFalse(configured.coordinator.finishReviewPresented)
+        configured.coordinator.save()
+        XCTAssertEqual(configured.coordinator.state.phase, .review)
+        XCTAssertTrue(configured.coordinator.finishReviewPresented)
+        summaries = try await configured.store.listSummaries(includeArchived: true)
+        XCTAssertTrue(summaries.isEmpty)
+
+        configured.coordinator.saveAnyway()
+        await eventually { configured.coordinator.state.phase == .saved }
+        let package = try await configured.store.load(projectID: "coordinator-project-001")
+        let report = try XCTUnwrap(package.revisions.last?.manifest.qualityReport)
+        XCTAssertEqual(report.finishEligibility, .reviewRecommended)
+        XCTAssertEqual(report.saveAcknowledgement?.acknowledgedFindingIDs, ["coverage-wall-001"])
+        XCTAssertEqual(report.records[1].findings.first?.affectedRegion?.regionID, "wall-001")
+    }
+
+    func testRevisitFromWeakFinishPublishesNoPartialQualityReport() async throws {
+        let driver = CoordinatorTestDriver(
+            preparedReview: RoomCapturePreparedReview(
+                commit: makeCommit(
+                    snapshot: makeSnapshot(label: "Revisit quality"),
+                    qualityAssessment: try makeWeakQualityAssessment()
+                )
+            )
+        )
+        let configured = makeCoordinator(driver: driver, locationProvider: StaticLocationProvider(result: .denied))
+        defer { try? FileManager.default.removeItem(at: configured.root) }
+
+        configured.coordinator.prepare()
+        await eventually { configured.coordinator.state.phase == .ready }
+        configured.coordinator.start()
+        await eventually { configured.coordinator.state.phase == .scanning }
+        configured.coordinator.stop()
+        await eventually { configured.coordinator.state.phase == .review }
+        configured.coordinator.finish()
+        configured.coordinator.revisitScan()
+        await eventually { configured.coordinator.state.phase == .discarded }
+
+        let summaries = try await configured.store.listSummaries(includeArchived: true)
+        XCTAssertTrue(summaries.isEmpty)
+    }
+
+    func testGoodFinishProceedsWithoutSaveAnywayAcknowledgement() async throws {
+        let assessment = RoomQualityAssessment(
+            coordinateSpaceEpochID: "epoch-001",
+            records: [
+                .init(dimension: .visualSharpness, state: .acceptable, reasonCode: .sharpnessAcceptable, findings: []),
+                .init(dimension: .spatialVisualCoverage, state: .acceptable, reasonCode: .coverageAcceptable, findings: []),
+                .init(dimension: .arTracking, state: .acceptable, reasonCode: .trackingNormal, findings: []),
+                .init(dimension: .semanticIdentificationConfidence, state: .acceptable, reasonCode: .semanticConfidenceAcceptable, findings: []),
+            ]
+        )
+        let driver = CoordinatorTestDriver(
+            preparedReview: RoomCapturePreparedReview(
+                commit: makeCommit(snapshot: makeSnapshot(label: "Good quality"), qualityAssessment: assessment)
+            )
+        )
+        let configured = makeCoordinator(driver: driver, locationProvider: StaticLocationProvider(result: .denied))
+        defer { try? FileManager.default.removeItem(at: configured.root) }
+
+        configured.coordinator.prepare()
+        await eventually { configured.coordinator.state.phase == .ready }
+        configured.coordinator.start()
+        await eventually { configured.coordinator.state.phase == .scanning }
+        configured.coordinator.stop()
+        await eventually { configured.coordinator.state.phase == .review }
+        configured.coordinator.finish()
+        await eventually { configured.coordinator.state.phase == .saved }
+
+        let package = try await configured.store.load(projectID: "coordinator-project-001")
+        let report = try XCTUnwrap(package.revisions.last?.manifest.qualityReport)
+        XCTAssertEqual(report.finishEligibility, .proceedNormally)
+        XCTAssertNil(report.saveAcknowledgement)
+    }
+
     func testReviewSnapshotIsFrozenAgainstLateSameTokenLiveUpdatesAndPersistence() async throws {
         let reviewSnapshot = makeSnapshot(label: "Reviewed semantic truth")
         let driver = CoordinatorTestDriver(
@@ -48,7 +150,11 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
                 semantic: [.lowClassificationConfidence],
                 operational: [.trackingLimited, .poorLightingHeuristic]
             ),
-            ["lowClassificationConfidence", "poorLightingHeuristic", "trackingLimited"]
+            [
+                "Show uncertain features clearly from another angle.",
+                "Add more light before continuing.",
+                "Move slowly until tracking stabilizes.",
+            ]
         )
 
         let driver = CoordinatorTestDriver(
@@ -72,7 +178,11 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
         driver.emitOperationalGuidance([.poorLightingHeuristic])
         XCTAssertEqual(
             configured.coordinator.qualitativeGuidance,
-            ["lowClassificationConfidence", "poorLightingHeuristic", "trackingLimited"]
+            [
+                "Show uncertain features clearly from another angle.",
+                "Add more light before continuing.",
+                "Move slowly until tracking stabilizes.",
+            ]
         )
 
         // A normal tracking state and bright operational observation must clear
@@ -81,7 +191,7 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
         driver.emitOperationalGuidance([])
         XCTAssertEqual(
             configured.coordinator.qualitativeGuidance,
-            ["lowClassificationConfidence"]
+            ["Show uncertain features clearly from another angle."]
         )
 
         driver.emitSemanticGuidance([])
@@ -566,7 +676,10 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
         return (coordinator, store, root)
     }
 
-    private func makeCommit(snapshot: RoomSemanticSnapshot) -> RoomInitialCaptureCommit {
+    private func makeCommit(
+        snapshot: RoomSemanticSnapshot,
+        qualityAssessment: RoomQualityAssessment? = nil
+    ) -> RoomInitialCaptureCommit {
         let date = Date(timeIntervalSince1970: 1_704_067_200)
         return RoomInitialCaptureCommit(
             draft: RoomDraft(
@@ -588,7 +701,47 @@ final class RoomCaptureCoordinatorTests: XCTestCase {
                     measurements: [],
                     photos: []
                 )
-            )
+            ),
+            qualityAssessment: qualityAssessment
+        )
+    }
+
+    private func makeWeakQualityAssessment() throws -> RoomQualityAssessment {
+        let region = try RoomQualityRegion(
+            regionID: "wall-001",
+            label: "East wall",
+            semanticElementID: "wall-001",
+            dimensionsMeters: .init(width: 3, height: 2.4, depth: 0.08),
+            roomTransform: .init(columnMajorValues: [
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                1.5, 1.2, 0, 1,
+            ])
+        )
+        let finding = RoomQualityFindingCandidate(
+            findingID: "coverage-wall-001",
+            dimension: .spatialVisualCoverage,
+            reasonCode: .uncoveredRegion,
+            evidenceReferences: [
+                .init(
+                    evidenceID: "coverage-evidence-001",
+                    kind: .coverageProjection,
+                    sourceReference: "fixture/coverage-evidence-001"
+                ),
+            ],
+            affectedRegion: region,
+            confidence: 0.9,
+            disposition: .stronglyRecommendRevisit
+        )
+        return .init(
+            coordinateSpaceEpochID: "epoch-001",
+            records: [
+                .init(dimension: .visualSharpness, state: .acceptable, reasonCode: .sharpnessAcceptable, findings: []),
+                .init(dimension: .spatialVisualCoverage, state: .advisory, reasonCode: .uncoveredRegion, findings: [finding]),
+                .init(dimension: .arTracking, state: .acceptable, reasonCode: .trackingNormal, findings: []),
+                .init(dimension: .semanticIdentificationConfidence, state: .acceptable, reasonCode: .semanticConfidenceAcceptable, findings: []),
+            ]
         )
     }
 

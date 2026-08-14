@@ -261,12 +261,23 @@ struct RoomCaptureFlowView: View {
 
     @ViewBuilder
     private var scanSurface: some View {
-        if let cameraView = coordinator.liveCameraView {
-            RoomLiveCaptureViewRepresentable(cameraView: cameraView)
-                .accessibilityIdentifier("capture.canvas")
-        } else {
-            RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
-                .accessibilityIdentifier("capture.canvas")
+        ZStack {
+            if let cameraView = coordinator.liveCameraView {
+                RoomLiveCaptureViewRepresentable(cameraView: cameraView)
+                    .accessibilityIdentifier("capture.canvas")
+            } else {
+                RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
+                    .accessibilityIdentifier("capture.canvas")
+            }
+            if !coordinator.liveQualityCues.isEmpty {
+                RoomQualityOverlayView(
+                    snapshot: coordinator.liveSnapshot,
+                    items: coordinator.liveQualityCues.map(RoomQualityOverlayItem.init),
+                    markerIdentifier: "capture.quality.liveOverlay",
+                    contentTopInset: 112
+                )
+                .padding(12)
+            }
         }
     }
 
@@ -332,11 +343,30 @@ struct RoomCaptureFlowView: View {
 
     private var reviewInstrument: some View {
         VStack(alignment: .leading, spacing: 16) {
-            RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
-                .frame(minHeight: 230)
-                .accessibilityIdentifier("capture.canvas")
+            ZStack {
+                RoomSemanticCanvas(snapshot: coordinator.liveSnapshot)
+                    .accessibilityIdentifier("capture.canvas")
+                if let assessment = coordinator.qualityAssessment {
+                    RoomQualityOverlayView(
+                        snapshot: coordinator.liveSnapshot,
+                        items: assessment.advisoryFindings.map(RoomQualityOverlayItem.init),
+                        markerIdentifier: "capture.quality.reviewOverlay",
+                        contentTopInset: 0
+                    )
+                    .padding(12)
+                }
+            }
+            .frame(minHeight: 230)
             scanReadout
             guidanceReadout
+            if let assessment = coordinator.qualityAssessment {
+                RoomQualitySummaryView(
+                    records: assessment.records.map(RoomQualitySummaryRecord.init),
+                    acknowledged: false,
+                    darkSurface: true,
+                    markerIdentifier: "capture.quality.summary"
+                )
+            }
             Text("REVIEW METADATA")
                 .font(AppTypography.measurement)
                 .tracking(1.4)
@@ -373,18 +403,69 @@ struct RoomCaptureFlowView: View {
                     .tint(AppPalette.blueprintOnDark)
                     .accessibilityIdentifier("capture.requestGPS")
                 }
-                Button("Save") {
-                    coordinator.save()
+                Button("Finish") {
+                    coordinator.finish()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppPalette.blueprintOnDark)
                 .disabled(!coordinator.canSave)
                 .accessibilityIdentifier("capture.save")
             }
+            if coordinator.finishReviewPresented,
+               let assessment = coordinator.qualityAssessment {
+                finishQualityGate(assessment)
+            }
             discardButton
         }
         .padding(18)
         .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func finishQualityGate(_ assessment: RoomQualityAssessment) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Revisit recommended before saving", systemImage: "checklist.unchecked")
+                .font(AppTypography.section)
+                .foregroundStyle(AppPalette.amberOnDark)
+                .accessibilityIdentifier("capture.quality.finishGate")
+            Text("These are independent capture advisories—not a room accuracy or construction-quality score.")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedOnDark)
+            ForEach(assessment.advisoryFindings, id: \.findingID) { finding in
+                Label(
+                    RoomQualityPresentation.guidance(for: finding),
+                    systemImage: RoomQualityPresentation.symbol(for: finding.dimension)
+                )
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.primaryOnDark)
+                .accessibilityLabel(RoomQualityPresentation.accessibilityDescription(for: finding))
+            }
+            if assessment.advisoryFindings.isEmpty {
+                Label(
+                    "Evidence was unavailable or insufficient. Consider another pass if the room matters for later redesign work.",
+                    systemImage: "questionmark.circle"
+                )
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.primaryOnDark)
+            }
+            AdaptiveActionRow(alignment: .leading, spacing: 10) {
+                Button("Revisit scan") { coordinator.revisitScan() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppPalette.amberOnDark)
+                    .accessibilityIdentifier("capture.quality.revisit")
+                Button("Back to review") { coordinator.cancelFinishReview() }
+                    .buttonStyle(.bordered)
+                    .tint(AppPalette.blueprintOnDark)
+                    .accessibilityIdentifier("capture.quality.cancel")
+                Button("Save Anyway") { coordinator.saveAnyway() }
+                    .buttonStyle(.bordered)
+                    .tint(AppPalette.blueprintOnDark)
+                    .disabled(!coordinator.canSave)
+                    .accessibilityIdentifier("capture.quality.saveAnyway")
+            }
+        }
+        .padding(16)
+        .background(AppPalette.amberOnDark.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppPalette.amberOnDark, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -516,7 +597,7 @@ struct RoomCaptureFlowView: View {
 
     @ViewBuilder
     private var guidanceReadout: some View {
-        if !coordinator.qualitativeGuidance.isEmpty {
+        if !coordinator.qualitativeGuidance.isEmpty || !coordinator.liveQualityCues.isEmpty {
             VStack(alignment: .leading, spacing: 5) {
                 Text("FIELD GUIDANCE")
                     .font(AppTypography.measurement)
@@ -526,6 +607,15 @@ struct RoomCaptureFlowView: View {
                     Text(guidance)
                         .font(AppTypography.measurement)
                         .foregroundStyle(AppPalette.mutedOnDark)
+                }
+                ForEach(coordinator.liveQualityCues, id: \.keyForPresentation) { cue in
+                    Label(
+                        RoomQualityPresentation.guidance(for: cue),
+                        systemImage: RoomQualityPresentation.symbol(for: cue.dimension)
+                    )
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.primaryOnDark)
+                    .accessibilityLabel(RoomQualityPresentation.accessibilityDescription(for: cue))
                 }
             }
             .accessibilityIdentifier("capture.guidance")
@@ -580,6 +670,326 @@ struct RoomCaptureFlowView: View {
         case .discarded, .cancelled:
             return "Capture closed"
         }
+    }
+}
+
+// MARK: - Slice 2 quality presentation
+
+extension RoomQualityCoachingCue {
+    var keyForPresentation: String {
+        "\(dimension.rawValue)-\(reasonCode.rawValue)-\(affectedRegion?.regionID ?? "general")"
+    }
+}
+
+enum RoomQualityPresentation {
+    static func title(for dimension: RoomQualityDimension) -> String {
+        switch dimension {
+        case .visualSharpness: "Visual sharpness"
+        case .spatialVisualCoverage: "Coverage"
+        case .arTracking: "AR tracking"
+        case .semanticIdentificationConfidence: "Identification confidence"
+        }
+    }
+
+    static func symbol(for dimension: RoomQualityDimension) -> String {
+        switch dimension {
+        case .visualSharpness: "camera.filters"
+        case .spatialVisualCoverage: "square.dashed"
+        case .arTracking: "location.slash"
+        case .semanticIdentificationConfidence: "questionmark.diamond"
+        }
+    }
+
+    static func pattern(for dimension: RoomQualityDimension) -> String {
+        switch dimension {
+        case .visualSharpness: "diagonal stripe"
+        case .spatialVisualCoverage: "dashed outline"
+        case .arTracking: "double outline"
+        case .semanticIdentificationConfidence: "dotted outline"
+        }
+    }
+
+    static func guidance(for finding: RoomQualityFindingCandidate) -> String {
+        guidance(
+            dimension: finding.dimension,
+            reason: finding.reasonCode,
+            region: finding.affectedRegion
+        )
+    }
+
+    static func guidance(for finding: RoomQualityFinding) -> String {
+        guidance(
+            dimension: finding.dimension,
+            reason: finding.reasonCode,
+            region: finding.affectedRegion
+        )
+    }
+
+    static func guidance(for cue: RoomQualityCoachingCue) -> String {
+        guidance(dimension: cue.dimension, reason: cue.reasonCode, region: cue.affectedRegion)
+    }
+
+    static func accessibilityDescription(for finding: RoomQualityFindingCandidate) -> String {
+        accessibilityDescription(
+            dimension: finding.dimension,
+            reason: finding.reasonCode,
+            region: finding.affectedRegion
+        )
+    }
+
+    static func accessibilityDescription(for finding: RoomQualityFinding) -> String {
+        accessibilityDescription(
+            dimension: finding.dimension,
+            reason: finding.reasonCode,
+            region: finding.affectedRegion
+        )
+    }
+
+    static func accessibilityDescription(for cue: RoomQualityCoachingCue) -> String {
+        accessibilityDescription(dimension: cue.dimension, reason: cue.reasonCode, region: cue.affectedRegion)
+    }
+
+    static func stateTitle(_ state: RoomQualityDimensionState) -> String {
+        switch state {
+        case .acceptable: "Acceptable evidence"
+        case .advisory: "Revisit recommended"
+        case .unavailable: "Source unavailable"
+        case .insufficientEvidence: "Insufficient evidence"
+        }
+    }
+
+    static func color(for dimension: RoomQualityDimension) -> Color {
+        switch dimension {
+        case .visualSharpness: .orange
+        case .spatialVisualCoverage: .cyan
+        case .arTracking: .pink
+        case .semanticIdentificationConfidence: .yellow
+        }
+    }
+
+    static func stroke(for dimension: RoomQualityDimension, selected: Bool) -> StrokeStyle {
+        let width: CGFloat = selected ? 4 : 2
+        switch dimension {
+        case .visualSharpness: return StrokeStyle(lineWidth: width, dash: [10, 3, 2, 3])
+        case .spatialVisualCoverage: return StrokeStyle(lineWidth: width, dash: [8, 6])
+        case .arTracking: return StrokeStyle(lineWidth: width)
+        case .semanticIdentificationConfidence: return StrokeStyle(lineWidth: width, dash: [2, 5])
+        }
+    }
+
+    private static func guidance(
+        dimension: RoomQualityDimension,
+        reason: RoomQualityReasonCode,
+        region: RoomQualityRegion?
+    ) -> String {
+        let target = region.map { " \($0.label)" } ?? " this area"
+        switch reason {
+        case .blurredRegion: return "Revisit\(target) slowly for a sharper view."
+        case .weakCoverage: return "Give\(target) another steady pass."
+        case .uncoveredRegion: return "Revisit\(target); it has no supporting view."
+        case .trackingLimited: return "Pause near\(target) until tracking recovers."
+        case .semanticLowConfidence: return "Show\(target) clearly from another angle."
+        case .sharpnessAcceptable: return "Sharpness evidence is acceptable."
+        case .coverageAcceptable: return "Coverage evidence is acceptable."
+        case .trackingNormal: return "Tracking evidence is normal."
+        case .semanticConfidenceAcceptable: return "Identification evidence is acceptable."
+        case .sourceUnavailable: return "This quality source is unavailable."
+        case .insufficientEvidence: return "There is not enough evidence for this dimension."
+        }
+    }
+
+    private static func accessibilityDescription(
+        dimension: RoomQualityDimension,
+        reason: RoomQualityReasonCode,
+        region: RoomQualityRegion?
+    ) -> String {
+        "\(title(for: dimension)) advisory, \(pattern(for: dimension)) pattern. \(guidance(dimension: dimension, reason: reason, region: region))"
+    }
+}
+
+struct RoomQualityOverlayItem: Identifiable, Equatable {
+    let id: String
+    let dimension: RoomQualityDimension
+    let reasonCode: RoomQualityReasonCode
+    let region: RoomQualityRegion?
+
+    init(_ finding: RoomQualityFindingCandidate) {
+        id = finding.findingID
+        dimension = finding.dimension
+        reasonCode = finding.reasonCode
+        region = finding.affectedRegion
+    }
+
+    init(_ cue: RoomQualityCoachingCue) {
+        id = cue.keyForPresentation
+        dimension = cue.dimension
+        reasonCode = cue.reasonCode
+        region = cue.affectedRegion
+    }
+}
+
+struct RoomQualitySummaryRecord: Equatable {
+    let dimension: RoomQualityDimension
+    let state: RoomQualityDimensionState
+    let reasonCode: RoomQualityReasonCode
+    let findingCount: Int
+
+    init(_ record: RoomQualityAssessmentRecord) {
+        dimension = record.dimension
+        state = record.state
+        reasonCode = record.reasonCode
+        findingCount = record.findings.count
+    }
+
+    init(_ record: RoomQualityDimensionRecord) {
+        dimension = record.dimension
+        state = record.state
+        reasonCode = record.reasonCode
+        findingCount = record.findings.count
+    }
+}
+
+struct RoomQualitySummaryView: View {
+    let records: [RoomQualitySummaryRecord]
+    let acknowledged: Bool
+    let darkSurface: Bool
+    let markerIdentifier: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("CAPTURE QUALITY")
+                    .font(AppTypography.measurement)
+                    .tracking(1.2)
+                    .accessibilityIdentifier(markerIdentifier)
+                Spacer()
+                if acknowledged {
+                    Label("Saved anyway", systemImage: "checkmark.seal")
+                        .accessibilityIdentifier("quality.acknowledged")
+                }
+            }
+            .foregroundStyle(darkSurface ? AppPalette.blueprintOnDark : AppPalette.blueprint)
+            ForEach(records, id: \.dimension.rawValue) { record in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: RoomQualityPresentation.symbol(for: record.dimension))
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(RoomQualityPresentation.title(for: record.dimension))
+                            .font(AppTypography.measurement)
+                        Text(RoomQualityPresentation.stateTitle(record.state)
+                             + (record.findingCount > 0 ? " · \(record.findingCount) region\(record.findingCount == 1 ? "" : "s")" : ""))
+                            .font(.caption)
+                    }
+                }
+                .foregroundStyle(darkSurface ? AppPalette.primaryOnDark : AppPalette.ink)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(RoomQualityPresentation.title(for: record.dimension)), \(RoomQualityPresentation.stateTitle(record.state)), symbol \(RoomQualityPresentation.symbol(for: record.dimension)), \(RoomQualityPresentation.pattern(for: record.dimension)) pattern"
+                )
+            }
+            Text("Dimensions stay independent; this is not a room accuracy score.")
+                .font(.caption)
+                .foregroundStyle(darkSurface ? AppPalette.mutedOnDark : AppPalette.mutedInk)
+        }
+        .padding(14)
+        .background(
+            darkSurface ? Color.white.opacity(0.06) : AppPalette.paperShadow.opacity(0.35),
+            in: RoundedRectangle(cornerRadius: 14)
+        )
+    }
+}
+
+private struct RoomQualityOverlayView: View {
+    let snapshot: RoomSemanticSnapshot?
+    let items: [RoomQualityOverlayItem]
+    let markerIdentifier: String
+    let contentTopInset: CGFloat
+    @State private var selectedID: String?
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                ForEach(
+                    Array(items.filter { $0.region != nil }.prefix(8).enumerated()),
+                    id: \.element.id
+                ) { index, item in
+                    let selected = selectedID == item.id
+                    Button {
+                        selectedID = selected ? nil : item.id
+                    } label: {
+                        Image(systemName: RoomQualityPresentation.symbol(for: item.dimension))
+                            .font(.body.weight(.bold))
+                            .imageScale(selected ? .large : .medium)
+                            .frame(width: selected ? 48 : 42, height: selected ? 48 : 42)
+                            .foregroundStyle(.black)
+                            .background(RoomQualityPresentation.color(for: item.dimension), in: Circle())
+                            .overlay(
+                                Circle().stroke(
+                                    .white,
+                                    style: RoomQualityPresentation.stroke(for: item.dimension, selected: selected)
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .position(position(for: item, index: index, size: proxy.size))
+                    .accessibilityLabel(accessibilityLabel(for: item))
+                    .accessibilityHint("Selects this qualitative region advisory.")
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("QUALITY REGION GUIDE")
+                        .font(.caption2.weight(.bold))
+                        .accessibilityIdentifier(markerIdentifier)
+                    ForEach(
+                        RoomQualityDimension.allCases.filter { dimension in
+                            items.contains { $0.dimension == dimension }
+                        },
+                        id: \.rawValue
+                    ) { dimension in
+                        Label(
+                            "\(RoomQualityPresentation.title(for: dimension)) · \(RoomQualityPresentation.pattern(for: dimension))",
+                            systemImage: RoomQualityPresentation.symbol(for: dimension)
+                        )
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.white)
+                .padding(8)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, contentTopInset + 4)
+                .padding(.horizontal, 4)
+            }
+        }
+        // Map annotations are capped below accessibility sizes so they never
+        // grow over capture controls. The full coaching copy still honors the
+        // user's Dynamic Type setting below the canvas, and every marker and
+        // legend entry retains a VoiceOver description.
+        .dynamicTypeSize(.xSmall ... .xxxLarge)
+        .allowsHitTesting(true)
+    }
+
+    private func position(for item: RoomQualityOverlayItem, index: Int, size: CGSize) -> CGPoint {
+        guard let region = item.region,
+              let snapshot,
+              let bounds = try? RoomSpatialNormalization.bounds(of: snapshot),
+              region.roomTransform.columnMajorValues.count == 16
+        else {
+            return CGPoint(x: size.width * 0.2 + CGFloat(index % 4) * 54, y: size.height * 0.68)
+        }
+        let m = region.roomTransform.columnMajorValues
+        let xSpan = max(0.01, bounds.maximum.x - bounds.minimum.x)
+        let zSpan = max(0.01, bounds.maximum.z - bounds.minimum.z)
+        let normalizedX = (m[12] - bounds.minimum.x) / xSpan
+        let normalizedZ = (m[14] - bounds.minimum.z) / zSpan
+        return CGPoint(
+            x: 28 + CGFloat(min(max(normalizedX, 0), 1)) * max(0, size.width - 56),
+            y: contentTopInset + 56
+                + CGFloat(min(max(normalizedZ, 0), 1))
+                * max(0, size.height - contentTopInset - 96)
+        )
+    }
+
+    private func accessibilityLabel(for item: RoomQualityOverlayItem) -> String {
+        "\(RoomQualityPresentation.title(for: item.dimension)) advisory, \(RoomQualityPresentation.pattern(for: item.dimension)) pattern, \(item.region?.label ?? "general room region")"
     }
 }
 

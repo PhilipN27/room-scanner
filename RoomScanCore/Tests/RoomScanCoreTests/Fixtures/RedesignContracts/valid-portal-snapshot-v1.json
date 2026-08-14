@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "roomscan-portal-snapshot-v1",
+  "contractKind": "portalSnapshot",
+  "snapshotID": "snapshot-001",
+  "workspaceID": "workspace-001",
+  "projectID": "project-001",
+  "sourceRevision": {
+    "projectID": "project-001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "publishedAt": "2026-08-12T12:00:00Z",
+  "selectionSHA256": "4ffcac54568243a1a217d1433e3d3a94ceeefa991e6058186bd02d3f033636cd",
+  "disclosureReview": {
+    "reviewID": "disclosure-portal",
+    "reviewedAt": "2026-08-12T12:00:00Z",
+    "decision": "approved",
+    "sourceRevisionID": "revision-001",
+    "sourceRevisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "reviewedSelectionSHA256": "4ffcac54568243a1a217d1433e3d3a94ceeefa991e6058186bd02d3f033636cd",
+    "preciseGPSExcluded": true,
+    "rawEvidenceDisclosureAccepted": false
+  },
+  "allowlistedSections": [
+    "semanticLayout",
+    "webGeometry",
+    "textures",
+    "selectedImages",
+    "floorPlan",
+    "dimensions",
+    "qualityWarnings",
+    "approvedConcepts",
+    "branding",
+    "enabledDownloads"
+  ],
+  "assets": [
+    {
+      "assetID": "portal-geometry",
+      "assetClass": "webGeometry",
+      "relativePath": "portal/room.glb",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "byteCount": 8192,
+      "mediaType": "model/gltf-binary"
+    },
+    {
+      "assetID": "portal-texture",
+      "assetClass": "webTexture",
+      "relativePath": "portal/room.webp",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "byteCount": 4096,
+      "mediaType": "image/webp"
+    },
+    {
+      "assetID": "portal-image",
+      "assetClass": "selectedImage",
+      "relativePath": "portal/reference-001.webp",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "byteCount": 4096,
+      "mediaType": "image/webp"
+    },
+    {
+      "assetID": "portal-floor-plan",
+      "assetClass": "floorPlan",
+      "relativePath": "portal/floor-plan.svg",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "byteCount": 2048,
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "assetID": "portal-concept",
+      "assetClass": "approvedConcept",
+      "relativePath": "portal/concept-001.webp",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "byteCount": 4096,
+      "mediaType": "image/webp"
+    },
+    {
+      "assetID": "portal-floor-plan-pdf",
+      "assetClass": "floorPlanPDF",
+      "relativePath": "downloads/floor-plan.pdf",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "byteCount": 4096,
+      "mediaType": "application/pdf"
+    },
+    {
+      "assetID": "portal-gallery-zip",
+      "assetClass": "approvedGalleryZIP",
+      "relativePath": "downloads/approved-gallery.zip",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "byteCount": 8192,
+      "mediaType": "application/zip"
+    },
+    {
+      "assetID": "portal-ai-ready-package",
+      "assetClass": "aiReadyPackage",
+      "relativePath": "downloads/ai-ready-package.zip",
+      "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "byteCount": 16384,
+      "mediaType": "application/zip",
+      "aiReadyPackageBinding": {
+        "packageID": "ai-package-ready-001",
+        "profile": "aiReady",
+        "manifestEntryPath": "ai-room-package.json",
+        "manifestSHA256": "a4caf6ae69e65e9cbf2b8675344f0d6aad90546cc2cde87ce42b546e9cad09a5",
+        "sourceRevisionID": "revision-001",
+        "sourceRevisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+        "artifactPlanSHA256": "6d3fe28812861ca9a9d7518b0a9e5300d22ba9861cdb300842013de7e340545e",
+        "selectionSHA256": "38731f6be89c586800628967f91ecc692613687e7d6aecce11b9932a4a4bf83d"
+      }
+    }
+  ],
+  "branding": {
+    "displayName": "North Star Studio",
+    "accentColorHex": "2F6B5F"
+  }
+}

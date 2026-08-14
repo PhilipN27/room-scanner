@@ -1,0 +1,21 @@
+{
+  "validScenarios": [
+    {"name":"sharp-and-acceptably-covered","mode":"good","expectedAdvisoryDimensions":[]},
+    {"name":"deliberately-blurred-region","mode":"blurred","expectedAdvisoryDimensions":["visualSharpness"]},
+    {"name":"uncovered-region","mode":"uncovered","expectedAdvisoryDimensions":["spatialVisualCoverage"]},
+    {"name":"low-semantic-confidence-region","mode":"semanticLow","expectedAdvisoryDimensions":["semanticIdentificationConfidence"]},
+    {"name":"tracking-limited-region","mode":"trackingLimited","expectedAdvisoryDimensions":["arTracking"]},
+    {"name":"multiple-independent-warnings","mode":"combined","expectedAdvisoryDimensions":["visualSharpness","spatialVisualCoverage","arTracking","semanticIdentificationConfidence"]},
+    {"name":"insufficient-evidence","mode":"insufficient","expectedAdvisoryDimensions":[]}
+  ],
+  "invalidScenarios": [
+    {"name":"non-finite-sharpness","mutation":"nonFiniteSharpness"},
+    {"name":"degenerate-region","mutation":"degenerateRegion"},
+    {"name":"singular-region-transform","mutation":"singularTransform"},
+    {"name":"inconsistent-dimension-reason","mutation":"inconsistentReason"},
+    {"name":"rebound-coordinate-epoch","mutation":"reboundEpoch"},
+    {"name":"malformed-unknown-quality-member","mutation":"unknownMember"},
+    {"name":"malformed-reason-code","mutation":"unknownReasonCode"},
+    {"name":"malformed-disposition","mutation":"unknownDisposition"}
+  ]
+}

@@ -347,6 +347,9 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
     public var restoredFromRevisionID: String?
     public var captureEvidence: RoomRevisionEvidencePlan?
     public var evidenceCompatibility: RoomRevisionEvidenceCompatibility?
+    /// Optional for backward decoding. When present, the report is immutable,
+    /// revision-bound capture provenance rather than editable project metadata.
+    public var qualityReport: RoomQualityReport?
 
     public init(
         revisionID: String,
@@ -357,7 +360,8 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
         immutable: Bool = true,
         restoredFromRevisionID: String? = nil,
         captureEvidence: RoomRevisionEvidencePlan? = nil,
-        evidenceCompatibility: RoomRevisionEvidenceCompatibility? = .strict
+        evidenceCompatibility: RoomRevisionEvidenceCompatibility? = .strict,
+        qualityReport: RoomQualityReport? = nil
     ) {
         self.revisionID = revisionID
         self.projectID = projectID
@@ -368,6 +372,7 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
         self.restoredFromRevisionID = restoredFromRevisionID
         self.captureEvidence = captureEvidence
         self.evidenceCompatibility = evidenceCompatibility
+        self.qualityReport = qualityReport
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -380,6 +385,7 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
         case restoredFromRevisionID
         case captureEvidence
         case evidenceCompatibility
+        case qualityReport
     }
 
     public init(from decoder: Decoder) throws {
@@ -396,6 +402,7 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
             RoomRevisionEvidenceCompatibility.self,
             forKey: .evidenceCompatibility
         )
+        qualityReport = try container.decodeIfPresent(RoomQualityReport.self, forKey: .qualityReport)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -409,6 +416,7 @@ public struct RoomRevisionManifest: Codable, Sendable, Equatable {
         try container.encodeIfPresent(restoredFromRevisionID, forKey: .restoredFromRevisionID)
         try container.encodeIfPresent(captureEvidence, forKey: .captureEvidence)
         try container.encodeIfPresent(evidenceCompatibility, forKey: .evidenceCompatibility)
+        try container.encodeIfPresent(qualityReport, forKey: .qualityReport)
     }
 }
 
@@ -893,15 +901,23 @@ public struct RoomInitialCaptureCommit: Sendable, Equatable {
     public var draft: RoomDraft
     public var evidence: RoomRevisionEvidencePlan?
     public var assets: [RoomAssetInput]
+    /// Unbound analysis is accepted at the scratch boundary. Only the store,
+    /// after allocating a fresh immutable revision ID, may bind and persist it.
+    public var qualityAssessment: RoomQualityAssessment?
+    public var qualityAcknowledgement: RoomQualitySaveAnywayAcknowledgementRequest?
 
     public init(
         draft: RoomDraft,
         evidence: RoomRevisionEvidencePlan? = nil,
-        assets: [RoomAssetInput] = []
+        assets: [RoomAssetInput] = [],
+        qualityAssessment: RoomQualityAssessment? = nil,
+        qualityAcknowledgement: RoomQualitySaveAnywayAcknowledgementRequest? = nil
     ) {
         self.draft = draft
         self.evidence = evidence
         self.assets = assets
+        self.qualityAssessment = qualityAssessment
+        self.qualityAcknowledgement = qualityAcknowledgement
     }
 }
 

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "roomscan-local-redesign-extension-v1",
+  "contractKind": "localRedesignExtension",
+  "sourceRevision": {
+    "projectID": "project 001",
+    "revisionID": "revision-001",
+    "coordinateSpaceEpochID": "epoch-001",
+    "packageSchemaVersion": "room-scan-project-v2",
+    "semanticSHA256": "not-a-sha256"
+  },
+  "orientation": {
+    "source": "confirmed",
+    "confidence": 1.2,
+    "coordinateSpaceEpochID": "epoch-001",
+    "entryPositionMeters": { "x": 0, "y": 0, "z": 0 },
+    "inwardDirection": { "x": 0, "y": 0, "z": 1 },
+    "canonicalAxes": {
+      "right": { "x": 1, "y": 0, "z": 0 },
+      "up": { "x": 0, "y": 1, "z": 0 },
+      "forward": { "x": 0, "y": 0, "z": 1 }
+    },
+    "canonicalCameras": []
+  },
+  "redesignIntent": {
+    "request": "Invalid source revision fixture.",
+    "scope": "stage",
+    "permissions": []
+  },
+  "propertyMembership": {
+    "propertyID": "property-001",
+    "roomProjectIDs": ["project-001"]
+  },
+  "conceptMetadata": []
+}

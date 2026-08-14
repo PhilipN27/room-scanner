@@ -1,0 +1,152 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "E45DC8C2-0557-4FB6-8799-26A9BA8C4CA9.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-accessibility-reopened-persisted-summary_0_1EBCF981-054F-457E-8AAB-4B14162A5B5A.png",
+        "timestamp" : 1786658995.908
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "516285DC-D10E-46A3-AB24-2951D55A42B6.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-accessibility-finish-review-save-anyway_0_5BFE0F68-465D-4A89-BF26-7066B04E1ECD.png",
+        "timestamp" : 1786658987.359
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "5B7B641E-A5A1-49DA-B19C-D40978872623.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-accessibility-review-overlay-summary_0_B84F015D-B127-46B8-B438-A9AC58F34674.png",
+        "timestamp" : 1786658971.816
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "29FB867A-825E-450D-9530-598E2AE69535.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-accessibility-live-coaching-overlay_0_7FD6D87A-91B6-4336-84F1-31FACB4A610F.png",
+        "timestamp" : 1786658963.047
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "910480FE-58AF-4182-8D9F-C19AAFF477F4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-accessibility-reopened-persisted-summary_0_84788C6E-9DED-4005-B93D-A5B7088BEC12.png",
+        "timestamp" : 1786658948.987
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "EE73CCA3-47F0-4E14-852A-BFB28319D793.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-accessibility-finish-review-save-anyway_0_BBC1A102-D896-43C1-9982-45761387C241.png",
+        "timestamp" : 1786658941.07
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "56EBA53C-7C4D-4583-822D-A7A3730FD941.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-accessibility-review-overlay-summary_0_C8A109C8-C5A3-4697-8D6A-AF15F2C75B16.png",
+        "timestamp" : 1786658925.286
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "8B3FABB6-7CDA-4943-A3C2-26345693F150.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-accessibility-live-coaching-overlay_0_63B2C3E7-F58E-4B2E-8314-153200635C99.png",
+        "timestamp" : 1786658916.635
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "338684AF-B406-47E8-B7CB-99C86BC2F9EA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-default-reopened-persisted-summary_0_7AB52111-0DC0-4856-9D95-99D2AFFEC173.png",
+        "timestamp" : 1786658903.827
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "4618B583-8B1C-4B87-B299-8D17F6F9C9E8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-default-finish-review-save-anyway_0_CC437158-C77D-4BC8-B75F-E6D28AC211AE.png",
+        "timestamp" : 1786658898.766
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "FEAB3172-D5DC-4567-8529-F0DE9B509FCA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-default-review-overlay-summary_0_95579EEF-02E2-4DF9-9633-5DE674BD924F.png",
+        "timestamp" : 1786658891.547
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "16B5E79F-B93D-400D-BC3E-B3C7738423E3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-dark-default-live-coaching-overlay_0_8C4D41C3-4049-4703-B850-1D65C6E67945.png",
+        "timestamp" : 1786658887.817
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "F88959E6-F5DB-4105-BA74-5274B631EA52.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-default-reopened-persisted-summary_0_082FFE32-DCD6-4E69-AD0E-64C46F6F6462.png",
+        "timestamp" : 1786658873.829
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "38F84A5F-D6CA-4F96-BBCE-93A23A34FEFE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-default-finish-review-save-anyway_0_80D75CA0-B56E-4826-91EE-300CD8D07E0C.png",
+        "timestamp" : 1786658868.635
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "FDB1B1E7-9744-4F42-82B0-56517A446230.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-default-review-overlay-summary_0_1E69FD8A-B145-4AFB-B45A-AB7001A922F5.png",
+        "timestamp" : 1786658861.231
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "CE1C7DB9-DD3F-4784-A6B4-AE2EC5404107.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "slice2-quality-ipad-light-default-live-coaching-overlay_0_C043CF7E-BD69-4387-9EDD-EF7FC6DEB54B.png",
+        "timestamp" : 1786658857.053
+      }
+    ],
+    "testIdentifier" : "RoomScanStudioUITests/testSlice2QualityScreenshotMatrix()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomScanStudioUITests/testSlice2QualityScreenshotMatrix"
+  }
+]

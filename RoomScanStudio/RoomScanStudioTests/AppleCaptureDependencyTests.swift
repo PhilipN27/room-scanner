@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreLocation
+import UIKit
 import XCTest
 import RoomScanCore
 @testable import RoomScanStudio
@@ -171,6 +172,92 @@ final class AppleCaptureDependencyTests: XCTestCase {
         XCTAssertEqual(decoded, manifest)
     }
 
+    func testPostStopQualityAnalyzerReusesPosedFramesAndLocalizesBlurWithoutCoverageCollapse() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RoomQualityAnalyzer-\(UUID().uuidString)", isDirectory: true)
+        let framesURL = root.appendingPathComponent(RoomCaptureBundleLibrary.framesSubdirectoryName, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: framesURL, withIntermediateDirectories: true)
+
+        let identity: [Double] = [
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        ]
+        let intrinsics: [Double] = [80, 0, 0, 0, 80, 0, 50, 50, 1]
+        let frames = (0..<4).map { index -> RoomCaptureBundleFrame in
+            let east = index < 2
+            let fileName = String(format: "frame-%05d.jpg", index + 1)
+            let data = east ? flatJPEG() : checkerboardJPEG()
+            try! data.write(to: framesURL.appendingPathComponent(fileName), options: .atomic)
+            var transform = identity
+            transform[12] = east ? 2 : -2
+            return RoomCaptureBundleFrame(
+                fileName: fileName,
+                timestamp: Double(index + 1),
+                cameraTransform: transform,
+                intrinsics: intrinsics,
+                imageWidth: 100,
+                imageHeight: 100,
+                exposureDuration: 0.01
+            )
+        }
+        let manifest = RoomCaptureBundleManifest(
+            schemaVersion: RoomCaptureBundleManifest.currentSchemaVersion,
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            frames: frames,
+            meshAnchorCount: 0,
+            meshVertexCount: 0,
+            meshFaceCount: 0,
+            notes: []
+        )
+        try RoomJSONCoding.makeEncoder().encode(manifest).write(
+            to: root.appendingPathComponent(RoomCaptureBundleLibrary.manifestFileName),
+            options: .atomic
+        )
+        let snapshot = qualitySnapshot()
+        let assessment = try RoomCaptureQualityAnalyzer.analyze(
+            snapshot: snapshot,
+            coordinateSpaceEpochID: "epoch-001",
+            bundleDirectoryURL: root,
+            trackingSamples: [
+                .init(
+                    sequence: 1,
+                    timestamp: 1,
+                    quality: .normal,
+                    limitedReason: nil,
+                    cameraTransform: identity,
+                    intrinsics: intrinsics,
+                    imageWidth: 100,
+                    imageHeight: 100
+                ),
+            ]
+        )
+
+        XCTAssertEqual(assessment.advisoryFindings.map(\.dimension), [.visualSharpness])
+        XCTAssertEqual(assessment.advisoryFindings.first?.affectedRegion?.regionID, "east-wall")
+        XCTAssertEqual(assessment.records[1].state, .acceptable)
+        XCTAssertEqual(assessment.records[2].state, .acceptable)
+        XCTAssertEqual(assessment.records[3].state, .acceptable)
+    }
+
+    func testMissingPostStopImageSourceFailsSafelyToUnavailableGeneralGuidance() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RoomQualityAnalyzerMissing-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let assessment = try RoomCaptureQualityAnalyzer.analyze(
+            snapshot: qualitySnapshot(),
+            coordinateSpaceEpochID: "epoch-001",
+            bundleDirectoryURL: root,
+            trackingSamples: []
+        )
+        XCTAssertEqual(assessment.records[0].state, .unavailable)
+        XCTAssertEqual(assessment.records[1].state, .unavailable)
+        XCTAssertEqual(assessment.records[2].state, .insufficientEvidence)
+        XCTAssertTrue(assessment.advisoryFindings.isEmpty)
+    }
+
     func testCaptureBundleLibraryAdoptionReplacesPriorBundleAndIsDiscoverable() throws {
         let projectID = "test-bundle-project-\(UUID().uuidString.lowercased())"
         defer { try? RoomCaptureBundleLibrary.removeBundle(forProject: projectID) }
@@ -201,5 +288,58 @@ final class AppleCaptureDependencyTests: XCTestCase {
 
         try RoomCaptureBundleLibrary.removeBundle(forProject: projectID)
         XCTAssertNil(RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID))
+    }
+
+    private func qualitySnapshot() -> RoomSemanticSnapshot {
+        let provenance = RoomElementProvenance(
+            framework: "quality-test",
+            sourceIdentifier: "quality-test-source",
+            classificationConfidence: .high,
+            captureAttemptID: "attempt-001",
+            coordinateSpaceEpochID: "epoch-001"
+        )
+        func wall(id: String, x: Double) -> RoomSemanticElement {
+            RoomSemanticElement(
+                id: id,
+                kind: "wall",
+                label: id == "east-wall" ? "East wall" : "West wall",
+                dimensionsMeters: .init(width: 1, height: 1, depth: 0.08),
+                transform: .init(columnMajorValues: [
+                    1, 0, 0, 0,
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                    x, 0, -2, 1,
+                ]),
+                provenance: provenance,
+                mobility: .structural,
+                origin: .deterministicFixture
+            )
+        }
+        return .init(
+            projectID: "pending-project",
+            revisionID: "pending-revision",
+            units: "meters",
+            accuracyDisclaimer: RoomCaptureState.nonSurveyAccuracyDisclaimer,
+            structuralElements: [wall(id: "east-wall", x: 2), wall(id: "west-wall", x: -2)],
+            objectElements: []
+        )
+    }
+
+    private func flatJPEG() -> Data {
+        UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+            UIColor(white: 0.5, alpha: 1).setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }.jpegData(compressionQuality: 0.95)!
+    }
+
+    private func checkerboardJPEG() -> Data {
+        UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { context in
+            for y in 0..<8 {
+                for x in 0..<8 {
+                    (x + y).isMultiple(of: 2) ? UIColor.white.setFill() : UIColor.black.setFill()
+                    context.cgContext.fill(CGRect(x: x * 8, y: y * 8, width: 8, height: 8))
+                }
+            }
+        }.jpegData(compressionQuality: 0.95)!
     }
 }

@@ -16,7 +16,7 @@ enum AppleRoomPlanDelegatePayloadKind: Sendable, Equatable {
     case didUpdate
 }
 
-/// iOS-17 production RoomPlan adapter. One instance owns exactly one
+/// iOS 18-deployment production RoomPlan adapter. One instance owns exactly one
 /// RoomCaptureView (and through it exactly one ARSession/RoomCaptureSession)
 /// for one app-coordinated capture attempt. The view renders the live camera
 /// feed with RoomPlan's in-progress model overlay; its built-in
@@ -37,6 +37,7 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     private var activeAttempt: RoomCaptureAttemptToken?
     private var activeWorkspace: RoomCaptureScratchWorkspace?
     private var coordinateSpaceEpochID: String?
+    private var scanStartPose: RoomScanStartPose?
     private var didIssueFinalStop = false
     private var sessionEndObservationGate = RoomCaptureSessionEndObservationGate()
     private var rawCapturedRoomData: CapturedRoomData?
@@ -46,6 +47,10 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     private var processingTask: Task<RoomCapturePreparedReview, Error>?
     private var photoTask: Task<Void, Error>?
     private var trackingTask: Task<Void, Never>?
+    private var qualityTrackingSamples: [RoomCaptureQualityTrackingSample] = []
+    private var roomPlanQualityCues: [RoomQualityCoachingCue] = []
+    private var trackingQualityCues: [RoomQualityCoachingCue] = []
+    private var semanticQualityCues: [RoomQualityCoachingCue] = []
 
     /// Cleanup waits at most two seconds for RoomPlan's documented asynchronous
     /// `didEndWith` completion. A timeout is deliberately surfaced as a
@@ -80,11 +85,16 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         activeAttempt = attempt
         activeWorkspace = workspace
         coordinateSpaceEpochID = "roomplan-epoch-\(attempt.value)"
+        scanStartPose = nil
         didIssueFinalStop = false
         sessionEndObservationGate.reset()
         rawCapturedRoomData = nil
         latestSnapshot = nil
         referencePhotoAssets = []
+        qualityTrackingSamples = []
+        roomPlanQualityCues = []
+        trackingQualityCues = []
+        semanticQualityCues = []
 
         // RoomCaptureView's documented order is display first, then run its
         // captureSession; running before the view is in a window leaves the
@@ -249,10 +259,15 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         rawCapturedRoomData = nil
         latestSnapshot = nil
         referencePhotoAssets = []
+        qualityTrackingSamples = []
+        roomPlanQualityCues = []
+        trackingQualityCues = []
+        semanticQualityCues = []
         bundleRecorder = nil
         activeWorkspace = nil
         activeAttempt = nil
         coordinateSpaceEpochID = nil
+        scanStartPose = nil
         didIssueFinalStop = false
         sessionEndObservationGate.reset()
         processingTask = nil
@@ -308,6 +323,27 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
                 instruction: instruction
             )
         )
+        switch instruction {
+        case .moveCloseToWall, .moveAwayFromWall:
+            roomPlanQualityCues = [.init(
+                dimension: .spatialVisualCoverage,
+                reasonCode: .weakCoverage,
+                affectedRegion: currentViewedQualityRegion(),
+                disposition: .revisitRecommended
+            )]
+        case .slowDown, .lowTexture:
+            roomPlanQualityCues = [.init(
+                dimension: .arTracking,
+                reasonCode: .trackingLimited,
+                affectedRegion: currentViewedQualityRegion(),
+                disposition: .revisitRecommended
+            )]
+        case .normal:
+            roomPlanQualityCues = []
+        case .turnOnLight, .unknown:
+            break
+        }
+        publishCombinedQualityCoaching(for: activeAttempt)
     }
 
     fileprivate func didEndCapture(
@@ -487,6 +523,29 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
             measurements: [],
             photos: referencePhotoAssets.map(\.photo)
         )
+        let bundleDirectoryURL = workspace.directoryURL.appendingPathComponent(
+            RoomCaptureBundleRecorder.bundleSubdirectoryName,
+            isDirectory: true
+        )
+        let trackingSamples = qualityTrackingSamples
+        let qualityAssessment = (try? await Task.detached(priority: .utility) {
+            try RoomCaptureQualityAnalyzer.analyze(
+                snapshot: snapshot,
+                coordinateSpaceEpochID: coordinateSpaceEpochID,
+                bundleDirectoryURL: bundleDirectoryURL,
+                trackingSamples: trackingSamples
+            )
+        }.value) ?? RoomQualityAssessment(
+            coordinateSpaceEpochID: coordinateSpaceEpochID,
+            records: RoomQualityDimension.allCases.map { dimension in
+                RoomQualityAssessmentRecord(
+                    dimension: dimension,
+                    state: .insufficientEvidence,
+                    reasonCode: .insufficientEvidence,
+                    findings: []
+                )
+            }
+        )
         var evidenceAssets: [RoomAssetInput] = []
         if rawDataWriteError == nil {
             evidenceAssets.append(
@@ -513,9 +572,14 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
             commit: RoomInitialCaptureCommit(
                 draft: RoomDraft(metadata: metadata, revision: payload),
                 evidence: evidence,
-                assets: [thumbnail] + evidenceAssets + referencePhotoAssets.map(\.asset)
+                assets: [thumbnail] + evidenceAssets + referencePhotoAssets.map(\.asset),
+                qualityAssessment: qualityAssessment
             ),
-            guidance: guidanceForCompletedSnapshot(snapshot)
+            guidance: guidanceForCompletedSnapshot(snapshot),
+            orientationSuggestion: try makeOrientationSuggestion(
+                snapshot: snapshot,
+                scanStartPose: scanStartPose
+            )
         )
     }
 
@@ -699,9 +763,8 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
         ))
     }
 
-    /// This exact iOS-17 call is deliberately isolated. It must be compiled on
-    /// the macOS/Xcode gate because Apple SDK availability annotations can vary
-    /// between the documented async API and an installed SDK revision.
+    /// This SDK call is deliberately isolated and compiled by the Xcode gate;
+    /// the installed SDK declares its async form available from iOS 16.
     private func captureHighResolutionReferenceFrame() async throws -> ARFrame {
         try await arSession.captureHighResolutionFrame()
     }
@@ -812,25 +875,141 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
                 guard self.activeAttempt == attempt, !self.didIssueFinalStop else {
                     return
                 }
+                self.captureScanStartPoseIfAvailable()
                 self.publishTrackingObservation(for: attempt)
                 try? await Task.sleep(nanoseconds: 600_000_000)
             }
         }
     }
 
+    /// Captures the first finite AR camera pose observed after RoomPlan starts.
+    /// This remains an app-owned suggestion input; it is not presented as a
+    /// RoomPlan canonical-entry API and requires user review before eligibility.
+    private func captureScanStartPoseIfAvailable() {
+        guard scanStartPose == nil,
+              let coordinateSpaceEpochID,
+              let frame = arSession.currentFrame
+        else { return }
+        let transform = frame.camera.transform
+        let position = RoomRedesignVector3(
+            x: Double(transform.columns.3.x),
+            y: Double(transform.columns.3.y),
+            z: Double(transform.columns.3.z)
+        )
+        let forward = RoomRedesignVector3(
+            x: Double(-transform.columns.2.x),
+            y: Double(-transform.columns.2.y),
+            z: Double(-transform.columns.2.z)
+        )
+        guard position.x.isFinite, position.y.isFinite, position.z.isFinite,
+              forward.x.isFinite, forward.y.isFinite, forward.z.isFinite
+        else { return }
+        scanStartPose = RoomScanStartPose(
+            positionMeters: position,
+            forwardDirection: forward,
+            coordinateSpaceEpochID: coordinateSpaceEpochID
+        )
+    }
+
+    private func makeOrientationSuggestion(
+        snapshot: RoomSemanticSnapshot,
+        scanStartPose: RoomScanStartPose?
+    ) throws -> RoomOrientationSuggestion? {
+        guard let scanStartPose else { return nil }
+        let bounds = try RoomSpatialNormalization.bounds(of: snapshot)
+        let center = bounds.center
+        let entries = snapshot.structuralElements.filter {
+            let role = RoomSemanticPresentation.role(for: $0)
+            return role == .door || role == .opening
+        }
+        var candidates: [RoomEntryCandidate] = []
+        for element in entries {
+            let detectedPosition = try RoomSpatialNormalization.position(of: element)
+            // RoomPlan reports a door/opening transform near the feature center.
+            // The app-owned entry reference is the corresponding floor point.
+            let position = RoomRedesignVector3(
+                x: detectedPosition.x,
+                y: bounds.minimum.y,
+                z: detectedPosition.z
+            )
+            let direction = RoomRedesignVector3(
+                x: center.x - position.x,
+                y: 0,
+                z: center.z - position.z
+            )
+            guard hypot(direction.x, direction.z) > 0.001 else { continue }
+            let confidence: Double
+            switch element.provenance?.classificationConfidence {
+            case .high: confidence = 0.9
+            case .medium: confidence = 0.7
+            case .low: confidence = 0.5
+            case .unknown, .none: confidence = 0.4
+            }
+            candidates.append(
+                RoomEntryCandidate(
+                    featureID: element.id,
+                    semanticRole: RoomSemanticPresentation.role(for: element),
+                    positionMeters: position,
+                    inwardDirection: direction,
+                    confidence: confidence
+                )
+            )
+        }
+        return try RoomOrientationSuggestionEngine.suggest(
+            scanStartPose: scanStartPose,
+            candidates: candidates
+        )
+    }
+
     /// This polling path is operational-only. It never supplies a photo and
     /// never describes `currentFrame` as a high-resolution capture fallback.
     private func publishTrackingObservation(for attempt: RoomCaptureAttemptToken) {
         guard let frame = arSession.currentFrame else {
+            if qualityTrackingSamples.count < 2_000 {
+                qualityTrackingSamples.append(.init(
+                    sequence: qualityTrackingSamples.count + 1,
+                    timestamp: ProcessInfo.processInfo.systemUptime,
+                    quality: .notAvailable,
+                    limitedReason: nil,
+                    cameraTransform: [],
+                    intrinsics: [],
+                    imageWidth: 0,
+                    imageHeight: 0
+                ))
+            }
             observationHandler?(
                 .tracking(attempt: attempt, quality: .notAvailable, limitedReason: nil)
             )
             observationHandler?(
                 .operationalGuidance(attempt: attempt, values: [.trackingLost])
             )
+            trackingQualityCues = [.init(
+                dimension: .arTracking,
+                reasonCode: .trackingLimited,
+                affectedRegion: nil,
+                disposition: .revisitRecommended
+            )]
+            publishCombinedQualityCoaching(for: attempt)
             return
         }
         let tracking = Self.trackingState(from: frame.camera.trackingState)
+        if qualityTrackingSamples.count < 2_000 {
+            let intrinsics = frame.camera.intrinsics
+            qualityTrackingSamples.append(.init(
+                sequence: qualityTrackingSamples.count + 1,
+                timestamp: frame.timestamp,
+                quality: tracking.quality,
+                limitedReason: tracking.reason,
+                cameraTransform: Self.roomTransform(from: frame.camera.transform).columnMajorValues,
+                intrinsics: [
+                    Double(intrinsics.columns.0.x), Double(intrinsics.columns.0.y), Double(intrinsics.columns.0.z),
+                    Double(intrinsics.columns.1.x), Double(intrinsics.columns.1.y), Double(intrinsics.columns.1.z),
+                    Double(intrinsics.columns.2.x), Double(intrinsics.columns.2.y), Double(intrinsics.columns.2.z),
+                ],
+                imageWidth: Int(frame.camera.imageResolution.width),
+                imageHeight: Int(frame.camera.imageResolution.height)
+            ))
+        }
         observationHandler?(
             .tracking(
                 attempt: attempt,
@@ -838,6 +1017,20 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
                 limitedReason: tracking.reason
             )
         )
+
+        let trackingCue: RoomQualityCoachingCue?
+        if tracking.quality == .limited || tracking.quality == .notAvailable {
+            trackingCue = .init(
+                dimension: .arTracking,
+                reasonCode: .trackingLimited,
+                affectedRegion: currentViewedQualityRegion(),
+                disposition: .revisitRecommended
+            )
+        } else {
+            trackingCue = nil
+        }
+        trackingQualityCues = trackingCue.map { [$0] } ?? []
+        publishCombinedQualityCoaching(for: attempt)
 
         var guidance: [RoomCaptureGuidance] = []
         if tracking.quality == .limited {
@@ -861,6 +1054,57 @@ final class AppleRoomCaptureDriver: RoomCaptureDriving {
     ) {
         let values = guidanceForCompletedSnapshot(snapshot)
         observationHandler?(.semanticGuidance(attempt: attempt, values: values))
+        let lowConfidenceCues = RoomCaptureQualityAnalyzer.makeRegions(snapshot: snapshot)
+            .filter { region in
+                guard let elementID = region.semanticElementID else { return false }
+                return (snapshot.structuralElements + snapshot.objectElements)
+                    .first(where: { $0.id == elementID })?
+                    .provenance?.classificationConfidence == .low
+            }
+            .prefix(4)
+            .map {
+                RoomQualityCoachingCue(
+                    dimension: .semanticIdentificationConfidence,
+                    reasonCode: .semanticLowConfidence,
+                    affectedRegion: $0,
+                    disposition: .revisitRecommended
+                )
+            }
+        semanticQualityCues = Array(lowConfidenceCues)
+        publishCombinedQualityCoaching(for: attempt)
+    }
+
+    /// Each live evidence source owns only its own cue set. Publishing the
+    /// union prevents a recovered tracking observation from erasing a real
+    /// semantic or coverage warning (and vice versa); Core then applies its
+    /// deterministic ordering, deduplication, and visible-count bound.
+    private func publishCombinedQualityCoaching(for attempt: RoomCaptureAttemptToken) {
+        observationHandler?(
+            .qualityCoaching(
+                attempt: attempt,
+                values: roomPlanQualityCues + trackingQualityCues + semanticQualityCues
+            )
+        )
+    }
+
+    private func currentViewedQualityRegion() -> RoomQualityRegion? {
+        guard let snapshot = latestSnapshot,
+              let frame = arSession.currentFrame
+        else { return nil }
+        let intrinsics = frame.camera.intrinsics
+        guard let camera = RoomMeshProjection.Camera(
+            cameraToWorldColumnMajor: Self.roomTransform(from: frame.camera.transform).columnMajorValues,
+            intrinsicsColumnMajor: [
+                Double(intrinsics.columns.0.x), Double(intrinsics.columns.0.y), Double(intrinsics.columns.0.z),
+                Double(intrinsics.columns.1.x), Double(intrinsics.columns.1.y), Double(intrinsics.columns.1.z),
+                Double(intrinsics.columns.2.x), Double(intrinsics.columns.2.y), Double(intrinsics.columns.2.z),
+            ],
+            sensorWidth: Int(frame.camera.imageResolution.width),
+            sensorHeight: Int(frame.camera.imageResolution.height)
+        ) else { return nil }
+        let regions = RoomCaptureQualityAnalyzer.makeRegions(snapshot: snapshot)
+        let visible = Set(RoomCaptureQualityAnalyzer.visibleRegionIDs(regions: regions, camera: camera))
+        return regions.first { visible.contains($0.regionID) }
     }
 
     private func guidanceForCompletedSnapshot(

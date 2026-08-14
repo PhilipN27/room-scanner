@@ -1193,3 +1193,209 @@ delivery wiring only. Scheduler admission, sustained background execution,
 system progress UI, notification timing, force-quit behavior, battery/thermal
 behavior, LiDAR registration, scan health, and photo-level quality remain the
 physical-device gates in `Docs/real-device-test-plan.md`.
+
+## 2026-08-12 - AI redesign platform Slice 0
+
+Scope: feasibility and contract inventory, five strict v1 contract families,
+malformed/cross-version fixtures, threat model, and a conditional hosted-service
+ADR. No hosted service, account, credential, endpoint, entitlement, upload,
+billing path, or production infrastructure was created. Private CloudKit
+backup remained separate from future professional sync.
+
+The required baseline was not initially green: static expectations were stale,
+the project carried a team identifier, the masthead used a fixed display size,
+and existing UI checks had off-screen/timing failures. Those baseline issues
+were repaired without changing the redesign product boundary. A detached
+worktree at exact commit `362c8cd862f38b1d159647d901ba75c6ef749efd`
+contains the repairs but no redesign source, fixtures, or tests. Its final
+oracles were:
+
+1. Static verifier and simulator-selector self-test passed.
+2. Portable `RoomScanCore`: 178 tests, 0 failures.
+3. iPhone 16 Pro / iOS 26.3.1 Simulator: 120 app + 25 UI tests, 0 failures.
+4. iPad (10th generation) / iOS 26.3.1 Simulator: 120 app + 25 UI tests,
+   0 failures.
+5. Exact package resolution and unsigned generic-device build succeeded with
+   0 errors; the build input, objects, and linked symbols contain no redesign
+   contract. The integrated build is the positive artifact control.
+
+This proves baseline-source independence retrospectively. It is not rewritten
+as a claim that the initially failing baseline passed earlier in wall-clock
+time.
+
+Focused redesign TDD first failed for absent types, then for unsupported source
+schemas, canonical slash escaping, unsafe paths, missing Concept Set content
+identity, duplicate JSON members, case/Unicode path aliases, and a filename-
+only portal download description. Restored guards reject those cases before
+typed materialization and validate actual bounded portal package archives.
+Safe live mutations proved raw-default exclusion, exact AI/sync ledgers,
+portal allowlisting, Concept attachment identity, and top-level decoder
+protection are exercised. Final focused result: 27 tests, 0 failures.
+
+The guest/offline oracle now combines two controls. An in-process iPhone
+Simulator test bootstraps the real app environment and completes simulated
+capture, explicit Save, local load/edit, actual legacy export preparation, and
+lease cleanup; it passed 1/1. An explicit fail-fast transport catches a
+deliberately injected HTTP request. Because global `URLProtocol` registration
+did not intercept new default/ephemeral sessions on this Simulator, the static
+production-boundary oracle separately rejects HTTP/auth/hosted clients and a
+memory-only injected `URLSession` proves that detector fails closed. Future AI
+package/import and physical Share Sheet paths are not claimed.
+
+Fresh final integrated verification:
+
+1. Static verifier, selector self-test, SDK arm64 iOS 18 type-check, and
+   `git diff --check`: passed.
+2. Complete portable `RoomScanCore`: 205 tests, 0 failures; focused redesign
+   subset: 27/27.
+3. iPhone 16 Pro / iOS 26.3.1 Simulator: 121 app + 25 UI tests, 0 failures;
+   `/private/tmp/roomscanstudio-ai-redesign-final4-iphone.xcresult`.
+4. iPad (10th generation) / iOS 26.3.1 Simulator: 121 app + 25 UI tests,
+   0 failures;
+   `/private/tmp/roomscanstudio-ai-redesign-final4-ipad.xcresult`.
+5. Exact package resolution and unsigned generic-device build succeeded with
+   0 errors. The build Swift file list and object output contain
+   `RoomRedesignContracts`; linked symbols include the AI-package validator and
+   portal snapshot types.
+6. Same-family contract, security, integration, and final sign-off reviews
+   ended with no high- or medium-severity finding. This got no cross-model pass.
+
+An earlier full iPhone run was a useful red control: its long metadata lifecycle
+completed after 64.096 seconds but exceeded the generic one-minute test
+allowance; another two-launch test transiently failed app termination before an
+automatic retry. The repaired focused pair passed, then both final full
+matrices passed. Superseded in-flight Xcode runs were interrupted only after
+later evidence changes; their resolved process trees exited and orphan checks
+were clean.
+
+Installed declarations and builds are not physical-device or hosted-service
+evidence. RoomPlan/ARKit/LiDAR behavior, Face ID/passcode states, Share Sheet
+destinations and lifecycle, hosted identity/authorization/revocation/deletion,
+and representative operating cost remain explicit gates in the real-device
+plan, release checklist, threat model, and ADR.
+
+## 2026-08-12 - AI redesign platform Slice 1
+
+Scope: additive spatial-truth/orientation v2 contracts, six deterministic
+canonical cameras, Stage/Renovate/Reimagine intent and per-feature permissions,
+Concept Set provenance, provider-neutral orientation readiness, nine semantic
+presentations, and local property containers. Companion documents remain
+separate from authoritative packages; existing revisions and fixtures are not
+rewritten. No Slice 2 quality work or hosted workflow was added.
+
+Red-green proof began with missing production APIs, then pinned the restored
+canonical-camera digest at
+`46c43c43604edf57dc8c35dc20ec8cef461ca9f3ce2b8249838d8ed733937edb`.
+Focused Slice 1 Core passed 12/12; complete Core passed 217/217. Neutralizing
+the live suggested-orientation guard made the intended negative test fail with
+`XCTAssertThrowsError failed: did not throw an error`; restoring the guard made
+all 8 surrounding spatial tests pass.
+
+Fresh final local verification:
+
+1. iPhone 16 Pro / iOS 26.3.1 Simulator: 123 app + 27 UI tests, 0 failures;
+   `/private/tmp/RoomScanStudio-Slice1-iPhone-isolated-final-20260812-1855.xcresult`.
+2. iPad (10th generation) / iOS 26.3.1 Simulator: 123 app + 27 UI tests,
+   0 failures;
+   `/private/tmp/RoomScanStudio-Slice1-iPad-isolated-final-20260812-1911.xcresult`.
+3. The focused screenshot matrix passed on both form factors and retained all
+   eight light/dark/default/accessibility attachments after a nonblank-frame
+   oracle. Visual critique confirmed all nine semantic roles differ by name,
+   symbol, border/pattern, selection treatment, accessibility text, and color.
+4. Exact package resolution and the unsigned generic iOS build succeeded.
+   Device-build inputs, objects, schema strings, and demangled symbols prove
+   the new Core and app sources were delivered.
+5. Static verifier and its hosted-client/weakened-guard controls, simulator
+   selector self-test, guest offline oracle, and `git diff --check` passed.
+
+One connected iPhone 17 Pro was unavailable and no physical iPad was present.
+RoomPlan/ARKit/LiDAR suggestion quality and coordinate conventions therefore
+remain unverified under the exact Slice 1 protocol in the real-device plan.
+Slice 1 is locally complete but not complete end to end. This got no
+cross-model pass.
+
+## 2026-08-13 - Slice 1 device-discovered orientation-plan parity correction
+
+An iPhone 17 Pro fresh capture proved that the orientation review's top-down
+plan was vertically reflected relative to the semantic viewer. The root cause
+was a display-only `+Z` convention mismatch; saved RoomPlan transforms were not
+mutated. The default plan now uses viewer parity and display-only Rotate 90°,
+Mirror, and Reset controls. An optional local presentation transform round
+trips in the Slice 1 companion while canonical orientation, cameras, feature
+IDs, captured geometry, measurements, evidence, lineage, coordinate epoch, and
+revision bytes remain unchanged.
+
+Fresh evidence from the final source state:
+
+1. Complete Core: 220 tests, 0 failures; restored surrounding spatial suite:
+   11 tests, 0 failures.
+2. Complete app-unit target: 126 tests, 0 failures.
+3. Strengthened orientation/property/semantic UI flow passed on iPhone and
+   iPad, including rotate, mirror, save, reopen, persisted values, reset,
+   property grouping, and all semantic roles.
+4. Complete iPhone 16 Pro / iOS 26.3.1 Simulator scheme: 153/153.
+5. Complete iPad (10th generation) / iOS 26.3.1 Simulator scheme: 153/153.
+6. Package resolution and unsigned generic iOS build passed; built-artifact
+   inspection contained `RoomTopDownPresentationTransform` and
+   `RoomOrientationPlanDisplayTransform` symbols.
+7. Guard mutation: removing the suggested-orientation guard made the focused
+   negative test fail with `XCTAssertThrowsError failed: did not throw an
+   error`; restoring it made the test pass. Static mutation controls detected
+   both a weakened guard and an injected HTTP client. Simulator-selector
+   self-test and `git diff --check` passed.
+8. The normal static verifier reports only the intentionally local,
+   uncommitted `DEVELOPMENT_TEAM` required for physical-device installation.
+
+An earlier full iPad attempt is excluded: the host had only 116 MiB free, Xcode
+timed out collecting Simulator diagnostics, and its result writer failed with
+an I/O error. Only disposable RoomScanStudio DerivedData created by verification
+was removed; the worktree and evidence files were untouched. The clean rerun
+with adequate space passed 153/153.
+
+The corrected UI still needs a physical iPhone parity/control/persistence
+retest, and all Slice 1 behaviors remain required on a supported physical LiDAR
+iPad. The user deferred the Norwalk YMCA example until the whole app is
+complete. No Slice 2 code, hosted system, account, upload, or production change
+was made.
+
+## 2026-08-13 - AI redesign platform Slice 2
+
+Implemented provider-neutral, revision/epoch-bound quality records for visual
+sharpness, spatial/visual coverage, AR tracking, and semantic identification
+confidence. The optional immutable-revision report preserves legacy decoding;
+post-stop analysis reuses posed keyframes and existing sharpness scoring while
+the live path remains scalar/pose-only. The app adds bounded deduplicated
+coaching, patterned accessible overlays, advisory Finish review, exact explicit
+Save Anyway provenance, and reopened quality summary. The future carrier is a
+contract hook only; no Slice 3 archive or hosted route was added.
+
+Red-green and mutation proof: missing APIs failed compilation; the canonical
+golden placeholder failed with digest
+`f5757df1fc17596c3b3ab47fc63709a4bca2bafd3d5dc48f36990beedd63ab36`.
+Neutralizing both weak-Finish/save checks failed the focused coordinator test;
+neutralizing required acknowledgement failed the Core throw assertion.
+Restored focused tests passed. Static controls detected injected live
+`luminanceSharpness` and injected production `URLSession` calls.
+
+Fresh final evidence:
+
+1. Complete Core 230/230; quality tests 10/10; complete app-unit target
+   131/131.
+2. Complete iPhone 16 Pro / iOS 26.3.1 Simulator scheme 160/160 at
+   `/private/tmp/RoomScanStudio-Slice2-iPhone-full.xcresult`.
+3. Complete iPad (10th generation) / iOS 26.3.1 Simulator scheme 160/160 at
+   `/private/tmp/RoomScanStudio-Slice2-iPad-full.xcresult`.
+4. Focused screenshot runs passed with 16 retained images per form factor over
+   four states, light/dark, and default/accessibility XXXL Dynamic Type.
+5. Exact package resolution, unsigned generic iOS build, built-artifact
+   source/schema/symbol inspection, selector self-test, `git diff --check`, and
+   all non-signing static checks passed. Branch/HEAD remained exact and the
+   staged diff was empty. The ordinary verifier reports only the preserved
+   local `DEVELOPMENT_TEAM`.
+
+The paired iPhone 17 Pro was unavailable and no physical iPad was present.
+Controlled physical Slice 2 iPhone behavior remains unverified and is the sole
+acceptance gate. Physical iPad is owner-waived and explicitly unverified. The
+Norwalk YMCA example remains deferred. No external system changed, nothing was
+staged or committed, and Slice 3 did not start. Full evidence is in
+`Docs/evidence/2026-08-13-ai-redesign-slice-2-verification.md`.

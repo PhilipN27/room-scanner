@@ -4,7 +4,7 @@ RoomScanStudio is a native iPhone and iPad room-documentation project. Phase 1
 adds an offline local room library backed by authoritative file packages, with a
 rebuildable local SwiftData index and an explicit deterministic mock-review
 path. Phase 2A adds Foundation-level capture contracts and evidence storage.
-Phase 2B adds a compile-intended iOS 17 RoomPlan adapter beside a deterministic
+Phase 2B adds a compile-intended iOS 18 RoomPlan adapter beside a deterministic
 simulator/test driver, explicit capture coordination, and a black semantic
 Canvas. Phase 2B itself did not add a rescan route, alternate export formats,
 CloudKit, a server, accounts, or analytics.
@@ -35,7 +35,7 @@ CloudKit call occurs at launch or merely when the local preference changes.
 The repository now contains:
 
 - a classic-group Xcode project with RoomScanStudio, XCTest, and XCUITest
-  targets; iOS 17.0; iPhone and iPad support; a shared scheme; no active team,
+  targets; iOS 18.0; iPhone and iPad support; a shared scheme; no active team,
   provisioning profile, iCloud entitlement, or CloudKit capability;
 - a repository-root local Swift package dependency named `RoomScanCore`, used
   by the app and unit-test targets without duplicating store behavior;
@@ -91,7 +91,7 @@ The repository now contains:
   actionable rather than routing away;
 - a Phase-3 V1-A fixture-only rescan flow. The exact safety boundary is:
   “A rescan candidate is valid only if one of these registrations is proven: 1.
-  continuous capture in the original app-owned ARSession, or 2. successful
+  continuous capture in the original `RoomCaptureView`-owned ARSession, or 2. successful
   relocalization against a recorded ARWorldMap.” The V1 production path is
   deliberately unavailable because the final privacy stop ends continuity and
   no world map is recorded. Only `--use-deterministic-rescan-fixture` enables
@@ -139,7 +139,7 @@ The repository now contains:
   bounded retry/cancellation, and settings UI are source-authored only;
 - authoring-time XCTest/XCUITest contracts and a static host verifier.
 
-The app deployment floor is iOS/iPadOS 17.0. The complete hosted Xcode 16.4
+The app deployment floor is iOS/iPadOS 18.0. The complete hosted Xcode 16.4
 build and Simulator matrix passes at that deployment target; physical RoomPlan
 behavior still requires supported LiDAR hardware. `RoomScanCore` also declares
 macOS 13 because it is Foundation-only and its portable test suite runs there.
@@ -307,7 +307,7 @@ passed on commit `aa18d6bbedfc4525208653a330dfe216636f5b01`. Xcode 16.4
 resolved the local package, all 122 `RoomScanCore` tests passed, the unsigned
 generic iOS application built, and dynamically selected iPhone and iPad
 Simulators each passed 62 app tests plus 25 UI tests. To reproduce the proved
-build path on a Mac with an iOS 17-or-later SDK, run:
+build path on a Mac with an iOS 18-or-later SDK, run:
 
     xcodebuild -resolvePackageDependencies -project RoomScanStudio.xcodeproj -scheme RoomScanStudio
     swift test

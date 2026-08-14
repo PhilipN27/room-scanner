@@ -11,9 +11,9 @@ design decision record; Simulator evidence is not physical-device validation.
 
 | Topic | Decision | Status |
 | --- | --- | --- |
-| Deployment floor | Use iOS and iPadOS 17.0 because SwiftData is the limiting framework. | Hosted Xcode 16.4 build and Simulator matrix passed; physical-device behavior remains unverified |
+| Deployment floor | The checked-in app and test targets use iOS and iPadOS 18.0. The portable package remains independently declared for iOS 17 and macOS 13. | Current Xcode build and Simulator proof is recorded separately; physical-device behavior remains unverified |
 | Devices | Support iPhone and iPad. RoomCaptureSession.isSupported alone gates live capture; ARWorldTrackingConfiguration scene reconstruction support gates only optional raw-mesh evidence. Never use a device-model allowlist. | API and hardware behavior unverified |
-| Capture ownership | The iOS adapter source creates one app-owned ARSession per driver and passes it to RoomCaptureSession(arSession:). It neither runs/delegates the ARSession nor creates a competing camera session; final cleanup retains ownership until RoomPlan reports didEndWith or exposes a retryable timeout. | Source-authored; SDK/API behavior unverified |
+| Capture ownership | The iOS adapter creates one `RoomCaptureView` per driver and derives that view's single `RoomCaptureSession` and `ARSession`. It delegates RoomPlan through the view/session, reconfigures only that same AR session for optional scene reconstruction, and creates no competing camera session; final cleanup retains the driver until RoomPlan reports `didEndWith` or exposes a retryable timeout. | Source-authored and SDK-compiled; physical-device behavior unverified |
 | Capture UI | A deterministic black semantic Canvas, explicit reducer route, and compile-intended live RoomPlan adapter are source-authored. A custom live presentation remains a physical-device gate/hypothesis. | Host-static only; device behavior unverified |
 | Mesh preservation | Probe raw mesh collection only when RoomPlan preserves the requested sceneReconstruction configuration. Disable raw mesh capture if it does not. | Unverified |
 | Required preservation | Preserve Encodable CapturedRoomData, CapturedRoom, an app-normalized semantic snapshot, native USD/USDZ, optional raw mesh/world map, photos, and provenance when each is available. | API/asset availability unverified |
@@ -157,7 +157,7 @@ links, package/revision/document/asset links, dangling declared assets, and
 duplicate semantic/annotation/measurement/photo IDs. A corrupt sibling package
 is exposed as a listing diagnostic while valid sibling packages remain usable.
 
-“A rescan candidate is valid only if one of these registrations is proven: 1. continuous capture in the original app-owned ARSession, or 2. successful relocalization against a recorded ARWorldMap.”
+“A rescan candidate is valid only if one of these registrations is proven: 1. continuous capture in the original `RoomCaptureView`-owned ARSession, or 2. successful relocalization against a recorded ARWorldMap.”
 
 RoomPlan identifiers are not assumed stable across sessions, and confidence is
 not treated as geometric accuracy. V1 stops the app-owned session with
@@ -327,7 +327,8 @@ license external reference material.
 
 1. Physical-device behavior of the RoomPlan/ARKit calls that compile in the
    hosted Xcode 16.4 build.
-2. Whether RoomPlan preserves scene reconstruction on the app-owned ARSession.
+2. Whether RoomPlan preserves scene reconstruction on the `RoomCaptureView`-
+   owned ARSession.
 3. Whether an app-owned session and a custom black scan surface work together.
 4. CapturedRoomData persistence, CapturedRoom export metadata, world-map
    storage, and their practical file sizes on current SDKs.

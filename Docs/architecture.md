@@ -124,7 +124,7 @@ revisions; they do not overwrite history.
 
 ## Rescan safety contract
 
-“A rescan candidate is valid only if one of these registrations is proven: 1. continuous capture in the original app-owned ARSession, or 2. successful relocalization against a recorded ARWorldMap.”
+“A rescan candidate is valid only if one of these registrations is proven: 1. continuous capture in the original `RoomCaptureView`-owned ARSession, or 2. successful relocalization against a recorded ARWorldMap.”
 
 Phase 3 V1-A deliberately proves neither production registration path. V1 final
 capture stops with `pauseARSession: true`, so continuity is unavailable, and the
@@ -177,10 +177,12 @@ heuristics), RoomPlan instruction/termination mirrors, and ARKit tracking-state
 mirrors. Those categories never claim geometric accuracy. Phase 2B adds a
 black SwiftUI semantic Canvas, explicit attempt-local scratch outside the
 authoritative project root, a deterministic simulated driver for UI tests, and
-a compile-intended iOS-only production adapter. The adapter owns one `ARSession`
-per leased driver, injects it into `RoomCaptureSession(arSession:)`, sets only
-the RoomCaptureSession delegate, and never runs/reconfigures/delegates the AR
-session or creates an AVCapture session, picker, or second camera session.
+a compile-intended iOS-only production adapter. The adapter owns one
+`RoomCaptureView` per leased driver and derives that view's single
+`RoomCaptureSession` and `ARSession`. It delegates RoomPlan through the view and
+session, and reconfigures only that same AR session when probing optional scene
+reconstruction; it creates no AVCapture session, picker, second AR session, or
+second camera owner.
 Camera permission follows explicit Prepare; one-shot GPS follows explicit user
 choice. GPS authorization and reference-photo callbacks are attempt-tokenized.
 A cancelled GPS request is resumed and cleared before terminal routing; a live

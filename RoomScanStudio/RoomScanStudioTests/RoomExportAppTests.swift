@@ -93,6 +93,99 @@ final class RoomExportAppTests: XCTestCase {
         XCTAssertEqual(cleaner.cleanedWorkspaces, [workspace])
     }
 
+    /// This is an in-process `AppEnvironment` bootstrap/integration oracle,
+    /// not an XCUITest app-process launch or a physical Share Sheet proof.
+    /// It covers the current local-only route through simulated capture, save,
+    /// package view/edit, and legacy head-export preparation. Future AI package
+    /// and concept-import routes are deliberately outside this Slice 0 oracle.
+    func testGuestSimulatedCaptureEditAndLegacyExportStayOffline() async throws {
+        let arguments = [
+            "--ui-testing",
+            "--reset-local-store",
+            "--use-simulated-capture",
+            "--use-mock-fixture",
+        ]
+        GuestOfflineHTTPTrap.reset()
+        GuestOfflineHTTPTrap.install()
+        defer { GuestOfflineHTTPTrap.uninstall() }
+        defer { cleanupGuestOfflineProjectAndCaptureScratch(arguments: arguments) }
+
+        let environment = AppEnvironment(arguments: arguments)
+        let capture = environment.acquireCaptureCoordinator()
+        capture.prepare()
+        try await awaitCapturePhase(capture, .ready)
+        capture.start()
+        try await awaitCapturePhase(capture, .scanning)
+        capture.stop()
+        try await awaitCapturePhase(capture, .review)
+        capture.roomName = "Offline guest capture"
+        capture.save()
+        try await awaitCapturePhase(capture, .saved)
+        environment.releaseCaptureCoordinator(capture)
+
+        await environment.libraryController.refreshLibrary()
+        XCTAssertEqual(environment.libraryController.summaries.count, 1)
+        let summary = try XCTUnwrap(environment.libraryController.summaries.first)
+        let initialPackage = try await environment.libraryController.loadPackage(
+            projectID: summary.projectID
+        )
+        let initialRevision = try XCTUnwrap(initialPackage.revisions.last)
+        var editor = try RoomRevisionEditor(payload: initialRevision.payload)
+        try editor.renameElement(
+            id: "simulated-table-001",
+            label: "Offline edited table"
+        )
+        let editedRevision = try await environment.libraryController.commitEditRevision(
+            projectID: summary.projectID,
+            expectedHeadRevisionID: initialPackage.manifest.headRevisionID,
+            payload: editor.payload
+        )
+        XCTAssertEqual(editedRevision.reason, RoomRevisionReason.edit)
+
+        await environment.exportCoordinator.prepare(
+            projectID: summary.projectID,
+            expectedHeadRevisionID: editedRevision.revisionID
+        )
+        XCTAssertEqual(environment.exportCoordinator.state, .ready)
+        let preparedExport = try XCTUnwrap(environment.exportCoordinator.readyResult)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preparedExport.archiveURL.path))
+        await environment.exportCoordinator.completeShare(completed: false)
+        XCTAssertEqual(environment.exportCoordinator.state, .idle)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: preparedExport.workspaceURL.path))
+
+        XCTAssertTrue(
+            GuestOfflineHTTPTrap.interceptedURLs.isEmpty,
+            "The local route must not hand an HTTP(S) request to the registered test trap."
+        )
+
+        // Positive control: inject the trap into an isolated ephemeral session.
+        // On the iOS 26.3.1 Simulator, `URLProtocol.registerClass` did not
+        // intercept newly created default or ephemeral URLSession instances:
+        // both reached `.invalid` DNS and returned `.cannotFindHost`. The
+        // explicit configuration below proves this trap itself fails before a
+        // transport can open; the companion production-source oracle guards
+        // uninstrumented hosted/auth client creation.
+        let positiveControlURL = try XCTUnwrap(
+            URL(string: "https://offline-guard.invalid/positive-control")
+        )
+        let result = GuestOfflineRequestResult()
+        let requestWasIntercepted = expectation(
+            description: "The fail-fast offline URL protocol intercepts HTTP(S)."
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GuestOfflineHTTPTrap.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        session.dataTask(with: positiveControlURL) { _, _, error in
+            result.record(error: error)
+            requestWasIntercepted.fulfill()
+        }.resume()
+        await fulfillment(of: [requestWasIntercepted], timeout: 1)
+
+        XCTAssertEqual(result.errorCode, .cannotConnectToHost)
+        XCTAssertEqual(GuestOfflineHTTPTrap.interceptedURLs, [positiveControlURL])
+    }
+
     func testControllerMaterializesFixtureHeadWithCanonicalJSONThumbnailAndReferencePhoto() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "RoomExportControllerFixture-\(UUID().uuidString)",
@@ -343,5 +436,131 @@ private final class FakeRoomExportWorkspaceCleaner: RoomExportWorkspaceCleaning 
             throw RoomExportError.cleanupFailed("Injected cleanup failure.")
         }
         cleanedWorkspaces.append(workspaceURL)
+    }
+}
+
+@MainActor
+private func awaitCapturePhase(
+    _ coordinator: RoomCaptureCoordinator,
+    _ expected: RoomCapturePhase
+) async throws {
+    for _ in 0..<250 {
+        if coordinator.state.phase == expected {
+            return
+        }
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    throw GuestOfflineRouteTestError.captureDidNotReachPhase(
+        expected: expected,
+        actual: coordinator.state.phase
+    )
+}
+
+private enum GuestOfflineRouteTestError: LocalizedError {
+    case captureDidNotReachPhase(expected: RoomCapturePhase, actual: RoomCapturePhase)
+
+    var errorDescription: String? {
+        switch self {
+        case let .captureDidNotReachPhase(expected, actual):
+            return "Expected simulated capture phase \(expected.rawValue), reached \(actual.rawValue)."
+        }
+    }
+}
+
+/// `--reset-local-store` deliberately isolates these two roots by test-host
+/// process ID. Re-resolving them after the route reaches its terminal save and
+/// export-cleanup states removes only this test's local project/scratch state.
+@MainActor
+private func cleanupGuestOfflineProjectAndCaptureScratch(arguments: [String]) {
+    let fileManager = FileManager.default
+    _ = RoomProjectRootResolver.resolve(arguments: arguments, fileManager: fileManager)
+    _ = RoomCaptureScratchRootResolver.resolve(arguments: arguments, fileManager: fileManager)
+}
+
+/// Test-only HTTP(S) transport guard. It is registered before `AppEnvironment`
+/// bootstraps and records every HTTP(S) request it would otherwise load. The
+/// test's positive control uses an explicit protocol class session so it cannot
+/// fall through to a socket if global registration changes in a future SDK.
+private final class GuestOfflineHTTPTrap: URLProtocol, @unchecked Sendable {
+    private static let recorder = GuestOfflineRequestRecorder()
+
+    static var interceptedURLs: [URL] {
+        recorder.urls
+    }
+
+    static func install() {
+        URLProtocol.registerClass(Self.self)
+    }
+
+    static func uninstall() {
+        URLProtocol.unregisterClass(Self.self)
+        reset()
+    }
+
+    static func reset() {
+        recorder.reset()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        guard let scheme = request.url?.scheme?.lowercased() else {
+            return false
+        }
+        return scheme == "http" || scheme == "https"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        if let url = request.url {
+            Self.recorder.record(url)
+        }
+        client?.urlProtocol(
+            self,
+            didFailWithError: URLError(.cannotConnectToHost)
+        )
+    }
+
+    override func stopLoading() {}
+}
+
+private final class GuestOfflineRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedURLs: [URL] = []
+
+    var urls: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedURLs
+    }
+
+    func record(_ url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        recordedURLs.append(url)
+    }
+
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        recordedURLs = []
+    }
+}
+
+private final class GuestOfflineRequestResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedErrorCode: URLError.Code?
+
+    var errorCode: URLError.Code? {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedErrorCode
+    }
+
+    func record(error: Error?) {
+        lock.lock()
+        defer { lock.unlock() }
+        recordedErrorCode = (error as? URLError)?.code
     }
 }

@@ -21,7 +21,8 @@ let package = Package(
         .testTarget(
             name: "RoomScanCoreTests",
             dependencies: ["RoomScanCore"],
-            path: "RoomScanCore/Tests/RoomScanCoreTests"
+            path: "RoomScanCore/Tests/RoomScanCoreTests",
+            exclude: ["Fixtures"]
         )
     ]
 )

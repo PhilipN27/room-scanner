@@ -14,6 +14,9 @@ final class RoomCaptureCoordinator: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var cleanupErrorMessage: String?
     @Published private(set) var qualitativeGuidance: [String] = []
+    @Published private(set) var liveQualityCues: [RoomQualityCoachingCue] = []
+    @Published private(set) var qualityAssessment: RoomQualityAssessment?
+    @Published private(set) var finishReviewPresented = false
 
     @Published var roomName = ""
     @Published var manualLocation = ""
@@ -51,6 +54,11 @@ final class RoomCaptureCoordinator: ObservableObject {
     private var operationalGuidance: [RoomCaptureGuidance] = []
     private var pendingSuccessfulSaveAttempt: RoomCaptureAttemptToken?
     private var referencePhotoSequence = 0
+    private var qualityCoachingSequence: UInt64 = 0
+    private var qualityCoachingThrottle = RoomQualityCoachingThrottle(
+        minimumSequenceInterval: 3,
+        maximumVisibleCues: 4
+    )
 
     init(
         controller: RoomLibraryController,
@@ -156,6 +164,11 @@ final class RoomCaptureCoordinator: ObservableObject {
             preparedReview = nil
             semanticGuidance = []
             operationalGuidance = []
+            liveQualityCues = []
+            qualityAssessment = nil
+            finishReviewPresented = false
+            qualityCoachingSequence = 0
+            qualityCoachingThrottle = .init(minimumSequenceInterval: 3, maximumVisibleCues: 4)
             dispatch(.requestCamera(attempt: attempt))
         } catch {
             state = RoomCaptureState(
@@ -204,8 +217,51 @@ final class RoomCaptureCoordinator: ObservableObject {
             errorMessage = "Enter a room name before saving."
             return
         }
+        if let qualityAssessment,
+           RoomQualityFinishGate.eligibility(for: qualityAssessment) == .reviewRecommended,
+           preparedReview?.commit.qualityAcknowledgement == nil {
+            errorMessage = "Review the quality findings and choose Save Anyway explicitly."
+            finishReviewPresented = true
+            return
+        }
         errorMessage = nil
         dispatch(.saveRequested(attempt: attempt))
+    }
+
+    /// Recommended Finish gate: good scans continue normally; weak scans stop
+    /// on a structured advisory review without publishing any partial report.
+    func finish() {
+        guard canSave else { return }
+        if let qualityAssessment,
+           RoomQualityFinishGate.eligibility(for: qualityAssessment) == .reviewRecommended {
+            finishReviewPresented = true
+            return
+        }
+        save()
+    }
+
+    func saveAnyway() {
+        guard let qualityAssessment, var review = preparedReview else { return }
+        do {
+            review.commit.qualityAcknowledgement = try RoomQualitySaveAnywayAcknowledgementRequest.make(
+                for: qualityAssessment,
+                acknowledgedAt: Date()
+            )
+            preparedReview = review
+            finishReviewPresented = false
+            save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func cancelFinishReview() {
+        finishReviewPresented = false
+    }
+
+    func revisitScan() {
+        finishReviewPresented = false
+        discard()
     }
 
     func discard() {
@@ -249,6 +305,17 @@ final class RoomCaptureCoordinator: ObservableObject {
             }
             operationalGuidance = values
             updateGuidance()
+        case let .qualityCoaching(attempt, values):
+            guard state.attemptToken == attempt, acceptsOperationalObservation(in: state.phase) else {
+                return
+            }
+            qualityCoachingSequence &+= 1
+            if let published = qualityCoachingThrottle.update(
+                candidates: values,
+                sequence: qualityCoachingSequence
+            ) {
+                liveQualityCues = published
+            }
         case let .liveSnapshot(attempt, snapshot):
             guard state.attemptToken == attempt, acceptsLiveSnapshot(in: state.phase) else {
                 return
@@ -402,6 +469,8 @@ final class RoomCaptureCoordinator: ObservableObject {
                 let review = try await driver.process(attempt: attempt, workspace: workspace)
                 guard !Task.isCancelled, isActive(attempt, phase: .processing) else { return }
                 preparedReview = review
+                qualityAssessment = review.commit.qualityAssessment
+                finishReviewPresented = false
                 // Processing output becomes the review truth. Later live
                 // callbacks cannot overwrite it once review starts.
                 liveSnapshot = review.commit.draft.revision.semanticSnapshot
@@ -453,6 +522,21 @@ final class RoomCaptureCoordinator: ObservableObject {
                 guard isActive(attempt, phase: .saving) else { return }
                 if let savedSummary {
                     adoptCaptureBundleIfPresent(forProject: savedSummary.projectID)
+                    if let suggestion = preparedReview?.orientationSuggestion {
+                        do {
+                            try await controller.saveOrientationSuggestion(
+                                suggestion,
+                                projectID: savedSummary.projectID,
+                                revisionID: savedSummary.headRevisionID,
+                                snapshot: commit.draft.revision.semanticSnapshot
+                            )
+                        } catch {
+                            // The authoritative package is already committed.
+                            // Never turn an additive companion-write failure
+                            // into a retry that duplicates immutable capture.
+                            print("RoomScanStudio orientation suggestion was not retained: \(error)")
+                        }
+                    }
                 }
                 pendingSuccessfulSaveAttempt = attempt
                 if await cleanupWorkspace(for: attempt) {
@@ -548,12 +632,18 @@ final class RoomCaptureCoordinator: ObservableObject {
             preparedReview = nil
             semanticGuidance = []
             operationalGuidance = []
+            liveQualityCues = []
+            qualityAssessment = nil
+            finishReviewPresented = false
             dispatch(.saveSucceeded(attempt: attempt))
             return
         }
         preparedReview = nil
         semanticGuidance = []
         operationalGuidance = []
+        liveQualityCues = []
+        qualityAssessment = nil
+        finishReviewPresented = false
         dispatch(.cleanupCompleted(attempt: attempt))
     }
 
@@ -596,7 +686,22 @@ final class RoomCaptureCoordinator: ObservableObject {
     ) -> [String] {
         Array(Set(semantic + operational))
             .sorted { $0.rawValue < $1.rawValue }
-            .map(\.rawValue)
+            .map { guidance in
+                switch guidance {
+                case .roomPlanCoaching:
+                    "Follow the on-screen RoomPlan coaching."
+                case .lowClassificationConfidence:
+                    "Show uncertain features clearly from another angle."
+                case .poorLightingHeuristic:
+                    "Add more light before continuing."
+                case .trackingLimited:
+                    "Move slowly until tracking stabilizes."
+                case .trackingLost:
+                    "Hold still and return to a mapped area."
+                case .anotherPassHeuristic:
+                    "Make another steady pass around the room."
+                }
+            }
     }
 
     private func updateGuidance() {

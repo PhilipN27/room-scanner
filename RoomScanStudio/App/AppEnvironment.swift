@@ -43,6 +43,13 @@ final class AppEnvironment: ObservableObject {
             rootURL: rootURL,
             idGenerator: generator
         )
+        let localExtensionRoots = RoomRedesignLocalRootResolver.resolve(
+            arguments: arguments,
+            projectRootURL: rootURL,
+            fileManager: .default
+        )
+        let redesignStore = LocalRoomRedesignStore(rootURL: localExtensionRoots.redesign)
+        let propertyStore = LocalRoomPropertyStore(rootURL: localExtensionRoots.properties)
         let indexBootstrap = RoomProjectIndexBootstrap.makeContainer()
 
         let usesIsolatedUIEnvironment = arguments.contains("--ui-testing")
@@ -126,7 +133,8 @@ final class AppEnvironment: ObservableObject {
                     processingFails: arguments.contains("--simulated-processing-failure"),
                     processingFailuresBeforeSuccess: arguments.contains("--simulated-processing-fail-once") ? 1 : 0,
                     referencePhotoFails: arguments.contains("--simulated-photo-failure"),
-                    suspendsProcessingUntilCancelled: arguments.contains("--simulated-processing-suspend")
+                    suspendsProcessingUntilCancelled: arguments.contains("--simulated-processing-suspend"),
+                    quality: Self.simulatedQualityScenario(arguments: arguments)
                 )
             )
             if arguments.contains("--simulated-save-failure") {
@@ -141,7 +149,8 @@ final class AppEnvironment: ObservableObject {
             capabilityProvider = SystemDeviceCapabilityProvider()
             // Production dependencies remain inert until the user explicitly
             // chooses Prepare or Request GPS. The driver owns exactly one
-            // injected ARSession/RoomCaptureSession pair per leased attempt.
+            // RoomCaptureView-derived ARSession/RoomCaptureSession pair per
+            // leased attempt.
             cameraPermissionProvider = AppleCameraPermissionProvider()
             locationProvider = AppleLocationProvider()
             captureDriverFactory = AppleRoomCaptureDriverFactory()
@@ -160,7 +169,9 @@ final class AppEnvironment: ObservableObject {
 
         libraryController = RoomLibraryController(
             store: store,
-            modelContainer: indexBootstrap.container
+            modelContainer: indexBootstrap.container,
+            redesignStore: redesignStore,
+            propertyStore: propertyStore
         )
         // Hero snapshots piggyback on the colored-mesh viewer's load, the one
         // moment the colored result is already resident — the profile never
@@ -266,6 +277,16 @@ final class AppEnvironment: ObservableObject {
         bootstrapMessage = bootstrapMessages.isEmpty
             ? nil
             : bootstrapMessages.joined(separator: " ")
+    }
+
+    private static func simulatedQualityScenario(
+        arguments: [String]
+    ) -> SimulatedRoomQualityScenario {
+        guard let index = arguments.firstIndex(of: "--simulated-quality"),
+              arguments.indices.contains(index + 1),
+              let scenario = SimulatedRoomQualityScenario(rawValue: arguments[index + 1])
+        else { return .good }
+        return scenario
     }
 
     /// A render pass may ask for the capture route more than once. The same
@@ -476,6 +497,46 @@ enum RoomProjectRootResolver {
         } catch {
             return
         }
+    }
+}
+
+enum RoomRedesignLocalRootResolver {
+    struct Roots {
+        let redesign: URL
+        let properties: URL
+    }
+
+    static func resolve(
+        arguments: [String],
+        projectRootURL: URL,
+        fileManager: FileManager
+    ) -> Roots {
+        let isIsolatedUIRun = arguments.contains("--ui-testing")
+            && arguments.contains("--reset-local-store")
+        if isIsolatedUIRun {
+            let temporaryRoot = fileManager.temporaryDirectory
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+            let suffix = String(ProcessInfo.processInfo.processIdentifier)
+            let roots = Roots(
+                redesign: temporaryRoot.appendingPathComponent("RoomScanStudio-UI-Testing-RedesignState-\(suffix)", isDirectory: true),
+                properties: temporaryRoot.appendingPathComponent("RoomScanStudio-UI-Testing-Properties-\(suffix)", isDirectory: true)
+            )
+            for url in [roots.redesign, roots.properties] {
+                let parentMatches = url.deletingLastPathComponent().standardizedFileURL == temporaryRoot
+                guard parentMatches,
+                      (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) == nil,
+                      fileManager.fileExists(atPath: url.path)
+                else { continue }
+                try? fileManager.removeItem(at: url)
+            }
+            return roots
+        }
+        let appRoot = projectRootURL.deletingLastPathComponent()
+        return Roots(
+            redesign: appRoot.appendingPathComponent("RedesignState", isDirectory: true),
+            properties: appRoot.appendingPathComponent("Properties", isDirectory: true)
+        )
     }
 }
 

@@ -38,6 +38,17 @@ def _is_available(device: dict[str, Any]) -> bool:
     return "unavailable" not in availability
 
 
+def _device_family(device: dict[str, Any]) -> str | None:
+    """Classify custom-named devices from stable simctl type metadata first."""
+    device_type = str(device.get("deviceTypeIdentifier", ""))
+    name = str(device.get("name", ""))
+    if ".SimDeviceType.iPhone-" in device_type or name.startswith("iPhone"):
+        return "iphone"
+    if ".SimDeviceType.iPad-" in device_type or name.startswith("iPad"):
+        return "ipad"
+    return None
+
+
 def select_latest_ios_destinations(payload: dict[str, Any]) -> dict[str, str]:
     """Return deterministic XCTest destination strings from a simctl JSON payload."""
 
@@ -58,8 +69,8 @@ def select_latest_ios_destinations(payload: dict[str, Any]) -> dict[str, str]:
             devices,
             key=lambda item: (str(item.get("name", "")), str(item.get("udid", ""))),
         )
-        iphone = next((item for item in ordered if str(item.get("name", "")).startswith("iPhone")), None)
-        ipad = next((item for item in ordered if str(item.get("name", "")).startswith("iPad")), None)
+        iphone = next((item for item in ordered if _device_family(item) == "iphone"), None)
+        ipad = next((item for item in ordered if _device_family(item) == "ipad"), None)
         if iphone is None or ipad is None:
             continue
         iphone_udid = iphone.get("udid")
@@ -89,7 +100,12 @@ def _self_test() -> None:
             "com.apple.CoreSimulator.SimRuntime.iOS-18-2": [
                 {"name": "iPhone 16", "udid": "unavailable-phone", "isAvailable": False},
                 {"name": "iPhone 15", "udid": "new-phone", "isAvailable": True},
-                {"name": "iPad Pro (13-inch)", "udid": "new-pad", "isAvailable": True},
+                {
+                    "name": "RoomScanStudio Custom Tablet",
+                    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB",
+                    "udid": "new-pad",
+                    "isAvailable": True,
+                },
             ],
         }
     }

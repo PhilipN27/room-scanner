@@ -12,6 +12,7 @@ struct RoomViewerRealityView: UIViewRepresentable {
     let scenePlan: RoomViewerScenePlan
     let camera: RoomViewerCamera
     let visibility: RoomViewerVisibility
+    let selectedElementID: String?
     /// Real UIKit gesture recognizers (installed below) translate touches
     /// into pure camera actions dispatched back to the owning view's
     /// reducer call — the same one-finger/two-finger/pinch split used by
@@ -36,7 +37,8 @@ struct RoomViewerRealityView: UIViewRepresentable {
         context.coordinator.render(
             scenePlan: scenePlan,
             camera: camera,
-            visibility: visibility
+            visibility: visibility,
+            selectedElementID: selectedElementID
         )
         return view
     }
@@ -46,7 +48,8 @@ struct RoomViewerRealityView: UIViewRepresentable {
         context.coordinator.render(
             scenePlan: scenePlan,
             camera: camera,
-            visibility: visibility
+            visibility: visibility,
+            selectedElementID: selectedElementID
         )
     }
 }
@@ -62,6 +65,7 @@ final class RoomViewerRealityCoordinator: NSObject {
     private let photoRoot = Entity()
     private var installed = false
     private var lastScenePlan: RoomViewerScenePlan?
+    private var lastSelectedElementID: String?
     private let onCameraAction: (RoomViewerCameraAction) -> Void
     private var cameraMode: RoomViewerCameraMode = .orbit
     private weak var twoFingerPanRecognizer: UIPanGestureRecognizer?
@@ -143,7 +147,8 @@ final class RoomViewerRealityCoordinator: NSObject {
     func render(
         scenePlan: RoomViewerScenePlan,
         camera: RoomViewerCamera,
-        visibility: RoomViewerVisibility
+        visibility: RoomViewerVisibility,
+        selectedElementID: String?
     ) {
         apply(camera: camera)
         structuralRoot.isEnabled = visibility.isVisible(.structural)
@@ -152,21 +157,22 @@ final class RoomViewerRealityCoordinator: NSObject {
         annotationRoot.isEnabled = visibility.isVisible(.annotations)
         photoRoot.isEnabled = visibility.isVisible(.photos)
 
-        guard lastScenePlan != scenePlan else { return }
+        guard lastScenePlan != scenePlan || lastSelectedElementID != selectedElementID else { return }
         rebuild(
             root: structuralRoot,
             elements: scenePlan.structuralElements,
-            color: UIColor(red: 0.19, green: 0.73, blue: 0.83, alpha: 0.72)
+            selectedElementID: selectedElementID
         )
         rebuild(
             root: objectRoot,
             elements: scenePlan.objectElements,
-            color: UIColor(red: 0.95, green: 0.62, blue: 0.16, alpha: 0.78)
+            selectedElementID: selectedElementID
         )
         rebuildMeasurements(scenePlan.measurements)
         rebuildAnnotations(scenePlan.annotations)
         rebuildPhotos(scenePlan.photos)
         lastScenePlan = scenePlan
+        lastSelectedElementID = selectedElementID
     }
 
     private func apply(camera: RoomViewerCamera) {
@@ -185,18 +191,37 @@ final class RoomViewerRealityCoordinator: NSObject {
     private func rebuild(
         root: Entity,
         elements: [RoomSemanticElement],
-        color: UIColor
+        selectedElementID: String?
     ) {
         removeChildren(from: root)
         for element in elements {
-            let size = boxSize(for: element.dimensionsMeters)
-            let material = SimpleMaterial(color: color, isMetallic: false)
+            let role = RoomSemanticPresentation.role(for: element)
+            let size = RoomSemanticVisualStyle.displaySize(
+                for: element.dimensionsMeters,
+                role: role
+            )
+            let style = RoomSemanticVisualStyle.style(for: role)
+            let material = SimpleMaterial(
+                color: style.color,
+                roughness: MaterialScalarParameter(floatLiteral: style.roughness),
+                isMetallic: style.isMetallic
+            )
             let entity = ModelEntity(
                 mesh: MeshResource.generateBox(size: size, cornerRadius: 0),
                 materials: [material]
             )
             entity.name = element.id
             entity.transform = Transform(matrix: matrix(for: element.transform))
+            if element.id == selectedElementID {
+                entity.scale *= SIMD3<Float>(repeating: 1.06)
+                let marker = ModelEntity(
+                    mesh: MeshResource.generateSphere(radius: 0.07),
+                    materials: [SimpleMaterial(color: .white, isMetallic: true)]
+                )
+                marker.name = "selection-marker-\(element.id)"
+                marker.position = SIMD3<Float>(0, max(size.y / 2 + 0.12, 0.12), 0)
+                entity.addChild(marker)
+            }
             root.addChild(entity)
         }
     }
@@ -281,16 +306,6 @@ final class RoomViewerRealityCoordinator: NSObject {
         return entity
     }
 
-    private func boxSize(for dimensions: RoomDimensions) -> SIMD3<Float> {
-        // RoomPlan surfaces can be effectively planar. Display thickness is a
-        // viewer-only aid, never written back into semantic truth.
-        SIMD3<Float>(
-            max(Float(dimensions.width), 0.025),
-            max(Float(dimensions.height), 0.025),
-            max(Float(dimensions.depth), 0.025)
-        )
-    }
-
     private func matrix(for transform: RoomTransform4x4?) -> simd_float4x4 {
         guard let transform, transform.isValid else {
             return matrix_identity_float4x4
@@ -335,5 +350,65 @@ final class RoomViewerRealityCoordinator: NSObject {
 
     private func removeChildren(from root: Entity) {
         root.children.removeAll()
+    }
+}
+
+enum RoomSemanticVisualStyle {
+    private static let planarSurfaceDisplayDepth: Float = 0.025
+    /// Doors, windows, and openings arrive from RoomPlan at zero depth and
+    /// share their parent wall's plane. A symmetric viewer-only projection
+    /// beyond both wall faces prevents depth fighting from either side. These
+    /// values never enter the saved semantic snapshot or any measurement.
+    private static let embeddedFeatureDisplayDepth: Float = 0.06
+
+    struct Style {
+        let color: UIColor
+        let roughness: Float
+        let isMetallic: Bool
+    }
+
+    static func color(for role: RoomSemanticRole) -> UIColor {
+        style(for: role).color
+    }
+
+    static func displaySize(
+        for dimensions: RoomDimensions,
+        role: RoomSemanticRole
+    ) -> SIMD3<Float> {
+        let minimumDepth: Float
+        switch role {
+        case .door, .window, .opening:
+            minimumDepth = embeddedFeatureDisplayDepth
+        case .wall, .floor, .ceiling, .fixedObject, .movableObject, .unknownObject:
+            minimumDepth = planarSurfaceDisplayDepth
+        }
+        return SIMD3<Float>(
+            max(Float(dimensions.width), planarSurfaceDisplayDepth),
+            max(Float(dimensions.height), planarSurfaceDisplayDepth),
+            max(Float(dimensions.depth), minimumDepth)
+        )
+    }
+
+    static func style(for role: RoomSemanticRole) -> Style {
+        switch role {
+        case .wall:
+            return Style(color: UIColor(red: 0.22, green: 0.75, blue: 0.84, alpha: 0.72), roughness: 0.75, isMetallic: false)
+        case .door:
+            return Style(color: UIColor(red: 0.98, green: 0.67, blue: 0.22, alpha: 1), roughness: 0.35, isMetallic: false)
+        case .window:
+            return Style(color: UIColor(red: 0.42, green: 0.78, blue: 1, alpha: 1), roughness: 0.08, isMetallic: true)
+        case .opening:
+            return Style(color: UIColor(red: 0.94, green: 0.9, blue: 0.76, alpha: 1), roughness: 1, isMetallic: false)
+        case .floor:
+            return Style(color: UIColor(red: 0.44, green: 0.68, blue: 0.48, alpha: 0.65), roughness: 0.95, isMetallic: false)
+        case .ceiling:
+            return Style(color: UIColor(red: 0.75, green: 0.73, blue: 0.92, alpha: 0.48), roughness: 0.6, isMetallic: false)
+        case .fixedObject:
+            return Style(color: UIColor(red: 0.94, green: 0.4, blue: 0.3, alpha: 0.82), roughness: 0.48, isMetallic: false)
+        case .movableObject:
+            return Style(color: UIColor(red: 0.9, green: 0.62, blue: 0.2, alpha: 0.8), roughness: 0.82, isMetallic: false)
+        case .unknownObject:
+            return Style(color: UIColor(red: 0.72, green: 0.72, blue: 0.72, alpha: 0.66), roughness: 0.25, isMetallic: true)
+        }
     }
 }

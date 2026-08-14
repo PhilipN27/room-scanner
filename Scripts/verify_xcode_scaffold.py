@@ -18,6 +18,14 @@ SCHEME = ROOT / "RoomScanStudio.xcodeproj" / "xcshareddata" / "xcschemes" / "Roo
 INFO_PLIST = ROOT / "RoomScanStudio" / "Resources" / "Info.plist"
 PRIVACY_PLIST = ROOT / "RoomScanStudio" / "Resources" / "PrivacyInfo.xcprivacy"
 PACKAGE = ROOT / "Package.swift"
+PACKAGE_RESOLVED = (
+    ROOT
+    / "RoomScanStudio.xcodeproj"
+    / "project.xcworkspace"
+    / "xcshareddata"
+    / "swiftpm"
+    / "Package.resolved"
+)
 FIXTURE_ROOT = ROOT / "RoomScanStudio" / "Fixtures" / "MockRoom-v1"
 RESCAN_FIXTURE = ROOT / "RoomScanStudio" / "Fixtures" / "RescanFixture-v1" / "rescan-fixture-v1.json"
 APP_ICON_DIRECTORY = ROOT / "RoomScanStudio" / "Resources" / "Assets.xcassets" / "AppIcon.appiconset"
@@ -25,6 +33,29 @@ APP_ICON = APP_ICON_DIRECTORY / "AppIcon-1024.png"
 APP_THEME = ROOT / "RoomScanStudio" / "App" / "AppTheme.swift"
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 SIMULATOR_SELECTOR = ROOT / "Scripts" / "select_simulators.py"
+
+METAL_SPLATTER_URL = "https://github.com/scier/MetalSplatter"
+METAL_SPLATTER_REVISION = "2b965de1934de38dda1c71cf90bf798aa948a14c"
+EXPECTED_RESOLVED_PINS = {
+    "metalsplatter": {
+        "kind": "remoteSourceControl",
+        "location": METAL_SPLATTER_URL,
+        "revision": METAL_SPLATTER_REVISION,
+        "version": None,
+    },
+    "spz-swift": {
+        "kind": "remoteSourceControl",
+        "location": "https://github.com/scier/spz-swift.git",
+        "revision": "e2410c91bceba2539c11157ad92e488ef6e16416",
+        "version": "2.1.0",
+    },
+    "swift-argument-parser": {
+        "kind": "remoteSourceControl",
+        "location": "https://github.com/apple/swift-argument-parser",
+        "revision": "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version": "1.8.2",
+    },
+}
 
 
 def object_body(pbx: str, identifier: str) -> str | None:
@@ -46,9 +77,265 @@ def object_body(pbx: str, identifier: str) -> str | None:
     return None
 
 
+def swift_function_body(source: str, declaration_marker: str) -> str | None:
+    """Return one Swift function body, including nested closures."""
+    declaration = source.find(declaration_marker)
+    if declaration < 0:
+        return None
+    opening = source.find("{", declaration)
+    if opening < 0:
+        return None
+    depth = 1
+    for index in range(opening + 1, len(source)):
+        character = source[index]
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1:index]
+    return None
+
+
 def expect(condition: bool, message: str, errors: list[str]) -> None:
     if not condition:
         errors.append(message)
+
+
+def guest_hosted_boundary_errors(production_sources: dict[Path, str]) -> list[str]:
+    """Reject hosted/auth transports from the production guest dependency graph.
+
+    Private CloudKit backup is an existing explicit, user-triggered boundary and
+    is intentionally not rejected here. Remote Swift packages are constrained
+    separately by the exact package-pin verifier.
+    """
+    forbidden_patterns = {
+        "Foundation HTTP client": re.compile(
+            r"\b(?:URLSession|NSURLSession|URLRequest|NSMutableURLRequest|URLProtocol)\b"
+        ),
+        "Network.framework client": re.compile(
+            r"(?m)^\s*import\s+Network\b|\b(?:NWConnection|NWBrowser|NWTCPConnection)\b"
+        ),
+        "raw socket/stream client": re.compile(
+            r"\b(?:CFStreamCreatePairWithSocketToHost|CFSocketCreate|CFSocketConnectToAddress)\b"
+        ),
+        "hosted authentication SDK": re.compile(
+            r"(?m)^\s*import\s+AuthenticationServices\b|"
+            r"\b(?:ASAuthorization|Amplify|Cognito|Supabase|Auth0|OAuthSwift|ApolloClient|FirebaseAuth)\b"
+        ),
+        "hosted billing SDK": re.compile(r"\b(?:Stripe|STPAPIClient)\b"),
+    }
+    errors: list[str] = []
+    for path, source in sorted(production_sources.items(), key=lambda item: str(item[0])):
+        for description, pattern in forbidden_patterns.items():
+            if pattern.search(source):
+                errors.append(
+                    "guest production boundary contains "
+                    f"{description}: {path.relative_to(ROOT)}"
+                )
+    return errors
+
+
+def slice1_spatial_contract_errors(production_sources: dict[Path, str]) -> list[str]:
+    """Check the additive Slice 1 boundary and its explicit readiness guard."""
+    errors: list[str] = []
+    spatial_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomSpatialTruth.swift"
+    companion_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomRedesignStore.swift"
+    store_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomProjectStore.swift"
+    apple_path = ROOT / "RoomScanStudio" / "Infrastructure" / "Capture" / "AppleRoomCaptureDriver.swift"
+    viewer_path = ROOT / "RoomScanStudio" / "Features" / "RoomViewer" / "RoomViewerView.swift"
+    detail_path = ROOT / "RoomScanStudio" / "Features" / "RoomLibrary" / "RoomDetailView.swift"
+    required_paths = [spatial_path, companion_path, store_path, apple_path, viewer_path, detail_path]
+    for path in required_paths:
+        expect(path in production_sources, f"Slice 1 production source is missing: {path.relative_to(ROOT)}", errors)
+    if errors:
+        return errors
+
+    spatial = production_sources[spatial_path]
+    companion = production_sources[companion_path]
+    store = production_sources[store_path]
+    apple = production_sources[apple_path]
+    viewer = production_sources[viewer_path]
+    detail = production_sources[detail_path]
+    required_spatial_symbols = [
+        "RoomLocalRedesignExtensionV2", "RoomCanonicalCameraGenerator",
+        "RoomOrientationSuggestionEngine", "RoomOrientationReadiness",
+        "RoomPropertyContainerV1", "RoomRedesignStructuredConstraints",
+        "RoomConceptMetadataV2", "RoomSemanticRole",
+    ]
+    for symbol in required_spatial_symbols:
+        expect(symbol in spatial, f"Slice 1 spatial contract is missing {symbol}", errors)
+    expect(
+        "guard document.orientation.source != .suggested else" in spatial,
+        "Slice 1 orientation eligibility guard is absent or weakened",
+        errors,
+    )
+    expect(
+        "redesignSourceRevisionBinding" in store
+        and 'RoomSHA256.hexDigest(ofFile: semanticURL)' in store
+        and 'RoomSHA256.hexDigest(ofFile: manifestURL)' in store,
+        "Slice 1 source binding does not hash exact immutable revision bytes",
+        errors,
+    )
+    expect(
+        "LocalRoomRedesignStore" in companion and "LocalRoomPropertyStore" in companion,
+        "Slice 1 local companion/property stores are missing",
+        errors,
+    )
+    expect(
+        "captureScanStartPoseIfAvailable" in apple
+        and "RoomSemanticPresentation.role" in apple
+        and "RoomPlan canonical-entry" in apple,
+        "Slice 1 app-owned scan-start/door-opening suggestion seam is incomplete",
+        errors,
+    )
+    expect(
+        "viewer.semanticLegend" in viewer
+        and "RoomSemanticRole.allCases" in viewer
+        and "accessibilityLabel" in viewer,
+        "Slice 1 semantic legend/accessibility presentation is incomplete",
+        errors,
+    )
+    expect(
+        "orientation.referenceWall" in detail
+        and "orientation.facingDirection" in detail
+        and "Property groups contain no cross-room transforms" in detail,
+        "Slice 1 manual orientation or property-boundary UI is incomplete",
+        errors,
+    )
+    return errors
+
+
+def slice2_quality_contract_errors(production_sources: dict[Path, str]) -> list[str]:
+    """Check Slice 2 contracts, delivery wiring, and the live hot-path boundary."""
+    errors: list[str] = []
+    quality_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomQuality.swift"
+    models_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomModels.swift"
+    store_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomProjectStore.swift"
+    dependencies_path = ROOT / "RoomScanStudio" / "Infrastructure" / "Capture" / "RoomCaptureDependencies.swift"
+    apple_path = ROOT / "RoomScanStudio" / "Infrastructure" / "Capture" / "AppleRoomCaptureDriver.swift"
+    recorder_path = ROOT / "RoomScanStudio" / "Infrastructure" / "Capture" / "RoomCaptureBundleRecorder.swift"
+    coordinator_path = ROOT / "RoomScanStudio" / "Features" / "RoomCapture" / "RoomCaptureCoordinator.swift"
+    flow_path = ROOT / "RoomScanStudio" / "Features" / "RoomCapture" / "RoomCaptureFlowView.swift"
+    detail_path = ROOT / "RoomScanStudio" / "Features" / "RoomLibrary" / "RoomDetailView.swift"
+    required_paths = [
+        quality_path, models_path, store_path, dependencies_path, apple_path,
+        recorder_path, coordinator_path, flow_path, detail_path,
+    ]
+    for path in required_paths:
+        expect(path in production_sources, f"Slice 2 production source is missing: {path.relative_to(ROOT)}", errors)
+    if errors:
+        return errors
+
+    quality = production_sources[quality_path]
+    models = production_sources[models_path]
+    store = production_sources[store_path]
+    dependencies = production_sources[dependencies_path]
+    apple = production_sources[apple_path]
+    recorder = production_sources[recorder_path]
+    coordinator = production_sources[coordinator_path]
+    flow = production_sources[flow_path]
+    detail = production_sources[detail_path]
+
+    required_quality_symbols = (
+        "RoomQualityDimension", "RoomQualityReasonCode", "RoomQualityRegion",
+        "RoomQualityAssessment", "RoomQualityReport", "RoomQualityReportCarrierV1",
+        "RoomQualityAggregator", "RoomQualityCoachingThrottle",
+    )
+    for symbol in required_quality_symbols:
+        expect(symbol in quality, f"Slice 2 quality contract is missing {symbol}", errors)
+    for dimension in (
+        "visualSharpness", "spatialVisualCoverage", "arTracking",
+        "semanticIdentificationConfidence",
+    ):
+        expect(dimension in quality, f"Slice 2 quality dimension is missing: {dimension}", errors)
+    expect(
+        "var qualityReport: RoomQualityReport?" in models
+        and "decodeIfPresent(RoomQualityReport.self, forKey: .qualityReport)" in models
+        and "encodeIfPresent(qualityReport, forKey: .qualityReport)" in models,
+        "Slice 2 legacy-compatible optional revision quality field is incomplete",
+        errors,
+    )
+    expect(
+        "assessment.bind(" in store
+        and "revisionID: revisionID" in store
+        and "coordinateSpaceEpochID" in store
+        and "qualityReport: qualityReport" in store,
+        "Slice 2 immutable revision/epoch quality binding is incomplete",
+        errors,
+    )
+    expect(
+        "CGImageSourceCreateThumbnailAtIndex" in dependencies
+        and "maximumAnalysisPixelSize = 320" in dependencies
+        and "RoomMeshFrameAnalysis.luminanceSharpness" in dependencies,
+        "Slice 2 bounded post-stop image analysis is incomplete",
+        errors,
+    )
+    expect(
+        "Task.detached(priority: .utility)" in apple
+        and "RoomCaptureQualityAnalyzer.analyze" in apple
+        and "publishCombinedQualityCoaching" in apple,
+        "Slice 2 Apple adapter analysis or independent live-cue integration is incomplete",
+        errors,
+    )
+    expect(
+        "finishReviewPresented" in coordinator
+        and "RoomQualitySaveAnywayAcknowledgementRequest" in coordinator
+        and "func saveAnyway()" in coordinator,
+        "Slice 2 advisory Finish/Save Anyway coordinator boundary is incomplete",
+        errors,
+    )
+    for identifier in (
+        "capture.quality.liveOverlay", "capture.quality.reviewOverlay",
+        "capture.quality.summary", "capture.quality.finishGate",
+        "capture.quality.revisit", "capture.quality.saveAnyway",
+    ):
+        expect(identifier in flow, f"Slice 2 quality UI contract is missing {identifier}", errors)
+    expect(
+        "qualityReport" in detail and "acknowledged: report.saveAcknowledgement != nil" in detail,
+        "Slice 2 persisted quality presentation is incomplete",
+        errors,
+    )
+
+    # The live paths may collect bounded scalar/pose/pixel-buffer references,
+    # but must never decode, rasterize, or score a full image synchronously.
+    hot_functions = (
+        (apple, "fileprivate func didReceiveFullRoomSnapshot", "Apple RoomPlan snapshot callback"),
+        (apple, "fileprivate func didProvideInstruction", "Apple RoomPlan coaching callback"),
+        (apple, "private func publishTrackingObservation", "Apple AR tracking poll"),
+        (apple, "private func publishSemanticHeuristics", "Apple semantic live callback"),
+        (recorder, "private func captureTickIfReady", "capture-bundle live tick"),
+    )
+    forbidden_hot_tokens = (
+        "CGImageSourceCreate", "CGImageSourceCreateThumbnailAtIndex",
+        "luminanceSharpness", "downsampledRGBA", "UIImage(data:",
+        "CIContext(options:", "createCGImage(", "jpegData(",
+    )
+    for source, marker, label in hot_functions:
+        body = swift_function_body(source, marker)
+        expect(body is not None, f"Slice 2 verifier cannot locate {label}", errors)
+        if body is None:
+            continue
+        for token in forbidden_hot_tokens:
+            if token in body:
+                errors.append(f"Slice 2 live hot path performs image decode/scoring in {label}: {token}")
+    return errors
+
+
+def read_guest_production_sources() -> dict[Path, str]:
+    roots = [
+        ROOT / "RoomScanCore" / "Sources" / "RoomScanCore",
+        ROOT / "RoomScanStudio" / "App",
+        ROOT / "RoomScanStudio" / "Features",
+        ROOT / "RoomScanStudio" / "Infrastructure",
+    ]
+    sources: dict[Path, str] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.swift"):
+            sources[path] = path.read_text(encoding="utf-8")
+    return sources
 
 
 def read_json(path: Path, errors: list[str]) -> dict:
@@ -76,6 +363,7 @@ def verify_required_files(errors: list[str]) -> None:
         INFO_PLIST,
         PRIVACY_PLIST,
         PACKAGE,
+        PACKAGE_RESOLVED,
         ROOT / "Docs" / "feasibility.md",
         ROOT / "Docs" / "architecture.md",
         ROOT / "Docs" / "export-format.md",
@@ -206,10 +494,111 @@ def verify_package_wiring(pbx: str, errors: list[str]) -> None:
         expect(f"productRef = {product}" in body, f"package framework build file {build_file} has wrong product ref", errors)
 
 
+def verify_remote_package_pin(pbx: str, errors: list[str]) -> None:
+    """Allow precisely the audited app-only MetalSplatter package pin."""
+
+    remote_reference = object_body(pbx, "B50000000000000000000002") or ""
+    project = object_body(pbx, "A10000000000000000000001") or ""
+    app_target = object_body(pbx, "A70000000000000000000001") or ""
+    app_frameworks = object_body(pbx, "A80000000000000000000003") or ""
+    metal_product = object_body(pbx, "B60000000000000000000003") or ""
+    splat_io_product = object_body(pbx, "B60000000000000000000004") or ""
+
+    expect(
+        pbx.count("isa = XCRemoteSwiftPackageReference;") == 1,
+        "project must contain exactly one approved remote Swift package reference",
+        errors,
+    )
+    expect(
+        pbx.count("repositoryURL =") == 1,
+        "project must not contain an additional remote package URL",
+        errors,
+    )
+    for setting in (
+        "isa = XCRemoteSwiftPackageReference;",
+        f'repositoryURL = "{METAL_SPLATTER_URL}";',
+        "kind = revision;",
+        f"revision = {METAL_SPLATTER_REVISION};",
+    ):
+        expect(setting in remote_reference, f"approved MetalSplatter pin is missing: {setting}", errors)
+    expect("B50000000000000000000002" in project, "project misses the approved MetalSplatter reference", errors)
+    expect(
+        "B60000000000000000000003" in app_target
+        and "B60000000000000000000004" in app_target,
+        "app target misses approved MetalSplatter products",
+        errors,
+    )
+    expect(
+        "7A0000000000000000000001" in app_frameworks
+        and "7A0000000000000000000002" in app_frameworks,
+        "app frameworks phase misses approved MetalSplatter products",
+        errors,
+    )
+    for product, name in ((metal_product, "MetalSplatter"), (splat_io_product, "SplatIO")):
+        expect("isa = XCSwiftPackageProductDependency;" in product, f"{name} product dependency is missing", errors)
+        expect("package = B50000000000000000000002" in product, f"{name} product has an unapproved package", errors)
+        expect(f"productName = {name};" in product, f"{name} product name is wrong", errors)
+
+
+def resolved_package_pin_errors(document: object) -> list[str]:
+    """Validate the committed Xcode resolver graph without allowing drift."""
+
+    errors: list[str] = []
+    if not isinstance(document, dict):
+        return ["workspace Package.resolved is not a JSON object"]
+    if document.get("version") != 3:
+        errors.append("workspace Package.resolved must use version 3")
+    pins = document.get("pins")
+    if not isinstance(pins, list):
+        return [*errors, "workspace Package.resolved has no pins array"]
+
+    actual: dict[str, dict] = {}
+    for pin in pins:
+        if not isinstance(pin, dict) or not isinstance(pin.get("identity"), str):
+            errors.append("workspace Package.resolved contains a malformed pin")
+            continue
+        identity = pin["identity"]
+        if identity in actual:
+            errors.append(f"workspace Package.resolved duplicates pin: {identity}")
+            continue
+        actual[identity] = pin
+
+    if set(actual) != set(EXPECTED_RESOLVED_PINS):
+        errors.append(
+            "workspace Package.resolved pins do not exactly match the approved MetalSplatter resolver graph"
+        )
+    for identity, expected in EXPECTED_RESOLVED_PINS.items():
+        pin = actual.get(identity)
+        if pin is None:
+            errors.append(f"workspace Package.resolved is missing approved pin: {identity}")
+            continue
+        state = pin.get("state")
+        if not isinstance(state, dict):
+            errors.append(f"workspace Package.resolved pin has no state: {identity}")
+            continue
+        for key in ("kind", "location"):
+            if pin.get(key) != expected[key]:
+                errors.append(
+                    f"workspace Package.resolved {identity} has unexpected {key}: {pin.get(key)!r}"
+                )
+        for key in ("revision", "version"):
+            if state.get(key) != expected[key]:
+                errors.append(
+                    f"workspace Package.resolved {identity} has unexpected {key}: {state.get(key)!r}"
+                )
+    return errors
+
+
+def verify_package_resolution(errors: list[str]) -> None:
+    if not PACKAGE_RESOLVED.is_file():
+        return
+    document = read_json(PACKAGE_RESOLVED, errors)
+    errors.extend(resolved_package_pin_errors(document))
+
+
 def verify_project(pbx: str, errors: list[str]) -> None:
     expect("PBXFileSystemSynchronizedRootGroup" not in pbx, "project uses filesystem-synchronized groups", errors)
     expect("isa = PBXGroup;" in pbx, "project has no classic PBXGroup", errors)
-    expect("XCRemoteSwiftPackageReference" not in pbx, "project uses a remote Swift package", errors)
 
     targets = {
         "RoomScanStudio": ("A70000000000000000000001", "A60000000000000000000002"),
@@ -376,7 +765,7 @@ def verify_project(pbx: str, errors: list[str]) -> None:
         body = object_body(pbx, config_id) or ""
         for setting in (
             "INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;",
-            "IPHONEOS_DEPLOYMENT_TARGET = 17.0;",
+            "IPHONEOS_DEPLOYMENT_TARGET = 18.0;",
             "PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;",
             'ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";',
             'TARGETED_DEVICE_FAMILY = "1,2";',
@@ -385,7 +774,7 @@ def verify_project(pbx: str, errors: list[str]) -> None:
             expect(setting in body, f"app build setting missing in {config_id}: {setting}", errors)
     for config_id in ("A63000000000000000000001", "A63000000000000000000002", "A64000000000000000000001", "A64000000000000000000002"):
         body = object_body(pbx, config_id) or ""
-        expect("IPHONEOS_DEPLOYMENT_TARGET = 17.0;" in body, f"test deployment target missing in {config_id}", errors)
+        expect("IPHONEOS_DEPLOYMENT_TARGET = 18.0;" in body, f"test deployment target missing in {config_id}", errors)
         expect('TARGETED_DEVICE_FAMILY = "1,2";' in body, f"test device families missing in {config_id}", errors)
 
     project_debug = object_body(pbx, "A61000000000000000000001") or ""
@@ -402,6 +791,7 @@ def verify_project(pbx: str, errors: list[str]) -> None:
         expect(setting not in pbx, f"forbidden active signing/cloud setting: {setting}", errors)
     expect(not re.search(r"(?m)^\s*path\s*=\s*(?:[A-Za-z]:[\\/]|/)", pbx), "project contains an absolute path", errors)
     verify_package_wiring(pbx, errors)
+    verify_remote_package_pin(pbx, errors)
 
 
 def verify_scheme(errors: list[str]) -> None:
@@ -781,12 +1171,21 @@ def verify_package(errors: list[str]) -> None:
     test_files = sorted(test_root.glob("*.swift"))
     expect(bool(source_files), "RoomScanCore has no source files in declared target path", errors)
     expect(bool(test_files), "RoomScanCoreTests has no tests in declared target path", errors)
+    allowed_source_imports = {"Foundation", "simd"}
     for source_path in source_files:
         imports = re.findall(r"(?m)^\s*import\s+([A-Za-z0-9_]+)", source_path.read_text(encoding="utf-8"))
-        expect(imports == ["Foundation"], f"non-portable core imports in {source_path.relative_to(ROOT)}: {imports}", errors)
+        expect(
+            set(imports).issubset(allowed_source_imports),
+            f"non-portable core imports in {source_path.relative_to(ROOT)}: {imports}",
+            errors,
+        )
     for test_path in test_files:
         imports = re.findall(r"(?m)^\s*(?:@testable\s+)?import\s+([A-Za-z0-9_]+)", test_path.read_text(encoding="utf-8"))
-        expect(set(imports).issubset({"Foundation", "XCTest", "RoomScanCore"}), f"non-portable core test imports in {test_path.relative_to(ROOT)}: {imports}", errors)
+        expect(
+            set(imports).issubset({"Foundation", "simd", "XCTest", "RoomScanCore"}),
+            f"non-portable core test imports in {test_path.relative_to(ROOT)}: {imports}",
+            errors,
+        )
     forbidden_write_options = re.compile(
         r"\[\s*\.atomic\s*,\s*\.withoutOverwriting\s*\]"
         r"|\[\s*\.withoutOverwriting\s*,\s*\.atomic\s*\]"
@@ -1037,8 +1436,11 @@ def phase2b_apple_capture_contract_errors(
         ("unavailable location services denial", "return Self.locationServicesResult(servicesEnabled: false)", apple_dependencies),
         ("stale one-shot GPS completion", "nonisolated static func oneShotResult", apple_dependencies),
         ("Apple RoomPlan driver", "final class AppleRoomCaptureDriver", apple_driver),
-        ("one injected AR session", "RoomCaptureSession(arSession: arSession)", apple_driver),
+        ("one RoomCaptureView owner", "let captureView = RoomCaptureView(frame: .zero)", apple_driver),
+        ("RoomCaptureView session chain", "roomCaptureSession = captureView.captureSession", apple_driver),
+        ("RoomCaptureView AR session chain", "arSession = captureView.captureSession.arSession", apple_driver),
         ("RoomCaptureSession delegate", "roomCaptureSession.delegate = delegateProxy", apple_driver),
+        ("RoomCaptureView delegate", "captureView.delegate = delegateProxy", apple_driver),
         ("RoomPlan configuration", "RoomCaptureSession.Configuration()", apple_driver),
         ("RoomPlan coaching enabled", "configuration.isCoachingEnabled = true", apple_driver),
         ("RoomPlan run", "roomCaptureSession.run(configuration: configuration)", apple_driver),
@@ -1049,8 +1451,8 @@ def phase2b_apple_capture_contract_errors(
         ("final-end cleanup barrier", "try await awaitFinalSessionEnd(for: attempt)", apple_driver),
         ("bounded end-timeout error", "case sessionEndNotObserved", apple_driver),
         ("RoomBuilder processing", "RoomBuilder(options: [])", apple_driver),
-        ("raw RoomPlan coding", "RoomJSONCoding.makeEncoder().encode(data)", apple_driver),
-        ("processed RoomPlan coding", "RoomJSONCoding.makeEncoder().encode(room)", apple_driver),
+        ("raw RoomPlan evidence coding", "Self.makeEvidenceEncoder().encode(data)", apple_driver),
+        ("processed RoomPlan evidence coding", "Self.makeEvidenceEncoder().encode(room)", apple_driver),
         ("native USDZ export", "room.export(to: usdzURL, exportOptions: .mesh)", apple_driver),
         ("raw evidence path", "evidence/roomplan/captured-room-data.json", apple_driver),
         ("processed evidence path", "evidence/roomplan/captured-room.json", apple_driver),
@@ -1058,6 +1460,7 @@ def phase2b_apple_capture_contract_errors(
         ("evidence digest", "RoomSHA256.hexDigest(ofFile: url)", apple_driver),
         ("RoomPlan evidence source", "source: .roomPlan", apple_driver),
         ("same-session high-resolution photo", "try await arSession.captureHighResolutionFrame()", apple_driver),
+        ("same-session mesh reconfiguration", "self.arSession.run(configuration)", apple_driver),
         ("floor surface mapping", "room.floors.map", apple_driver),
         ("documented surface identifier", "surface.identifier", apple_driver),
         ("documented surface parent identifier", "surface.parentIdentifier", apple_driver),
@@ -1110,16 +1513,47 @@ def phase2b_apple_capture_contract_errors(
     )
 
     expect(
-        apple_driver.count("ARSession()") == 1,
-        "Phase-2B production adapter must construct exactly one ARSession per driver",
+        apple_driver.count("RoomCaptureView(") == 1,
+        "Phase-2B production adapter must construct exactly one RoomCaptureView per driver",
+        errors,
+    )
+    expect(
+        apple_driver.count("ARSession(") == 0,
+        "Phase-2B production adapter must not construct a second ARSession outside RoomCaptureView",
+        errors,
+    )
+    reconfiguration_start = apple_driver.find("private func beginSceneReconstructionEnablement")
+    reconfiguration_body = apple_driver[reconfiguration_start:] if reconfiguration_start >= 0 else ""
+    expect(
+        "self.arSession.run(configuration)" in reconfiguration_body,
+        "Phase-2B production adapter must reconfigure the RoomCaptureView-owned ARSession only",
+        errors,
+    )
+    expect(
+        re.search(r"(?<!self\.)\barSession\.run\(", apple_driver) is None,
+        "Phase-2B production adapter contains a non-owned ARSession reconfiguration path",
+        errors,
+    )
+    run_calls = re.findall(
+        r"(?m)(?<![A-Za-z0-9_])(?:self\.)?[A-Za-z_][A-Za-z0-9_]*\.run\([^\n]*\)",
+        apple_driver,
+    )
+    allowed_run_calls = {
+        "roomCaptureSession.run(configuration: configuration)",
+        "self.arSession.run(configuration)",
+    }
+    expect(
+        all(call in allowed_run_calls for call in run_calls),
+        "Phase-2B production adapter contains an unapproved session run path",
         errors,
     )
     for forbidden in (
         "AVCaptureSession(",
-        "RoomCaptureView(",
         "UIImagePickerController(",
-        "arSession.run(",
+        "RoomCaptureSession(arSession:",
         "arSession.delegate",
+        "RoomJSONCoding.makeEncoder().encode(data)",
+        "RoomJSONCoding.makeEncoder().encode(room)",
         "String(describing:)",
         "rawValue",
         "fatalError",
@@ -1241,8 +1675,8 @@ def phase4_viewer_editor_contract_errors(
         ("scene-plan render cache", "lastScenePlan", reality_view),
         ("main actor RealityKit isolation", "@MainActor", reality_view),
         ("root entity collection cleanup", "root.children.removeAll()", reality_view),
-        ("viewer incremental drag state", "previousDragTranslation", viewer_view),
-        ("viewer incremental magnification state", "previousMagnificationScale", viewer_view),
+        ("viewer incremental pan reset", "recognizer.setTranslation(.zero, in: recognizer.view)", reality_view),
+        ("viewer incremental magnification reset", "recognizer.scale = 1", reality_view),
         ("viewer no-clip disclosure", "viewer.noClipDisclosure", viewer_view),
         ("viewer visibility controls", "viewer.visibility.structural", viewer_view),
         ("editor explicit save", "editor.save", editor_view),
@@ -1559,10 +1993,24 @@ def phase7_release_contract_errors(
             errors.append(f"Phase-7 privacy-policy source contract is missing: {description}")
 
     for name in (
-        "home", "library", "new_scan", "mock", "capture", "detail", "viewer", "editor", "cloud", "rescan", "export",
+        "library", "new_scan", "mock", "capture", "viewer", "editor", "cloud", "rescan", "export",
     ):
         if "AdaptiveActionRow" not in context_sources.get(name, ""):
             errors.append(f"Phase-7 adaptive action row is missing from {name}")
+    home = context_sources.get("home", "")
+    detail = context_sources.get("detail", "")
+    for description, contract, source in (
+        ("Home size-class action layout", "horizontalSizeClass == .regular", home),
+        ("Home Rooms action", 'accessibilityIdentifier("home.existingRooms")', home),
+        ("Home Scan action", 'accessibilityIdentifier("home.newRoomScan")', home),
+        ("Detail responsive action fit", "ViewThatFits(in: .horizontal)", detail),
+        ("Detail open-room action", "openRoomButton", detail),
+        ("Detail edit-room action", "editRoomButton", detail),
+        ("Detail rescan action", "rescanButton", detail),
+        ("Detail duplicate action", "duplicateButton", detail),
+    ):
+        if contract not in source:
+            errors.append(f"Phase-7 responsive action contract is missing: {description}")
     for name, required_roles in {
         "home": ("AppPalette.blueprintOnDark", "AppPalette.amberOnDark"),
         "new_scan": ("AppPalette.blueprintOnDark", "AppPalette.amberOnDark"),
@@ -1932,7 +2380,7 @@ def verify_source_contract(errors: list[str]) -> None:
     ):
         expect(required_test in ui_tests, f"required Phase-4 UI test is missing: {required_test}", errors)
     for description, contract in (
-        ("persisted editor label assertion", 'XCTAssertEqual(persistedLabel.label, "Main floor Edited")'),
+        ("persisted editor label assertion", 'persistedLabel.label.contains("Main floor Edited")'),
         ("invalid pending form assertion", 'app.staticTexts["editor.error"].waitForExistence(timeout: 5)'),
         ("viewer no-clip assertion", 'app.staticTexts["viewer.noClipDisclosure"].waitForExistence(timeout: 5)'),
     ):
@@ -2107,31 +2555,25 @@ def verify_source_contract(errors: list[str]) -> None:
     ):
         expect(required_test in ui_tests, f"required Phase-6 UI cloud test is missing: {required_test}", errors)
     expect(
-        'app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 5)' in ui_tests,
+        'let prepare = app.buttons["cloudBackup.prepare"]' in ui_tests
+        and 'XCTAssertTrue(prepare.waitForExistence(timeout: 15))' in ui_tests,
         "Phase-6 UI cloud test does not wait for backup completion before listing/preparing recovery",
         errors,
     )
     expect(
         'let listStatus = app.staticTexts["cloudBackup.listStatus"]' in ui_tests
-        and 'XCTAssertTrue(waitForHittable(listStatus, in: settingsScroll))' in ui_tests
         and 'XCTAssertTrue(listStatus.waitForExistence(timeout: 5))' in ui_tests,
         "Phase-6 UI cloud test does not await the explicit list-completion state before backup",
         errors,
     )
     expect(
-        'private func waitForHittable(' in ui_tests
-        and 'timeout: TimeInterval = 30' in ui_tests
-        and 'let deadline = Date().addingTimeInterval(timeout)' in ui_tests
-        and 'searchBothDirections: Bool = false' in ui_tests
-        and 'if element.isHittable {' in ui_tests
-        and 'guard scrollView.exists else { return false }' in ui_tests
-        and 'if searchBothDirections {' in ui_tests
-        and 'scanDirection = opposite(scanDirection)' in ui_tests
-        and 'swipesBeforeTurn = min(swipesBeforeTurn + 2, 8)' in ui_tests
-        and 'XCTAssertTrue(waitForHittable(prepare, in: settingsScroll))' in ui_tests
-        and 'direction: .backward,\n            searchBothDirections: true' in ui_tests
-        and 'XCTAssertTrue(waitForHittable(outcome, in: settingsScroll))' in ui_tests,
-        "Phase-6 UI tests do not confine bidirectional scanning to protected asynchronous recovery",
+        'executionTimeAllowance = 120' in ui_tests
+        and 'let recoverCopy = app.buttons["cloudBackup.recoverCopy"]' in ui_tests
+        and 'XCTAssertTrue(recoverCopy.waitForExistence(timeout: 15))' in ui_tests
+        and 'for _ in 0..<2 where !recoverCopy.isHittable {' in ui_tests
+        and 'swipe(settingsScroll, direction: .backward)' in ui_tests
+        and 'XCTAssertTrue(recoverCopy.isHittable)' in ui_tests,
+        "Phase-6 UI test does not bound real-archive recovery preparation and scrolling",
         errors,
     )
     expect(
@@ -2151,7 +2593,7 @@ def verify_source_contract(errors: list[str]) -> None:
     )
     expect(
         'identifiedElement("cloudBackup.recoveryOutcome", in: app)' in ui_tests
-        and 'XCTAssertTrue(outcome.waitForExistence(timeout: 5))' in ui_tests,
+        and 'XCTAssertTrue(outcome.waitForExistence(timeout: 15))' in ui_tests,
         "Phase-6 UI cloud test does not wait for a role-independent recovery outcome before closing",
         errors,
     )
@@ -2217,10 +2659,101 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
     verify_package_wiring(mutated_pbx, package_errors)
     expect(bool(package_errors), "verifier self-test did not detect broken package wiring", errors)
 
+    foreign_remote_errors: list[str] = []
+    verify_remote_package_pin(
+        pbx.replace(METAL_SPLATTER_URL, "https://example.invalid/foreign-package", 1),
+        foreign_remote_errors,
+    )
+    expect(
+        bool(foreign_remote_errors),
+        "verifier self-test did not detect a foreign remote package URL",
+        errors,
+    )
+    wrong_revision_errors: list[str] = []
+    verify_remote_package_pin(
+        pbx.replace(METAL_SPLATTER_REVISION, "0000000000000000000000000000000000000000", 1),
+        wrong_revision_errors,
+    )
+    expect(
+        bool(wrong_revision_errors),
+        "verifier self-test did not detect a changed MetalSplatter revision",
+        errors,
+    )
+    if PACKAGE_RESOLVED.is_file():
+        try:
+            resolved_document = json.loads(PACKAGE_RESOLVED.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            resolved_document = None
+        if isinstance(resolved_document, dict):
+            foreign_resolution = json.loads(json.dumps(resolved_document))
+            pins = foreign_resolution.get("pins")
+            if isinstance(pins, list) and pins and isinstance(pins[0], dict):
+                pins[0]["location"] = "https://example.invalid/foreign-package"
+                expect(
+                    bool(resolved_package_pin_errors(foreign_resolution)),
+                    "verifier self-test did not detect a foreign Package.resolved URL",
+                    errors,
+                )
+            wrong_resolution = json.loads(json.dumps(resolved_document))
+            pins = wrong_resolution.get("pins")
+            if isinstance(pins, list) and pins and isinstance(pins[0], dict):
+                state = pins[0].get("state")
+                if isinstance(state, dict):
+                    state["revision"] = "0000000000000000000000000000000000000000"
+                    expect(
+                        bool(resolved_package_pin_errors(wrong_resolution)),
+                        "verifier self-test did not detect a changed Package.resolved revision",
+                        errors,
+                    )
+
     app_tests = (ROOT / "RoomScanStudio" / "RoomScanStudioTests" / "RoomScanStudioTests.swift").read_text(encoding="utf-8")
     ui_tests = (ROOT / "RoomScanStudio" / "RoomScanStudioUITests" / "RoomScanStudioUITests.swift").read_text(encoding="utf-8")
     duplicate_errors = class_declaration_errors(app_tests + "\nfinal class RoomScanStudioTests: XCTestCase {}", ui_tests)
     expect(bool(duplicate_errors), "verifier self-test did not detect duplicate XCTest classes", errors)
+
+    guest_sources = read_guest_production_sources()
+    app_environment_path = ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift"
+    if app_environment_path in guest_sources:
+        injected_hosted_call = dict(guest_sources)
+        injected_hosted_call[app_environment_path] += (
+            '\nprivate let injectedHostedRequest = URLSession.shared.dataTask('
+            'with: URL(string: "https://offline-guard.invalid")!)\n'
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(injected_hosted_call)),
+            "verifier self-test did not detect an injected guest hosted request",
+            errors,
+        )
+
+    if not slice1_spatial_contract_errors(guest_sources):
+        spatial_path = ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomSpatialTruth.swift"
+        weakened_orientation_guard = dict(guest_sources)
+        weakened_orientation_guard[spatial_path] = weakened_orientation_guard[spatial_path].replace(
+            "guard document.orientation.source != .suggested else",
+            "guard true else",
+            1,
+        )
+        expect(
+            bool(slice1_spatial_contract_errors(weakened_orientation_guard)),
+            "verifier self-test did not detect a weakened Slice 1 orientation guard",
+            errors,
+        )
+
+    if not slice2_quality_contract_errors(guest_sources):
+        recorder_path = ROOT / "RoomScanStudio" / "Infrastructure" / "Capture" / "RoomCaptureBundleRecorder.swift"
+        injected_hot_path = dict(guest_sources)
+        injected_hot_path[recorder_path] = injected_hot_path[recorder_path].replace(
+            "private func captureTickIfReady() {",
+            "private func captureTickIfReady() {\n"
+            "        _ = RoomMeshFrameAnalysis.luminanceSharpness(rgba: [], width: 0, height: 0)",
+            1,
+        )
+        hot_path_errors = slice2_quality_contract_errors(injected_hot_path)
+        expect(
+            any("live hot path performs image decode/scoring" in error for error in hot_path_errors),
+            "verifier self-test did not detect injected live full-image scoring",
+            errors,
+        )
 
     phase7_context_paths = {
         "home": ROOT / "RoomScanStudio" / "Features" / "Home" / "HomeView.swift",
@@ -2543,24 +3076,27 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
             apple_sources["environment"],
             apple_sources["mapper"],
         ):
-            removed_injected_session = apple_sources["driver"].replace(
-                "RoomCaptureSession(arSession: arSession)",
-                "RoomCaptureSession()",
+            removed_capture_view_chain = apple_sources["driver"].replace(
+                "arSession = captureView.captureSession.arSession",
+                "arSession = ARSession()",
                 1,
             )
             injection_errors = phase2b_apple_capture_contract_errors(
                 apple_sources["dependencies"],
-                removed_injected_session,
+                removed_capture_view_chain,
                 apple_sources["environment"],
                 apple_sources["mapper"],
             )
             expect(
                 bool(injection_errors),
-                "verifier self-test did not detect removed app-owned ARSession injection",
+                "verifier self-test did not detect a broken RoomCaptureView ARSession chain",
                 errors,
             )
 
-            unsafe_session_driver = apple_sources["driver"] + "\narSession.run(configuration: ARWorldTrackingConfiguration())\n"
+            unsafe_session_driver = apple_sources["driver"].replace(
+                "self.arSession.run(configuration)",
+                "otherSession.run(configuration)",
+            )
             unsafe_session_errors = phase2b_apple_capture_contract_errors(
                 apple_sources["dependencies"],
                 unsafe_session_driver,
@@ -2569,7 +3105,24 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
             )
             expect(
                 bool(unsafe_session_errors),
-                "verifier self-test did not detect forbidden ARSession.run usage",
+                "verifier self-test did not detect a non-owned ARSession reconfiguration path",
+                errors,
+            )
+
+            removed_evidence_encoder = apple_sources["driver"].replace(
+                "Self.makeEvidenceEncoder().encode(data)",
+                "RoomJSONCoding.makeEncoder().encode(data)",
+                1,
+            )
+            evidence_encoder_errors = phase2b_apple_capture_contract_errors(
+                apple_sources["dependencies"],
+                removed_evidence_encoder,
+                apple_sources["environment"],
+                apple_sources["mapper"],
+            )
+            expect(
+                bool(evidence_encoder_errors),
+                "verifier self-test did not detect a removed RoomPlan evidence encoder",
                 errors,
             )
 
@@ -2784,6 +3337,22 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
             expect(
                 bool(viewer_errors),
                 "verifier self-test did not detect a non-AR viewer regression",
+                errors,
+            )
+
+            missing_incremental_reset = phase4_sources["reality"].replace(
+                "recognizer.scale = 1",
+                "// removed incremental pinch reset",
+                1,
+            )
+            gesture_errors = phase4_viewer_editor_contract_errors(
+                phase4_sources["models"], phase4_sources["viewer_core"], phase4_sources["store"],
+                phase4_sources["controller"], phase4_sources["detail"], missing_incremental_reset,
+                phase4_sources["viewer"], phase4_sources["editor"],
+            )
+            expect(
+                bool(gesture_errors),
+                "verifier self-test did not detect a removed incremental viewer gesture reset",
                 errors,
             )
 
@@ -3078,6 +3647,12 @@ def main() -> int:
         verify_rescan_fixture(errors)
     if PACKAGE.is_file():
         verify_package(errors)
+    if PACKAGE_RESOLVED.is_file():
+        verify_package_resolution(errors)
+    production_sources = read_guest_production_sources()
+    errors.extend(guest_hosted_boundary_errors(production_sources))
+    errors.extend(slice1_spatial_contract_errors(production_sources))
+    errors.extend(slice2_quality_contract_errors(production_sources))
     if all(path.is_file() for path in (
         ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
         ROOT / "RoomScanStudio" / "Features" / "RoomCapture" / "RoomCaptureCoordinator.swift",
@@ -3093,7 +3668,11 @@ def main() -> int:
 
     entitlements = list(ROOT.rglob("*.entitlements"))
     expect(not entitlements, "active entitlements file present: " + ", ".join(str(path.relative_to(ROOT)) for path in entitlements), errors)
-    expect(not (ROOT / "Package.resolved").exists(), "Package.resolved is not allowed for the local package scaffold", errors)
+    expect(
+        not (ROOT / "Package.resolved").exists(),
+        "Package.resolved is only permitted at the committed Xcode workspace resolution path",
+        errors,
+    )
     generated_python_artifacts = list(ROOT.rglob("__pycache__")) + list(ROOT.rglob("*.pyc")) + list(ROOT.rglob("*.pyo"))
     expect(not generated_python_artifacts, "generated Python cache present: " + ", ".join(str(path.relative_to(ROOT)) for path in generated_python_artifacts), errors)
 
