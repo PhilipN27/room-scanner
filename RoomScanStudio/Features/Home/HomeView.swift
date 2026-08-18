@@ -54,6 +54,7 @@ struct HomeView: View {
                         exportCoordinator: environment.exportCoordinator,
                         cloudBackupCoordinator: environment.cloudBackupCoordinator,
                         meshColoringCoordinator: environment.meshColoringCoordinator,
+                        aiRedesignModelFactory: environment.aiRedesignModelFactory,
                         privacyPolicyURL: environment.privacyPolicyURL
                     )
                 case .newRoomScan:
@@ -92,6 +93,7 @@ struct HomeView: View {
                         exportCoordinator: environment.exportCoordinator,
                         cloudBackupCoordinator: environment.cloudBackupCoordinator,
                         meshColoringCoordinator: environment.meshColoringCoordinator,
+                        aiRedesignModelFactory: environment.aiRedesignModelFactory,
                         privacyPolicyURL: environment.privacyPolicyURL,
                         openColoredMeshOnAppear: true
                     )

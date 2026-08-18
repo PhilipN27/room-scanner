@@ -96,10 +96,11 @@ external and physical-device items stay unchecked until observed.
   two-phase configuration, poor-tracking handling, and cleanup. SDK
   type-checking and Simulator runs do not close this gate. Physical-iPad
   behavior is owner-waived and unverified.
-- [ ] Slice 2 physical iPhone quality gate: complete all seven controlled
-  good/bad protocols in the real-device plan and retain exact region, evidence,
-  Finish, Save Anyway, and reopen proof. Simulator and SDK evidence do not
-  close this gate.
+- [x] Slice 2 physical-iPhone owner acceptance: the owner accepts the quality
+  behavior based on direct observation. Only three physical-run screenshots
+  were retained, not a complete independent artifact/device-metadata matrix;
+  do not treat this as independently reproduced seven-case proof. The generic
+  `regions` label and repeated tracking guidance remain known limitations.
 - [ ] Slice 2 physical iPad quality behavior is owner-waived for the current
   program and remains unverified. Do not check this item or make a physical
   iPad claim without a future retained device evidence set.
@@ -110,6 +111,25 @@ external and physical-device items stay unchecked until observed.
   AirDrop, an external app, completion, cancellation, error, dismissal fallback,
   and exactly-once export-lease cleanup. Physical-iPad behavior remains waived
   and unverified.
+- [x] 2026-08-17 Slice 3 local/Simulator completion: 266/266 Core tests;
+  complete 219/219 schemes (185 app + 34 UI) on each iPhone 16 Pro and iPad
+  (10th generation) Simulator; and final focused Slice 3 UI evidence of 5/5
+  per form factor. The dated evidence records deterministic AI-ready/Complete
+  archive extraction/closure, authenticated finalized-package Concept automatic
+  mapping, local Share Sheet lease cleanup, and the scoped production
+  AIRedesign no-provider/model/auth/direct-HTTP-client control. The only known
+  pre-existing static-verifier exception remains local `DEVELOPMENT_TEAM`; this
+  check does not close provider, physical-device, or release-owner gates.
+- [ ] Slice 3 external-provider/current-terms gate: if any provider-specific
+  workflow is presented beyond offline instruction files, verify its current
+  behavior, privacy/account terms, and output handling from official provider
+  sources and test it separately. No provider SDK, model call, account, upload,
+  or direct-chat insertion is part of this slice.
+- [ ] Slice 3 physical import/share gate: on a supported LiDAR iPhone, retain
+  the device/app metadata and prove sanitization/rejection, disclosure
+  invalidation, Files/AirDrop/external-app share outcomes, dismissal fallback,
+  exactly-once lease cleanup, loose/packaged Concept import, mapping, archive,
+  delete, and source immutability. Physical iPad remains waived and unverified.
 - [ ] Hosted-service gate: before provisioning or release, close the ADR's
   magic-link, Sign in with Apple federation/linking, immediate cache-aware link
   revocation, tenant/RLS context, deletion/restore, publication allowlist, and
@@ -118,5 +138,8 @@ external and physical-device items stay unchecked until observed.
 - [ ] Device/storage: complete the disk-cleanup and performance protocol in
   [storage-performance.md](storage-performance.md) with representative small
   and large room assets.
+
+The Norwalk YMCA Computer Lab example remains deferred until the entire app is
+complete. It is not a Slice 2 acceptance requirement.
 
 Unchecked items are release gates, not implied completed work.

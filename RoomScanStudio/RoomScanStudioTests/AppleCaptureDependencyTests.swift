@@ -290,6 +290,105 @@ final class AppleCaptureDependencyTests: XCTestCase {
         XCTAssertNil(RoomCaptureBundleLibrary.bundleDirectory(forProject: projectID))
     }
 
+    func testCaptureBundleAIEvidenceRequiresExactRevisionBindingAndSealedManifest() throws {
+        let projectID = "test-ai-bundle-\(UUID().uuidString.lowercased())"
+        defer { try? RoomCaptureBundleLibrary.removeBundle(forProject: projectID) }
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RoomCaptureBound-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let manifest = RoomCaptureBundleManifest(
+            schemaVersion: RoomCaptureBundleManifest.currentSchemaVersion,
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            frames: [],
+            meshAnchorCount: 0,
+            meshVertexCount: 0,
+            meshFaceCount: 0,
+            notes: []
+        )
+        let manifestData = try RoomJSONCoding.makeEncoder().encode(manifest)
+        try manifestData.write(
+            to: scratch.appendingPathComponent(RoomCaptureBundleLibrary.manifestFileName),
+            options: .atomic
+        )
+        let source = RoomRedesignSourceRevision(
+            projectID: projectID,
+            revisionID: "revision-001",
+            coordinateSpaceEpochID: "epoch-001",
+            packageSchemaVersion: RoomProjectSchemaVersion.v2.rawValue,
+            semanticSHA256: String(repeating: "a", count: 64),
+            revisionManifestSHA256: String(repeating: "b", count: 64)
+        )
+
+        try RoomCaptureBundleLibrary.adoptBoundBundle(
+            at: scratch,
+            forProject: projectID,
+            sourceRevision: source
+        )
+
+        let evidence = try XCTUnwrap(
+            RoomCaptureBundleLibrary.boundEvidence(
+                forProject: projectID,
+                expectedSourceRevision: source
+            )
+        )
+        XCTAssertEqual(evidence.sourceBinding.sourceRevision, source)
+        XCTAssertEqual(
+            evidence.sourceBinding.bundleManifestSHA256,
+            RoomSHA256.hexDigest(of: manifestData)
+        )
+        XCTAssertEqual(evidence.manifest, manifest)
+
+        var wrongRevision = source
+        wrongRevision.revisionID = "revision-002"
+        XCTAssertNil(RoomCaptureBundleLibrary.boundEvidence(
+            forProject: projectID,
+            expectedSourceRevision: wrongRevision
+        ))
+
+        let adoptedManifestURL = evidence.directoryURL.appendingPathComponent(
+            RoomCaptureBundleLibrary.manifestFileName
+        )
+        try (manifestData + Data(" ".utf8)).write(to: adoptedManifestURL, options: .atomic)
+        XCTAssertNil(RoomCaptureBundleLibrary.boundEvidence(
+            forProject: projectID,
+            expectedSourceRevision: source
+        ))
+    }
+
+    func testLegacyCaptureBundleIsUnavailableToAIPackageAdapter() throws {
+        let projectID = "test-legacy-bundle-\(UUID().uuidString.lowercased())"
+        defer { try? RoomCaptureBundleLibrary.removeBundle(forProject: projectID) }
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RoomCaptureLegacy-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        try RoomJSONCoding.makeEncoder().encode(RoomCaptureBundleManifest(
+            schemaVersion: RoomCaptureBundleManifest.currentSchemaVersion,
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            frames: [],
+            meshAnchorCount: 0,
+            meshVertexCount: 0,
+            meshFaceCount: 0,
+            notes: []
+        )).write(
+            to: scratch.appendingPathComponent(RoomCaptureBundleLibrary.manifestFileName),
+            options: .atomic
+        )
+        try RoomCaptureBundleLibrary.adoptBundle(at: scratch, forProject: projectID)
+        let source = RoomRedesignSourceRevision(
+            projectID: projectID,
+            revisionID: "revision-001",
+            coordinateSpaceEpochID: "epoch-001",
+            packageSchemaVersion: RoomProjectSchemaVersion.v2.rawValue,
+            semanticSHA256: String(repeating: "a", count: 64),
+            revisionManifestSHA256: String(repeating: "b", count: 64)
+        )
+
+        XCTAssertNil(RoomCaptureBundleLibrary.boundEvidence(
+            forProject: projectID,
+            expectedSourceRevision: source
+        ))
+    }
+
     private func qualitySnapshot() -> RoomSemanticSnapshot {
         let provenance = RoomElementProvenance(
             framework: "quality-test",

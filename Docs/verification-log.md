@@ -1393,9 +1393,59 @@ Fresh final evidence:
    staged diff was empty. The ordinary verifier reports only the preserved
    local `DEVELOPMENT_TEAM`.
 
-The paired iPhone 17 Pro was unavailable and no physical iPad was present.
-Controlled physical Slice 2 iPhone behavior remains unverified and is the sole
-acceptance gate. Physical iPad is owner-waived and explicitly unverified. The
-Norwalk YMCA example remains deferred. No external system changed, nothing was
-staged or committed, and Slice 3 did not start. Full evidence is in
+At this checkpoint, the paired iPhone 17 Pro was unavailable and no physical
+iPad was present. Controlled physical Slice 2 iPhone behavior therefore
+remained unverified. Physical iPad was owner-waived and explicitly unverified.
+The Norwalk YMCA example remained deferred. No external system changed,
+nothing was staged or committed, and Slice 3 had not started at this
+checkpoint. Full evidence is in
 `Docs/evidence/2026-08-13-ai-redesign-slice-2-verification.md`.
+
+## 2026-08-16 - Slice 2 physical-iPhone owner-acceptance reconciliation
+
+The owner accepts Slice 2 on the physical LiDAR iPhone based on direct
+observation. The retained physical evidence is limited to three screenshots;
+it is not a complete independent artifact/device-metadata matrix for the
+seven-case protocol. This records owner acceptance without claiming that exact
+region/evidence, Finish, Save Anyway, and reopen results can be independently
+reproduced from retained artifacts. The generic `regions` label and repeated
+tracking guidance remain known limitations.
+
+Physical iPad remains owner-waived and unverified, not passed or failed. The
+Norwalk YMCA example remains deferred until the entire application is complete.
+This reconciliation changes documentation only and does not change Slice 2
+code. Slice 3 work is governed by
+`Docs/superpowers/plans/2026-08-16-ai-redesign-platform-slice-3.md`.
+
+## 2026-08-17 - AI redesign platform Slice 3 (local/Simulator complete)
+
+Slice 3 completes the local/offline AI Room Package, disclosure review, Share
+Sheet preparation/cleanup, and revision-bound Concept Set scope. It adds no
+hosted provider call, account, upload, direct-chat insertion, or Slice 4 work.
+
+Fresh final local/Simulator evidence is recorded in
+`Docs/evidence/2026-08-17-ai-redesign-slice-3-verification.md`:
+
+1. Complete `RoomScanCore` passed 266/266 tests.
+2. The complete Xcode scheme passed 219/219 on each iPhone 16 Pro and iPad
+   (10th generation) Simulator: 185 app tests and 34 UI tests per form factor.
+3. The final focused Slice 3 UI evidence passed 5/5 on each form factor.
+4. Deterministic AI-ready and Complete production archives independently
+   extracted and closed their canonical manifest, ledger, digest, and source/
+   profile bindings before becoming shareable.
+5. Concept automatic mapping required an authenticated finalized-package binding
+   (the exact local canonical manifest and complete view ledger, not account
+   authentication); otherwise it remained manual or unmatched. The local Share
+   Sheet lifecycle cleaned only its exact owned lease.
+6. The scoped production AIRedesign path has no provider/model/authentication/
+   direct-HTTP client. This is not a claim that the entire target is
+   network-free: explicit private CloudKit backup remains separately scoped.
+7. The known pre-existing ordinary static-verifier exception remains local
+   `DEVELOPMENT_TEAM`; it is not a Slice 3 change or release approval.
+
+The supported physical LiDAR iPhone was unavailable, so physical Share Sheet,
+Files/AirDrop/external-app handoff, actual device media import, and device
+lease-cleanup behavior remain unverified. All physical-iPad checks remain
+waived and unverified. Current external-provider behavior, privacy/account
+terms, instruction following, and output quality are unverified. Slice 4 and
+later checklists remain unchecked.

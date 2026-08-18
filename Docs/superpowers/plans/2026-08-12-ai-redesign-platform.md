@@ -142,42 +142,62 @@ scheme remains required; physical-iPad behavior is waived and unverified.
 **Rollback:** Quality coaching is advisory and feature-gated; capture/save
 continues with the existing general guidance if localized analysis fails.
 
-**Slice 2 status (2026-08-13):** Implementation, deterministic fixtures,
-mutation controls, and focused iPhone/iPad Simulator UI evidence are complete.
-The controlled physical LiDAR iPhone protocol remains the external acceptance
-gate. Physical iPad is waived and unverified. The Norwalk YMCA example remains
-deferred until the whole application is complete.
+**Slice 2 status (reconciled 2026-08-16):** Implementation, deterministic
+fixtures, mutation controls, and focused iPhone/iPad Simulator UI evidence are
+complete. The owner accepts Slice 2 on the physical LiDAR iPhone based on direct
+observation. Only three physical-run screenshots were retained; they are not a
+complete independent artifact/device-metadata matrix. The generic `regions`
+label and repeated tracking guidance remain known limitations. Physical iPad
+is waived and unverified. The Norwalk YMCA example remains deferred until the
+whole application is complete. Slice 3 implementation is governed by
+[the dedicated Slice 3 plan](2026-08-16-ai-redesign-platform-slice-3.md).
 
 ## Slice 3: AI Room Package, disclosure review, and Concept Sets
 
-**Outcome:** Complete the guaranteed user-funded AI workflow end to end.
+**Outcome:** Complete the guaranteed local user-funded AI preparation and
+Concept workflow; provider execution and physical delivery remain external.
 
-- [ ] Implement canonical provider-neutral package schemas and manifests.
-- [ ] Build AI-ready selection from semantic truth, orientation, quality,
+- [x] Implement canonical provider-neutral package schemas and manifests.
+- [x] Build AI-ready selection from semantic truth, orientation, quality,
   canonical views, and bounded sharp posed images.
-- [ ] Build Complete as an explicit superset with additional available meshes,
+- [x] Build Complete as an explicit superset with additional available meshes,
   textures, images, depth/confidence, and diagnostics.
-- [ ] Encode required free-form intent, optional structured constraints, Stage/
+- [x] Encode required free-form intent, optional structured constraints, Stage/
   Renovate/Reimagine, and per-feature `preserve`/`mayChange`/`requestedChange`.
-- [ ] Generate provider-tailored instruction files without changing underlying
-  truth; treat verified direct-chat insertion as optional adapters.
-- [ ] Add mandatory outbound privacy review, advisory sensitive-content flags,
+- [x] Generate offline provider-tailored instruction files without changing
+  underlying truth; direct-chat insertion remains an unimplemented and
+  unverified optional adapter.
+- [x] Add mandatory outbound privacy review, advisory sensitive-content flags,
   image exclusion/replacement, and default precise-GPS exclusion.
-- [ ] Deliver through the existing iOS Share Sheet with owned lease cleanup.
-- [ ] Import loose or packaged outputs as revision-bound Concept Sets; map to
-  canonical views automatically only when confidence is sufficient and allow
-  manual mapping otherwise.
-- [ ] Add original-versus-concept comparison and concept archive/delete flows.
+- [x] Deliver through the existing iOS Share Sheet with owned lease cleanup in
+  the local/Simulator lifecycle.
+- [x] Import loose or packaged outputs as revision-bound Concept Sets; map to
+  canonical views automatically only with authenticated finalized-package
+  provenance and a current declared view, otherwise manually or unmatched.
+- [x] Add original-versus-concept comparison and concept archive/delete flows.
 
-**Oracle:** Golden AI-ready and Complete fixtures pass schema, manifest,
+**Local oracle:** Golden AI-ready and Complete fixtures pass schema, manifest,
 checksum, and archive-closure tests; every requested artifact has an included/
 excluded/skipped/failed record; GPS/raw-default negative tests include positive
-controls; package extraction succeeds in independent tooling; device Share
-Sheet completion/cancel/recovery is exercised; concept import/delete cannot
-change semantic geometry, measurements, or source revision digests.
+controls; package extraction succeeds independently; local Share Sheet lifecycle
+cleanup is exercised; concept import/delete cannot change semantic geometry,
+measurements, or source revision digests. Physical Share Sheet targets,
+security-scoped import, completion/cancel/error/dismissal, and provider behavior
+remain separate unchecked gates.
 
 **Rollback:** Package versions coexist with the legacy head export. Concepts
 are additive attachments and can be hidden without altering source rooms.
+
+**Slice 3 local/Simulator status (2026-08-17):** Complete: 266/266 Core tests;
+complete 219/219 schemes (185 app + 34 UI) on each iPhone 16 Pro and iPad (10th
+generation) Simulator; and focused Slice 3 UI evidence of 5/5 on each form
+factor. The final local proof includes deterministic AI-ready/Complete archive
+extraction/closure, authenticated finalized-package Concept automatic mapping,
+local Share Sheet lease cleanup, and no provider/model/auth/direct-HTTP client
+in the production AIRedesign path. This does not authorize or imply Slice 4
+work. Physical LiDAR iPhone Share Sheet/import evidence, all physical-iPad
+checks, and current external-provider behavior/terms remain unverified and
+unchecked.
 
 ## Slice 4: Professional service foundation
 

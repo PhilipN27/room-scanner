@@ -3,11 +3,15 @@
 Status: Phase-2A Core/storage, Phase-2B deterministic/production capture,
 Phase-3 V1-A fixture-only rescan, Phase-4 saved-room viewer/editor, Phase-5
 head-revision export, and Phase-6 opt-in full-project backup/recovery source
-are authored and host-statically checked. On 2026-08-10 the complete hosted
+are authored and host-statically checked. Slice 3 local AI Room
+Package/disclosure/Concept Set paths are implemented and locally/Simulator-
+verified: 266/266 Core tests; complete 219/219 schemes (185 app + 34 UI) on
+both iPhone 16 Pro and iPad (10th generation) Simulators; and focused Slice 3
+UI evidence of 5/5 on each form factor. On 2026-08-10 the complete hosted
 Xcode 16.4 build and iPhone/iPad Simulator matrix passed. Physical RoomPlan
 capture, independent ZIP/render inspection, CloudKit development-container,
-signing, and physical-device proof remain pending. The implementation is
-local-first and one-room only.
+signing, and physical-device proof remain separately gated. The implementation
+is local-first and one-room only; Slice 3 adds no hosted/provider dependency.
 
 ## Architectural boundaries
 
@@ -23,6 +27,8 @@ local-first and one-room only.
 | Revision/rescan boundary | Builds reviewable semantic proposals and lineage. | Continuous session or successful ARWorldMap relocalization only; fail closed otherwise. |
 | Cloud backup boundary | Explicit private immutable backup/recovery only. | Local opt-in defaults false; no launch/toggle call, no default container, sync, or source-of-truth migration. |
 | Export boundary | Generates native and verified optional deliverables. | USD/USDZ required; manifest reports generated/skipped/failed formats. |
+| AI package boundary | Plans and builds one source-bound provider-neutral archive after exact disclosure review. | Offline; complete ledger/closure; source immutable; no provider/model client. |
+| Concept boundary | Validates, sanitizes, persists, reviews, compares, archives, and deletes additive concept media. | Separate store; untrusted imports; atomic promotion; never captured truth. |
 
 ## Package-first room layout
 
@@ -59,6 +65,9 @@ Attempt scratch is deliberately outside that layout:
           lease-ownership.json  fixed marker; external handoff only
           head/                 frozen current-head materialization
           roomscan-head-<revision>.zip
+      ConceptSets/              additive, source-bound Concept Set store
+      ConceptImportScratch/     marker-owned untrusted import staging
+      AIRedesignProvenance/     validated built-package bindings only
 
 `CaptureScratch` is never an authoritative package directory. It is removed
 after successful promotion or completed discard, subject to the guarded retry
@@ -69,6 +78,47 @@ rule: each direct child carries a regular fixed-schema ownership marker. Cleanup
 and crash recovery remove only marker-valid, non-symlink direct children; a
 prefix-matching lookalike or link is preserved for manual review. Export never
 recursively clears this root.
+
+## Slice 3 local AI redesign boundary
+
+`RoomScanCore` owns the provider-neutral artifact slots/plans, canonical
+digests, package/ledger/disclosure validation, deterministic ZIP construction
+and independent extraction, Concept Set/archive schemas, and atomic local
+Concept store. It imports no SwiftUI, UIKit, Vision, provider, authentication,
+or network API.
+
+The iOS `Infrastructure/AIRedesign` layer reloads the exact sealed source,
+requires confirmed/manual orientation and a valid nonempty intent, renders the
+floor/six canonical derivatives, sanitizes selected images, runs advisory
+Vision analysis, freezes bytes into an owned lease, and coordinates exact
+approval. `Features/AIRedesign` presents the profile, brief/permissions,
+readiness, actual selected/raw previews and metadata, warnings, GPS exclusion,
+provider notice, artifact inventory, Share Sheet request, and Concept review
+actions. SwiftUI never receives an authoritative project URL or mutates source
+geometry.
+
+Package review has two distinct state machines. Core disclosure coordination
+uses `idle`, `reviewing`, `approved`, `rejected`, `stale`, and `consumed`; the
+production screen uses `drafting`, `readyForReview`, `approved`, `stale`,
+`archiveReady`, and `cleanupFailed`. Any source/profile/plan/selection change
+invalidates approval. Finalization independently extracts the archive before
+publishing a one-shot Share Sheet request. Completion, cancellation, error, or
+dismissal cleans only that exact lease; cleanup failure remains retryable.
+
+Concept imports never stage inside `Projects`. The bounded archive/image
+boundary rejects unsafe paths, links, aliases, remote references, unsupported
+media, rebound source identity, and incomplete closure, then performs a fresh
+decode/re-encode before same-root promotion. Automatic mapping requires an
+authenticated finalized-package binding (the exact local canonical manifest and
+complete view ledger, not account authentication) plus a canonical view
+identifier; otherwise mapping is manual or unmatched. Concept media/metadata
+remains additive and archive/delete operates on one selected concept only.
+
+The final local/Simulator matrix independently proved deterministic AI-ready
+and Complete archive extraction/manifest/ledger closure, exact
+finalized-package Concept automatic mapping, and local Share Sheet lease
+cleanup. It does not prove real provider behavior or terms, physical Share
+Sheet/import behavior on iPhone, or any physical-iPad behavior.
 
 The live asset layout may add Encodable CapturedRoomData, a CapturedRoom-native
 USD/USDZ export, optional raw mesh, optional ARWorldMap, photos, and provenance

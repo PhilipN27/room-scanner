@@ -728,7 +728,7 @@ public struct RoomHostedAPIResource: Encodable, Sendable, Equatable {
 
 // MARK: - AI Room Package
 
-public enum RoomAIRoomPackageProfile: String, Codable, Sendable, Equatable {
+public enum RoomAIRoomPackageProfile: String, Codable, Sendable, Equatable, CaseIterable {
     case aiReady
     case complete
 }
@@ -875,12 +875,41 @@ public enum RoomRedesignArtifactClass: String, Codable, Sendable, Equatable, Cas
     case diagnostics
     case worldMap
 
-    fileprivate var isRawCaptureEvidence: Bool {
+    /// Raw or diagnostic evidence that is valid only in a reviewed Complete
+    /// package. World maps remain invalid in both AI package profiles.
+    public var isAIRawEvidence: Bool {
         switch self {
-        case .rawRGB, .rawDepth, .rawConfidence, .diagnostics, .worldMap:
+        case .rawRGB, .rawDepth, .rawConfidence, .diagnostics:
             return true
         default:
             return false
+        }
+    }
+
+    /// Stable v1 ordering. Raw-value sorting is not used because inserting a
+    /// newly named class must not silently reorder the signed manifest.
+    public var aiPackageCanonicalRank: Int {
+        switch self {
+        case .normalizedSemantics: return 0
+        case .revisionLineage: return 1
+        case .orientation: return 2
+        case .floorPlan: return 3
+        case .canonicalView: return 4
+        case .selectedReferenceImage: return 5
+        case .materials: return 6
+        case .qualityReport: return 7
+        case .roomBrief: return 8
+        case .redesignIntent: return 9
+        case .providerInstructions: return 10
+        case .mesh: return 11
+        case .texture: return 12
+        case .conceptAttachment: return 13
+        case .comments: return 14
+        case .rawRGB: return 15
+        case .rawDepth: return 16
+        case .rawConfidence: return 17
+        case .diagnostics: return 18
+        case .worldMap: return 19
         }
     }
 }
@@ -935,6 +964,10 @@ public struct RoomAIRoomPackageArtifact: Codable, Sendable, Equatable {
             at: path
         )
     }
+
+    public var slot: RoomAIArtifactSlot {
+        RoomAIArtifactSlot(artifactID: artifactID, artifactClass: artifactClass)
+    }
 }
 
 public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
@@ -943,6 +976,9 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
     public var packageID: String
     public var profile: RoomAIRoomPackageProfile
     public var sourceRevision: RoomRedesignSourceRevision
+    /// Exact ordered plan reviewed before any disposition or bytes are chosen.
+    /// Repeated artifact classes are represented by distinct stable IDs.
+    public var artifactPlan: [RoomAIArtifactSlot]
     /// Deterministic v1 plan derived from the immutable source, profile, and
     /// contract. It fixes the complete ledger slots before any bytes are
     /// selected, preventing silent omission of a requested record.
@@ -957,6 +993,7 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
         packageID: String,
         profile: RoomAIRoomPackageProfile,
         sourceRevision: RoomRedesignSourceRevision,
+        artifactPlan: [RoomAIArtifactSlot],
         artifactPlanSHA256: String,
         selectionSHA256: String,
         disclosureReview: RoomDisclosureReview,
@@ -967,6 +1004,7 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
         self.packageID = packageID
         self.profile = profile
         self.sourceRevision = sourceRevision
+        self.artifactPlan = artifactPlan
         self.artifactPlanSHA256 = artifactPlanSHA256
         self.selectionSHA256 = selectionSHA256
         self.disclosureReview = disclosureReview
@@ -986,23 +1024,45 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
             at: "artifactPlanSHA256"
         )
         try RoomRedesignContractRules.requireSHA256(selectionSHA256, at: "selectionSHA256")
+        try RoomAIArtifactPlan.validateSlots(
+            artifactPlan,
+            profile: profile,
+            at: "artifactPlan"
+        )
         try RoomRedesignContractRules.requireNonemptyCount(
             artifacts.count,
             maximum: RoomRedesignContractRules.maximumCollectionCount,
             at: "artifacts"
         )
         try RoomRedesignContractRules.requireUnique(artifacts.map(\.artifactID), at: "artifacts.artifactID")
-        try RoomRedesignContractRules.requireUnique(
-            artifacts.map(\.artifactClass),
-            at: "artifacts.artifactClass"
-        )
         for (index, artifact) in artifacts.enumerated() {
             try artifact.validate(at: "artifacts[\(index)]")
+        }
+        guard artifacts.map(\.slot) == artifactPlan else {
+            let plannedCounts = Dictionary(grouping: artifactPlan, by: \.artifactClass).mapValues(\.count)
+            let actualCounts = Dictionary(grouping: artifacts, by: \.artifactClass).mapValues(\.count)
+            let hasUnplannedClassOccurrence = actualCounts.contains { artifactClass, count in
+                artifactClass != .worldMap && count > plannedCounts[artifactClass, default: 0]
+            }
+            throw RoomRedesignContractValidationError.invalidValue(
+                path: hasUnplannedClassOccurrence ? "artifacts.artifactClass" : "artifacts",
+                reason: "The full artifact ledger must contain exactly one canonical record for every planned slot and no unplanned record."
+            )
         }
         try RoomRedesignContractRules.requireUniqueRelativePaths(
             artifacts.compactMap { $0.disposition == .included ? $0.relativePath : nil },
             at: "artifacts.included.relativePath"
         )
+        for (index, artifact) in artifacts.enumerated() {
+            try RoomAIArtifactPolicy.validateIncludedArtifact(artifact, at: "artifacts[\(index)]")
+        }
+        guard !artifacts.contains(where: { $0.disposition == .failed }) else {
+            throw RoomRedesignContractValidationError.invalidValue(
+                path: "artifacts",
+                reason: "Failed producer artifacts block package approval and sharing."
+            )
+        }
+        try RoomAIArtifactPolicy.validateProfileLedger(artifacts, profile: profile)
 
         let computedSelectionSHA256 = try RoomRedesignContractRules.selectionDigest(
             artifacts: artifacts
@@ -1015,7 +1075,8 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
         }
         let computedArtifactPlanSHA256 = try RoomRedesignContractRules.aiArtifactPlanDigest(
             sourceRevision: sourceRevision,
-            profile: profile
+            profile: profile,
+            slots: artifactPlan
         )
         guard artifactPlanSHA256 == computedArtifactPlanSHA256 else {
             throw RoomRedesignContractValidationError.invalidValue(
@@ -1031,15 +1092,6 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
             at: "disclosureReview"
         )
 
-        let expectedArtifactClasses = RoomRedesignContractRules.aiArtifactPlanSlots(profile: profile)
-        guard Set(artifacts.map(\.artifactClass)) == Set(expectedArtifactClasses),
-              artifacts.count == expectedArtifactClasses.count
-        else {
-            throw RoomRedesignContractValidationError.invalidValue(
-                path: "artifacts",
-                reason: "The AI artifact ledger must contain exactly one record for every source-bound v1 plan slot."
-            )
-        }
         guard !artifacts.contains(where: { $0.artifactClass == .worldMap }) else {
             throw RoomRedesignContractValidationError.invalidValue(
                 path: "artifacts",
@@ -1048,14 +1100,14 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
         }
 
         let includesRawEvidence = artifacts.contains {
-            $0.artifactClass.isRawCaptureEvidence && $0.disposition == .included
+            $0.artifactClass.isAIRawEvidence && $0.disposition == .included
         }
         switch profile {
         case .aiReady:
-            guard !includesRawEvidence else {
+            guard !artifactPlan.contains(where: { $0.artifactClass.isAIRawEvidence }) else {
                 throw RoomRedesignContractValidationError.invalidValue(
-                    path: "artifacts",
-                    reason: "AI-ready packages must not include raw RGB, depth, confidence, diagnostics, or world-map evidence."
+                    path: "artifactPlan",
+                    reason: "AI-ready plans structurally exclude raw RGB, depth, confidence, and diagnostics slots."
                 )
             }
             guard !disclosureReview.rawEvidenceDisclosureAccepted else {
@@ -1065,10 +1117,10 @@ public struct RoomAIRoomPackage: Encodable, Sendable, Equatable {
                 )
             }
         case .complete:
-            if includesRawEvidence && !disclosureReview.rawEvidenceDisclosureAccepted {
+            guard disclosureReview.rawEvidenceDisclosureAccepted == includesRawEvidence else {
                 throw RoomRedesignContractValidationError.invalidValue(
                     path: "disclosureReview.rawEvidenceDisclosureAccepted",
-                    reason: "Complete packages require explicit disclosure review for raw capture evidence."
+                    reason: "Complete raw approval must exactly match whether raw evidence is included."
                 )
             }
         }
@@ -1411,16 +1463,9 @@ public struct RoomPortalAIReadyPackageBinding: Codable, Sendable, Equatable {
                 reason: "The validated AI-ready manifest must bind to the portal source revision."
             )
         }
-        let expectedPlan = try RoomRedesignContractRules.aiArtifactPlanDigest(
-            sourceRevision: sourceRevision,
-            profile: .aiReady
-        )
-        guard artifactPlanSHA256 == expectedPlan else {
-            throw RoomRedesignContractValidationError.invalidValue(
-                path: "\(path).artifactPlanSHA256",
-                reason: "The portal download must use the source-bound AI-ready artifact plan."
-            )
-        }
+        // Dynamic repeated slots cannot be reconstructed from the portal
+        // envelope alone. The actual archive validator below compares this
+        // digest with the strict canonical manifest and its explicit plan.
     }
 }
 
@@ -1706,6 +1751,7 @@ private struct RoomAIRoomPackageWire: Decodable {
     var packageID: String
     var profile: RoomAIRoomPackageProfile
     var sourceRevision: RoomRedesignSourceRevision
+    var artifactPlan: [RoomAIArtifactSlot]
     var artifactPlanSHA256: String
     var selectionSHA256: String
     var disclosureReview: RoomDisclosureReview
@@ -1718,6 +1764,7 @@ private struct RoomAIRoomPackageWire: Decodable {
             packageID: packageID,
             profile: profile,
             sourceRevision: sourceRevision,
+            artifactPlan: artifactPlan,
             artifactPlanSHA256: artifactPlanSHA256,
             selectionSHA256: selectionSHA256,
             disclosureReview: disclosureReview,
@@ -2025,13 +2072,29 @@ public enum RoomRedesignContractValidator {
 /// a review is valid only for the exact source-bound plan and selected ledger
 /// that produced the digest.
 public enum RoomRedesignContractDigests {
+    /// Compatibility helper for the canonical Slice 0 fixture plan. New
+    /// producers with repeated or source-derived slots must call the overload
+    /// that accepts the exact ordered slot list.
     public static func aiArtifactPlanSHA256(
         sourceRevision: RoomRedesignSourceRevision,
         profile: RoomAIRoomPackageProfile
     ) throws -> String {
         try RoomRedesignContractRules.aiArtifactPlanDigest(
             sourceRevision: sourceRevision,
-            profile: profile
+            profile: profile,
+            slots: RoomRedesignContractRules.defaultAIArtifactPlanSlots(profile: profile)
+        )
+    }
+
+    public static func aiArtifactPlanSHA256(
+        sourceRevision: RoomRedesignSourceRevision,
+        profile: RoomAIRoomPackageProfile,
+        slots: [RoomAIArtifactSlot]
+    ) throws -> String {
+        try RoomRedesignContractRules.aiArtifactPlanDigest(
+            sourceRevision: sourceRevision,
+            profile: profile,
+            slots: slots
         )
     }
 
@@ -2273,27 +2336,41 @@ private enum RoomRedesignContractRules {
     static let maximumAssetByteCount: UInt64 = 1_099_511_627_776
     static let hexadecimalScalars = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
     private static let lowercaseHexadecimalScalars = CharacterSet(charactersIn: "0123456789abcdef")
-    static func aiArtifactPlanSlots(profile: RoomAIRoomPackageProfile) -> [RoomRedesignArtifactClass] {
-        let common: [RoomRedesignArtifactClass] = [
-            .normalizedSemantics,
-            .orientation,
-            .floorPlan,
-            .canonicalView,
-            .selectedReferenceImage,
-            .materials,
-            .qualityReport,
-            .roomBrief,
-            .redesignIntent,
-            .providerInstructions,
-            .mesh,
-            .texture,
-            .conceptAttachment
+    static func defaultAIArtifactPlanSlots(
+        profile: RoomAIRoomPackageProfile
+    ) -> [RoomAIArtifactSlot] {
+        var slots = [
+            RoomAIArtifactSlot(artifactID: "artifact-normalized-semantics", artifactClass: .normalizedSemantics),
+            RoomAIArtifactSlot(artifactID: "artifact-revision-lineage", artifactClass: .revisionLineage),
+            RoomAIArtifactSlot(artifactID: "artifact-orientation", artifactClass: .orientation),
+            RoomAIArtifactSlot(artifactID: "artifact-floor-plan", artifactClass: .floorPlan),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-entry", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-wall", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-corner", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-orbit", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-perspective", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-canonical-view-top-down", artifactClass: .canonicalView),
+            RoomAIArtifactSlot(artifactID: "artifact-reference-image", artifactClass: .selectedReferenceImage),
+            RoomAIArtifactSlot(artifactID: "artifact-materials", artifactClass: .materials),
+            RoomAIArtifactSlot(artifactID: "artifact-quality-report", artifactClass: .qualityReport),
+            RoomAIArtifactSlot(artifactID: "artifact-room-brief", artifactClass: .roomBrief),
+            RoomAIArtifactSlot(artifactID: "artifact-redesign-intent", artifactClass: .redesignIntent),
+            RoomAIArtifactSlot(artifactID: "instructions-provider-neutral", artifactClass: .providerInstructions),
+            RoomAIArtifactSlot(artifactID: "instructions-chatgpt", artifactClass: .providerInstructions),
+            RoomAIArtifactSlot(artifactID: "instructions-claude", artifactClass: .providerInstructions),
+            RoomAIArtifactSlot(artifactID: "instructions-grok", artifactClass: .providerInstructions),
+            RoomAIArtifactSlot(artifactID: "artifact-mesh", artifactClass: .mesh),
+            RoomAIArtifactSlot(artifactID: "artifact-texture", artifactClass: .texture),
         ]
-        // Both profiles have an honest ledger slot for raw evidence. AI-ready
-        // must explicitly mark those slots non-included; Complete may include
-        // them after review. This lets a raw-default guard be exercised rather
-        // than hidden behind an omitted-slot failure.
-        return common + [.rawRGB, .rawDepth, .rawConfidence, .diagnostics]
+        if profile == .complete {
+            slots.append(contentsOf: [
+                RoomAIArtifactSlot(artifactID: "artifact-raw-rgb", artifactClass: .rawRGB),
+                RoomAIArtifactSlot(artifactID: "artifact-raw-depth", artifactClass: .rawDepth),
+                RoomAIArtifactSlot(artifactID: "artifact-raw-confidence", artifactClass: .rawConfidence),
+                RoomAIArtifactSlot(artifactID: "artifact-diagnostics", artifactClass: .diagnostics),
+            ])
+        }
+        return RoomAIArtifactSlot.canonicalized(slots)
     }
 
     static func workingSyncAssetPlanSlots(
@@ -2522,7 +2599,7 @@ private enum RoomRedesignContractRules {
     }
 
     static func selectionDigest(artifacts: [RoomAIRoomPackageArtifact]) throws -> String {
-        let ledger: [[String: Any]] = artifacts.sorted { $0.artifactID < $1.artifactID }.map { artifact in
+        let ledger: [[String: Any]] = artifacts.map { artifact in
             var object: [String: Any] = [
                 "artifactID": artifact.artifactID,
                 "artifactClass": artifact.artifactClass.rawValue,
@@ -2597,14 +2674,20 @@ private enum RoomRedesignContractRules {
 
     static func aiArtifactPlanDigest(
         sourceRevision: RoomRedesignSourceRevision,
-        profile: RoomAIRoomPackageProfile
+        profile: RoomAIRoomPackageProfile,
+        slots: [RoomAIArtifactSlot]
     ) throws -> String {
         try canonicalDigest([
             "schemaVersion": RoomRedesignContractKind.aiRoomPackage.supportedSchemaVersion,
             "contractKind": RoomRedesignContractKind.aiRoomPackage.rawValue,
             "profile": profile.rawValue,
             "sourceRevision": sourceRevisionObject(sourceRevision),
-            "artifactClasses": aiArtifactPlanSlots(profile: profile).map(\.rawValue).sorted()
+            "slots": slots.map {
+                [
+                    "artifactID": $0.artifactID,
+                    "artifactClass": $0.artifactClass.rawValue,
+                ]
+            }
         ])
     }
 
@@ -2655,6 +2738,7 @@ private enum RoomRedesignStrictJSON {
     private static let artifactKeys: Set<String> = [
         "artifactID", "artifactClass", "disposition", "relativePath", "sha256", "byteCount", "mediaType", "reasonCode"
     ]
+    private static let artifactSlotKeys: Set<String> = ["artifactID", "artifactClass"]
     private static let syncAssetKeys: Set<String> = [
         "assetID", "assetClass", "disposition", "relativePath", "sha256", "byteCount", "mediaType", "reasonCode"
     ]
@@ -2976,8 +3060,8 @@ private enum RoomRedesignStrictJSON {
     static func validateAIRoomPackage(_ root: [String: Any]) throws {
         let root = try object(
             root,
-            allowed: ["schemaVersion", "contractKind", "packageID", "profile", "sourceRevision", "artifactPlanSHA256", "selectionSHA256", "disclosureReview", "artifacts"],
-            required: ["schemaVersion", "contractKind", "packageID", "profile", "sourceRevision", "artifactPlanSHA256", "selectionSHA256", "disclosureReview", "artifacts"],
+            allowed: ["schemaVersion", "contractKind", "packageID", "profile", "sourceRevision", "artifactPlan", "artifactPlanSHA256", "selectionSHA256", "disclosureReview", "artifacts"],
+            required: ["schemaVersion", "contractKind", "packageID", "profile", "sourceRevision", "artifactPlan", "artifactPlanSHA256", "selectionSHA256", "disclosureReview", "artifacts"],
             path: "$"
         )
         try validateSourceRevision(try requiredObject(root, key: "sourceRevision", path: "$"), path: "$.sourceRevision")
@@ -2985,6 +3069,15 @@ private enum RoomRedesignStrictJSON {
             try requiredObject(root, key: "disclosureReview", path: "$"),
             path: "$.disclosureReview"
         )
+        let artifactPlan = try requiredArray(root, key: "artifactPlan", path: "$")
+        for (index, value) in artifactPlan.enumerated() {
+            _ = try object(
+                value,
+                allowed: artifactSlotKeys,
+                required: artifactSlotKeys,
+                path: "$.artifactPlan[\(index)]"
+            )
+        }
         let artifacts = try requiredArray(root, key: "artifacts", path: "$")
         for (index, value) in artifacts.enumerated() {
             _ = try object(

@@ -1,9 +1,9 @@
 # AI redesign contract inventory
 
-- Date: 2026-08-12
+- Date: 2026-08-17 (Slice 3 implementation update)
 - Baseline: branch `agent/ai-redesign-platform-plan`, commit `362c8cd`
-- Purpose: classify the existing persisted boundaries before adding Slice 0
-  contracts
+- Purpose: retain the pre-Slice inventory and record the implemented Slice 3
+  local contract routes without changing hosted boundaries
 
 ## Existing authoritative contracts
 
@@ -17,21 +17,37 @@
 | Capture sidecar | Capture bundle manifest schema v3 outside the project package | Best-effort high-volume RGB/mesh/depth/confidence/diagnostic evidence is stored separately from package truth. Training ZIP export is another explicit action. | Default sync must not discover or upload this directory implicitly. A future raw archive needs an explicit revision binding, owner opt-in, size/privacy review, and distinct asset policy. |
 | Viewer/editor | Disposable non-AR render state plus copy-on-write edit revisions | The saved-room viewer renders semantic boxes/derived mesh without starting capture. Edits append a new revision under an expected local head. | Concepts, orientation, and presentation metadata remain additive and cannot become an alternate mutable geometry authority. |
 
-Repository source and app tests contain no general `URLSession`, OAuth,
-bearer-token, hosted-service SDK, or professional-auth path. Network/account
-behavior is confined to existing explicit Apple services such as private
-CloudKit backup and OS authorization APIs. The current executable guest route
-remains:
+The production `AIRedesign` path contains no general `URLSession`, OAuth,
+bearer-token, hosted-service SDK, provider/model client, or professional-auth
+path. App tests retain a deliberate `URLSession` positive control for the
+offline detector. This scoped AIRedesign claim does not erase the target's
+existing explicit private CloudKit backup transport or OS authorization APIs.
+The current executable guest route remains:
 
 ```text
 launch -> capture or fixture -> review -> local save -> local view/edit
        -> head export -> Share Sheet
 ```
 
-The approved future AI package construction and Concept Set import operations
-sit on the same account-free, offline side of the boundary. Slice 0 defines
-their contracts only. Nothing in this slice changes the executable route or
-makes server availability a precondition.
+AI package construction and Concept Set import now execute on the same
+account-free, offline side of the boundary. Slice 3 implements them without
+making server availability a precondition:
+
+```text
+validated immutable revision + confirmed/manual orientation
+  -> RoomAIRoomPackageAppService materialization/review
+  -> deterministic AI Room Package archive -> explicit Share Sheet
+
+untrusted local image/Concept archive
+  -> RoomConceptImportCoordinator sanitization/validation
+  -> LocalRoomConceptStore atomic promotion -> review/compare/archive/delete
+```
+
+`RoomScanCore` owns plans, digests, strict manifests, deterministic archive
+closure, the Concept archive contract, and the local Concept store. The iOS
+`AIRedesign` infrastructure owns Apple image rendering/sanitization, disclosure
+coordination, security-scoped import lifetime, and system-share presentation.
+No hosted/provider/model client participates.
 
 Slice 0 executes the currently available local portion through an in-process
 `AppEnvironment` integration test: simulated capture, explicit Save, package
@@ -40,8 +56,15 @@ test-only HTTP(S) transport catches a deliberately injected request. On the
 installed iOS 26.3.1 Simulator, global `URLProtocol` registration did not
 intercept newly created default or ephemeral sessions, so a companion static
 oracle rejects production HTTP/auth clients and proves its detector with an
-in-memory injected `URLSession` control. This combined evidence does not claim
-the future AI-package/Concept Set paths or a physical system Share Sheet.
+in-memory injected `URLSession` control. That Slice 0 evidence did not claim
+AI-package/Concept paths. Their Slice 3 local/Simulator evidence is recorded
+separately in the dated Slice 3 report: 266/266 Core tests, complete 219/219
+schemes (185 app + 34 UI) on each iPhone 16 Pro and iPad (10th generation)
+Simulator, and focused UI evidence of 5/5 per form factor. That matrix also
+records deterministic AI-ready/Complete archive extraction closure, exact
+finalized-package Concept automatic mapping, local Share Sheet cleanup, and no
+production AIRedesign provider/model/auth/HTTP-client path. Neither record
+proves a physical system Share Sheet/import or current provider behavior/terms.
 
 ## Additive fields and documents
 
@@ -100,5 +123,7 @@ the new operation requires its own complete, valid revision-bound extension.
   is constructed from an empty snapshot, never from a private package by
   subtraction.
 
-These contracts introduce no migration, production database, endpoint,
-credential, dependency, or network call in Slice 0.
+Slice 3 realizes the local AI-package and Concept Set boundaries without a
+room-package migration, production database, endpoint, credential, provider
+SDK, model call, or network call. Hosted resources, professional sync, and
+portal publication remain later-slice contracts only.

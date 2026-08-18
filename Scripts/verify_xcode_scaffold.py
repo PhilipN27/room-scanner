@@ -322,6 +322,225 @@ def slice2_quality_contract_errors(production_sources: dict[Path, str]) -> list[
     return errors
 
 
+def slice3_ai_redesign_contract_errors(
+    production_sources: dict[Path, str],
+    pbx: str,
+) -> list[str]:
+    """Check Slice 3's offline AI-package and Concept Set delivery boundary.
+
+    This is deliberately a host-only structural oracle.  It checks that the
+    security-critical Core guards, app adapters, SwiftUI host, and Xcode target
+    membership remain present, but it does not replace the focused Core/app/UI
+    tests that exercise actual ZIP, image, UIKit, and persistence behavior.
+    """
+    errors: list[str] = []
+    source_paths = {
+        "contracts": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomRedesignContracts.swift",
+        "selection": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAIArtifactSelection.swift",
+        "builder": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAIRoomPackageBuilder.swift",
+        "archive": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAIRoomPackageArchive.swift",
+        "concept": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomConceptSet.swift",
+        "concept_archive": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomConceptSetArchive.swift",
+        "concept_store": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomConceptStore.swift",
+        "project_store": ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomProjectStore.swift",
+        "environment": ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
+        "detail": ROOT / "RoomScanStudio" / "Features" / "RoomLibrary" / "RoomDetailView.swift",
+        "export_view": ROOT / "RoomScanStudio" / "Features" / "RoomLibrary" / "RoomExportView.swift",
+        "export_coordinator": ROOT / "RoomScanStudio" / "Infrastructure" / "Export" / "RoomExportCoordinator.swift",
+        "controller": ROOT / "RoomScanStudio" / "Infrastructure" / "Persistence" / "RoomLibraryController.swift",
+        "sanitizer": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIImageSanitizer.swift",
+        "sensitive_content": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAISensitiveContentAnalyzer.swift",
+        "disclosure": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIDisclosureCoordinator.swift",
+        "package_service": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRoomPackageAppService.swift",
+        "materializer": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRoomPackageMaterializer.swift",
+        "renderer": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRoomPackageDerivativeRenderer.swift",
+        "concept_import": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomConceptImportCoordinator.swift",
+        "factory": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRedesignModelFactory.swift",
+        "model": ROOT / "RoomScanStudio" / "Features" / "AIRedesign" / "RoomAIRedesignProductionModel.swift",
+        "view": ROOT / "RoomScanStudio" / "Features" / "AIRedesign" / "RoomAIRedesignView.swift",
+        "host": ROOT / "RoomScanStudio" / "Features" / "AIRedesign" / "RoomAIRedesignHostView.swift",
+    }
+    for name, path in source_paths.items():
+        expect(
+            path in production_sources,
+            f"Slice 3 production source is missing: {name} ({path.relative_to(ROOT)})",
+            errors,
+        )
+    if errors:
+        return errors
+
+    sources = {name: production_sources[path] for name, path in source_paths.items()}
+
+    # The Core contract is the primary non-bypassable boundary. In particular,
+    # suggested orientation, unreviewed/rebound disclosure, raw AI-ready
+    # material, world maps, and precise GPS must all fail before any app UI can
+    # make a package shareable.
+    for description, contract, source in (
+        ("AI Room Package profile contract", "public enum RoomAIRoomPackageProfile", sources["contracts"]),
+        ("disclosure review contract", "public struct RoomDisclosureReview", sources["contracts"]),
+        ("exact disclosure source revision binding", "sourceRevisionID == sourceRevision.revisionID", sources["contracts"]),
+        ("exact disclosure manifest binding", "sourceRevisionManifestSHA256 == sourceRevision.revisionManifestSHA256", sources["contracts"]),
+        ("exact disclosure selection binding", "reviewedSelectionSHA256 == selectionSHA256", sources["contracts"]),
+        ("exact disclosure plan binding", "reviewedArtifactPlanSHA256 == artifactPlanSHA256", sources["contracts"]),
+        ("structural precise-GPS exclusion", "guard preciseGPSExcluded else", sources["contracts"]),
+        ("exact plan-to-ledger closure", "guard artifacts.map(\\.slot) == artifactPlan else", sources["contracts"]),
+        ("world-map exclusion", "guard !artifacts.contains(where: { $0.artifactClass == .worldMap }) else", sources["contracts"]),
+        ("AI-ready raw-plan exclusion", "guard !artifactPlan.contains(where: { $0.artifactClass.isAIRawEvidence }) else", sources["contracts"]),
+        ("Complete raw-consent equality", "disclosureReview.rawEvidenceDisclosureAccepted == includesRawEvidence", sources["contracts"]),
+        ("artifact allowlist", "let alwaysAllowed: Set<RoomRedesignArtifactClass>", sources["selection"]),
+        ("Complete-only raw allowlist", "let completeOnly: Set<RoomRedesignArtifactClass>", sources["selection"]),
+        ("confirmed/manual readiness guard", "guard orientation.source == .confirmed || orientation.source == .manual else", sources["selection"]),
+        ("confirmed/manual companion readiness guard", "guard companion.orientation.source == .confirmed || companion.orientation.source == .manual else", sources["selection"]),
+        ("redesign intent readiness guard", "throw RoomAIRoomPackageError.redesignIntentRequired", sources["selection"]),
+        ("AI-ready inventory raw rejection", "if profile == .aiReady, rawGroups.contains(where: { !$0.isEmpty }) {", sources["selection"]),
+        ("bounded deterministic reference selector", "public enum RoomAIReferenceImageSelector", sources["selection"]),
+        ("provider instruction truth binding", "public static func makeProviderInstructions", sources["builder"]),
+        ("canonical manifest round-trip", "guard case let .aiRoomPackage(decoded)", sources["builder"]),
+        ("frozen artifact-source validation", "private static func validateFrozenSources", sources["archive"]),
+        ("independent post-build extraction", "let validation = try await extractAndValidate(", sources["archive"]),
+        ("post-build owned validation directory", ".roomscan-ai-package-validation", sources["archive"]),
+        ("post-build package identity check", "guard validation.package == package,", sources["archive"]),
+        ("strict archive extractor", "RoomDeterministicZIP.extractVerifiedStoreEntries", sources["archive"]),
+        ("manifest/archive entry closure", "guard expectedPaths == actualPaths,", sources["archive"]),
+        ("archive plan/ledger closure", "guard package.artifactPlan == package.artifacts.map(\\.slot) else", sources["archive"]),
+        ("Concept Set contract", "public struct RoomConceptSet", sources["concept"]),
+        ("Concept exact source-revision binding", "guard sourceRevision == context.expectedSourceRevision else", sources["concept"]),
+        ("Concept validated source-package authority", "public struct RoomConceptValidatedSourcePackage", sources["concept"]),
+        ("Concept canonical-view authority closure", "guard canonicalViews.count == 6 else", sources["concept"]),
+        ("Concept exact source-package binding", "let validatedSourcePackage = context.validatedSourceAIRoomPackage(", sources["concept"]),
+        ("Concept unambiguous package capability", "guard matches.count == 1 else { return nil }", sources["concept"]),
+        ("Concept automatic mapping source binding", "packageCanonicalCameraIDs.contains(cameraID)", sources["concept"]),
+        ("strict packaged Concept archive reader", "public enum RoomConceptSetArchive", sources["concept_archive"]),
+        ("Concept archive closure", "guard expectedPaths == actualPaths,", sources["concept_archive"]),
+        ("Concept canonical promotion", "let canonicalManifest = try RoomConceptSetCanonicalJSON.encode", sources["concept_store"]),
+        ("Concept pending transaction marker", "try writeNewCanonical(pending, to: pendingURL)", sources["concept_store"]),
+        ("Concept atomic stage promotion", "try fileManager.moveItem(at: stageURL, to: finalURL)", sources["concept_store"]),
+        ("Concept pending-marker commit", "try removeRegularFile(pendingURL)", sources["concept_store"]),
+        ("Concept ownership/source check", "guard ownership.sourceRevision == context.expectedSourceRevision,", sources["concept_store"]),
+        ("exact head-bound original preview", "guard package.manifest.headRevisionID == expectedHeadRevisionID else", sources["project_store"]),
+        ("AI redesign roots", "RoomAIRedesignRootResolver.resolve", sources["environment"]),
+        ("AI redesign factory wiring", "aiRedesignModelFactory = RoomAIRedesignModelFactory", sources["environment"]),
+        ("AI package detail entry", "detail.aiRedesign", sources["detail"]),
+        ("production host route", "RoomAIRedesignHostView(model: aiRedesignModel)", sources["detail"]),
+        ("revision-bound production model factory", "final class RoomAIRedesignModelFactory", sources["factory"]),
+        ("factory confirmed/manual readiness", "companion.orientation.source == .confirmed", sources["factory"]),
+        ("factory manual-orientation readiness", "companion.orientation.source == .manual", sources["factory"]),
+        ("factory exact export readiness", "operation: .aiExport", sources["factory"]),
+        ("factory exact source rebind", "guard currentBinding == sourceRevision else", sources["factory"]),
+        ("factory expected-head recheck", "currentPackage.manifest.headRevisionID == sourceRevision.revisionID", sources["factory"]),
+        ("validated package provenance registry", "final class RoomAIConceptPackageProvenanceRegistry", sources["factory"]),
+        ("validated package manifest identity", "canonicalManifestData == archive.manifestData", sources["factory"]),
+        ("validated package exact camera binding", "exactCameraIDs(finalizedBinding.canonicalCameraIDs, currentCanonicalCameraIDs)", sources["factory"]),
+        ("bounded package provenance record", "maximumStoredBindingBytes", sources["factory"]),
+        ("atomic package provenance record", "try writeOwnedRecord(data, to: recordURL)", sources["factory"]),
+        ("provenance ancestor-symlink rejection", "try requireNoSymbolicLinkInExistingAncestors(of: rootURL)", sources["factory"]),
+        ("provenance resolved source-root isolation", "rootURL.resolvingSymlinksInPath().standardizedFileURL.path", sources["factory"]),
+        ("factory head-bound original comparison", "expectedHeadRevisionID: requestedSource.revisionID", sources["factory"]),
+        ("narrow head-bound thumbnail read", "expectedHeadRevisionID: expectedHeadRevisionID", sources["controller"]),
+        ("offline package app service", "final class RoomAIRoomPackageAppService", sources["package_service"]),
+        ("metadata-free selected-image thumbnails", "makeReviewThumbnailJPEG", sources["package_service"]),
+        ("AI package raw path exclusion", "!artifact.relativePath.lowercased().contains(\"gps\")", sources["package_service"]),
+        ("AI package world-map path exclusion", "!artifact.relativePath.lowercased().contains(\"world-map\")", sources["package_service"]),
+        ("sanitized outbound image boundary", "RoomAIImageSanitizer.sanitize", sources["package_service"]),
+        ("offline materializer readiness", "RoomAIRoomPackageReadiness.requireEligible", sources["materializer"]),
+        ("Complete-only raw materialization", "let raw = profile == .complete", sources["materializer"]),
+        ("bounded image sanitizer", "enum RoomAIImageSanitizer", sources["sanitizer"]),
+        ("review thumbnail byte cap", "maximumReviewThumbnailBytes", sources["sanitizer"]),
+        ("advisory local sensitive-content analyzer", "enum RoomAISensitiveContentAnalyzer", sources["sensitive_content"]),
+        ("untrusted Concept scratch lease", "withScratchLease", sources["concept_import"]),
+        ("strict Concept archive import", "RoomConceptSetArchive.validateImport", sources["concept_import"]),
+        ("single-use disclosure coordinator", "final class RoomAIDisclosureCoordinator", sources["disclosure"]),
+        ("disclosure exact source binding", "draft.sourceRevision == sourceRevision", sources["disclosure"]),
+        ("disclosure exact plan binding", "draft.artifactPlanSHA256 == artifactPlanSHA256", sources["disclosure"]),
+        ("disclosure exact selection binding", "draft.selectionSHA256 == selectionSHA256", sources["disclosure"]),
+        ("disclosure one-shot consumption", "state = .consumed", sources["disclosure"]),
+        ("disclosure raw AI-ready exclusion", "guard draft.profile != .aiReady || !draft.includesRawEvidence else", sources["disclosure"]),
+        ("disclosure precise-GPS exclusion", "guard draft.preciseGPSExcluded else", sources["disclosure"]),
+        ("production review model", "final class RoomAIRedesignProductionModel", sources["model"]),
+        ("stale package-operation guard", "guard isCurrentPackageOperation(operationID, snapshot: snapshot) else", sources["model"]),
+        ("finalization draft identity guard", "preparedDraft == draft else", sources["model"]),
+        ("typed terminal Share Sheet outcome", "func completeSystemShare(outcome: SystemShareSheetOutcome)", sources["model"]),
+        ("exact AI lease cleanup", "try dependencies.packageService.cleanupLease(draft.workspaceURL)", sources["model"]),
+        ("share cleanup retry state", "reviewState = .cleanupFailed", sources["model"]),
+        ("explicit system-share action", "func shareArchive()", sources["model"]),
+        ("SwiftUI redesign screen", "struct RoomAIRedesignView", sources["view"]),
+        ("production SwiftUI host", "struct RoomAIRedesignHostView", sources["host"]),
+        ("host typed Share Sheet", "SystemShareSheet(activityItems: [request.archiveURL])", sources["host"]),
+        ("host exact share-request identity", "guard shareRequest?.id == requestID,", sources["host"]),
+        ("host dismissal fallback", "private func shareSheetDismissed()", sources["host"]),
+        ("host dismissal cancellation outcome", "outcome: .cancelled", sources["host"]),
+        ("typed system Share Sheet adapter", "struct SystemShareSheet: UIViewControllerRepresentable", sources["export_view"]),
+        ("UIKit terminal outcome bridge", "controller.completionWithItemsHandler", sources["export_view"]),
+        ("iPad share popover source", "popover.sourceView = controller.view", sources["export_view"]),
+        ("typed Share Sheet outcome enum", "enum SystemShareSheetOutcome: Equatable, Sendable", sources["export_coordinator"]),
+    ):
+        expect(contract in source, f"Slice 3 contract is missing: {description}", errors)
+
+    for identifier in (
+        "ai.prepare",
+        "ai.image.\\(image.id).preview",
+        "ai.image.\\(image.id).exclude",
+        "ai.image.\\(image.id).replace",
+        "ai.gps.excluded",
+        "ai.provider.notice",
+        "ai.provider.acknowledge",
+        "ai.complete.rawConsent",
+        "ai.disclosure.approve",
+        "ai.share",
+        "concept.import.loose",
+        "concept.import.package",
+        "concept.comparison",
+    ):
+        expect(identifier in sources["view"], f"Slice 3 SwiftUI identifier is missing: {identifier}", errors)
+
+    # Ensure the app target, app-unit target, and UI target all carry their
+    # Slice 3 source/test units. Core sources are delivered through the existing
+    # local RoomScanCore package product, checked by verify_package_wiring.
+    app_phase = object_body(pbx, "A80000000000000000000001") or ""
+    unit_phase = object_body(pbx, "A80000000000000000000004") or ""
+    ui_phase = object_body(pbx, "A80000000000000000000007") or ""
+    for phase, label, filenames in (
+        (
+            app_phase,
+            "app",
+            (
+                "RoomAIImageSanitizer.swift",
+                "RoomAISensitiveContentAnalyzer.swift",
+                "RoomAIDisclosureCoordinator.swift",
+                "RoomAIRoomPackageAppService.swift",
+                "RoomAIRoomPackageDerivativeRenderer.swift",
+                "RoomAIRoomPackageMaterializer.swift",
+                "RoomConceptImportCoordinator.swift",
+                "RoomAIRedesignModelFactory.swift",
+                "RoomAIRedesignView.swift",
+                "RoomAIRedesignProductionModel.swift",
+                "RoomAIRedesignHostView.swift",
+            ),
+        ),
+        (
+            unit_phase,
+            "unit-test",
+            (
+                "RoomAIImageSanitizerTests.swift",
+                "RoomAISensitiveContentAnalyzerTests.swift",
+                "RoomAIDisclosureCoordinatorTests.swift",
+                "RoomAIRoomPackageServiceTests.swift",
+                "RoomConceptImportCoordinatorTests.swift",
+                "RoomAIRedesignProductionIntegrationTests.swift",
+            ),
+        ),
+        (ui_phase, "UI-test", ("RoomAIRedesignUITests.swift",)),
+    ):
+        expect(bool(phase), f"Slice 3 {label} source build phase is missing", errors)
+        for filename in filenames:
+            expect(
+                f"/* {filename} in Sources */" in phase,
+                f"Slice 3 {label} target misses source membership: {filename}",
+                errors,
+            )
+    return errors
+
+
 def read_guest_production_sources() -> dict[Path, str]:
     roots = [
         ROOT / "RoomScanCore" / "Sources" / "RoomScanCore",
@@ -2755,6 +2974,131 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
             errors,
         )
 
+    if not slice3_ai_redesign_contract_errors(guest_sources, pbx):
+        def expects_slice3_mutation(
+            path: Path,
+            needle: str,
+            replacement: str,
+            description: str,
+        ) -> None:
+            original = guest_sources[path]
+            expect(
+                needle in original,
+                f"Slice 3 verifier self-test setup is missing: {description}",
+                errors,
+            )
+            if needle not in original:
+                return
+            mutated_sources = dict(guest_sources)
+            mutated_sources[path] = original.replace(needle, replacement, 1)
+            expect(
+                bool(slice3_ai_redesign_contract_errors(mutated_sources, pbx)),
+                f"verifier self-test did not detect {description}",
+                errors,
+            )
+
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAIArtifactSelection.swift",
+            "guard companion.orientation.source == .confirmed || companion.orientation.source == .manual else",
+            "guard true else",
+            "a weakened Slice 3 confirmed/manual export-readiness guard",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIDisclosureCoordinator.swift",
+            "draft.artifactPlanSHA256 == artifactPlanSHA256",
+            "true",
+            "a weakened Slice 3 disclosure artifact-plan binding",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIDisclosureCoordinator.swift",
+            "draft.selectionSHA256 == selectionSHA256",
+            "true",
+            "a weakened Slice 3 disclosure selection binding",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIDisclosureCoordinator.swift",
+            "guard draft.preciseGPSExcluded else",
+            "guard true else",
+            "a weakened Slice 3 disclosure precise-GPS exclusion",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomRedesignContracts.swift",
+            "guard !artifactPlan.contains(where: { $0.artifactClass.isAIRawEvidence }) else",
+            "guard true else",
+            "AI-ready raw-evidence admission",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomRedesignContracts.swift",
+            "guard !artifacts.contains(where: { $0.artifactClass == .worldMap }) else",
+            "guard true else",
+            "world-map admission to an AI package",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomAIRoomPackageArchive.swift",
+            "guard expectedPaths == actualPaths,",
+            "guard true,",
+            "a removed AI-package archive closure guard",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomConceptSet.swift",
+            "guard sourceRevision == context.expectedSourceRevision else",
+            "guard true else",
+            "a weakened Concept Set source-revision binding",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomConceptSet.swift",
+            "guard matches.count == 1 else { return nil }",
+            "guard let first = matches.first else { return nil }; return first",
+            "an ambiguous or unreviewed Concept package capability",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "LocalRoomConceptStore.swift",
+            "try fileManager.moveItem(at: stageURL, to: finalURL)",
+            "try fileManager.createDirectory(at: finalURL, withIntermediateDirectories: false)",
+            "a removed Concept Set atomic promotion",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRedesignModelFactory.swift",
+            "try requireNoSymbolicLinkInExistingAncestors(of: rootURL)",
+            "_ = rootURL",
+            "a removed Concept package provenance ancestor-symlink guard",
+        )
+        expects_slice3_mutation(
+            ROOT / "RoomScanStudio" / "Features" / "AIRedesign" / "RoomAIRedesignProductionModel.swift",
+            "try dependencies.packageService.cleanupLease(draft.workspaceURL)",
+            "try FileManager.default.createDirectory(at: draft.workspaceURL, withIntermediateDirectories: true)",
+            "a removed typed Share Sheet lease cleanup",
+        )
+
+        app_phase = object_body(pbx, "A80000000000000000000001") or ""
+        host_membership = "530000000000000000000035 /* RoomAIRedesignHostView.swift in Sources */"
+        expect(
+            host_membership in app_phase,
+            "Slice 3 verifier self-test setup is missing host target membership",
+            errors,
+        )
+        if host_membership in app_phase:
+            mutated_phase = app_phase.replace(host_membership, "530000000000000000000035 /* host omitted */", 1)
+            mutated_pbx = pbx.replace(app_phase, mutated_phase, 1)
+            expect(
+                bool(slice3_ai_redesign_contract_errors(guest_sources, mutated_pbx)),
+                "verifier self-test did not detect missing Slice 3 host target membership",
+                errors,
+            )
+
+        app_environment_path = ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift"
+        if app_environment_path in guest_sources:
+            injected_urlsession = dict(guest_sources)
+            injected_urlsession[app_environment_path] += (
+                "\nprivate let slice3InjectedURLSession = URLSession.shared.dataTask("
+                "with: URL(string: \"https://offline-guard.invalid\")!)\n"
+            )
+            expect(
+                bool(guest_hosted_boundary_errors(injected_urlsession)),
+                "verifier self-test did not detect an injected Slice 3 URLSession client",
+                errors,
+            )
+
     phase7_context_paths = {
         "home": ROOT / "RoomScanStudio" / "Features" / "Home" / "HomeView.swift",
         "library": ROOT / "RoomScanStudio" / "Features" / "Home" / "ExistingRoomsView.swift",
@@ -3653,6 +3997,7 @@ def main() -> int:
     errors.extend(guest_hosted_boundary_errors(production_sources))
     errors.extend(slice1_spatial_contract_errors(production_sources))
     errors.extend(slice2_quality_contract_errors(production_sources))
+    errors.extend(slice3_ai_redesign_contract_errors(production_sources, pbx))
     if all(path.is_file() for path in (
         ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
         ROOT / "RoomScanStudio" / "Features" / "RoomCapture" / "RoomCaptureCoordinator.swift",

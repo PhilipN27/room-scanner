@@ -121,14 +121,84 @@ final class RoomLibraryController: ObservableObject {
                 suggestionEvidence: suggestion.evidence
             )
         )
-        let document = RoomLocalRedesignExtensionV2(
+        let document = try Self.mergingOrientationSuggestion(
+            orientation,
             sourceRevision: binding,
-            orientation: orientation,
-            redesignIntent: nil,
-            propertyMembership: nil,
-            conceptMetadata: []
+            existing: try await redesignStore.load(sourceRevision: binding)
         )
         try await redesignStore.save(document, expectedSourceRevision: binding)
+    }
+
+    /// Capture may publish an orientation suggestion after the immutable room
+    /// revision is saved. That additive write must not erase independently
+    /// reviewed redesign intent, property membership, or imported concepts.
+    static func mergingOrientationSuggestion(
+        _ orientation: RoomOrientationContractV2,
+        sourceRevision: RoomRedesignSourceRevision,
+        existing: RoomLocalRedesignExtensionV2?
+    ) throws -> RoomLocalRedesignExtensionV2 {
+        try sourceRevision.validate()
+        try orientation.validate(boundTo: sourceRevision)
+        if let existing {
+            try existing.validate()
+            guard existing.sourceRevision == sourceRevision else {
+                throw RoomProjectStoreError.invalidPackage(
+                    "Existing redesign companion state is bound to another immutable revision."
+                )
+            }
+        }
+        return RoomLocalRedesignExtensionV2(
+            sourceRevision: sourceRevision,
+            orientation: orientation,
+            redesignIntent: existing?.redesignIntent,
+            propertyMembership: existing?.propertyMembership,
+            conceptMetadata: existing?.conceptMetadata ?? []
+        )
+    }
+
+    func saveRedesignIntent(
+        _ intent: RoomRedesignIntentV2,
+        sourceRevision: RoomRedesignSourceRevision
+    ) async throws {
+        guard let redesignStore else {
+            throw RoomProjectStoreError.storageFailure("Local redesign companion storage is unavailable.")
+        }
+        let document = try Self.mergingRedesignIntent(
+            intent,
+            sourceRevision: sourceRevision,
+            existing: try await redesignStore.load(sourceRevision: sourceRevision)
+        )
+        try await redesignStore.save(document, expectedSourceRevision: sourceRevision)
+    }
+
+    /// Redesign intent is additive review state. Editing it replaces only the
+    /// intent while retaining the exact orientation and all independent local
+    /// companion metadata already bound to this immutable revision.
+    static func mergingRedesignIntent(
+        _ intent: RoomRedesignIntentV2,
+        sourceRevision: RoomRedesignSourceRevision,
+        existing: RoomLocalRedesignExtensionV2?
+    ) throws -> RoomLocalRedesignExtensionV2 {
+        try sourceRevision.validate()
+        try intent.validate()
+        guard let existing else {
+            throw RoomProjectStoreError.invalidPackage(
+                "Confirm or set the room orientation before saving an AI redesign brief."
+            )
+        }
+        try existing.validate()
+        guard existing.sourceRevision == sourceRevision else {
+            throw RoomProjectStoreError.invalidPackage(
+                "Existing redesign companion state is bound to another immutable revision."
+            )
+        }
+        return RoomLocalRedesignExtensionV2(
+            sourceRevision: sourceRevision,
+            orientation: existing.orientation,
+            redesignIntent: intent,
+            propertyMembership: existing.propertyMembership,
+            conceptMetadata: existing.conceptMetadata
+        )
     }
 
     func properties() async throws -> [RoomPropertyContainerV1] {
@@ -329,6 +399,20 @@ final class RoomLibraryController: ObservableObject {
 
     func thumbnailData(for projectID: String) -> Data? {
         thumbnailDataByProjectID[projectID]
+    }
+
+    func thumbnailData(
+        for projectID: String,
+        expectedHeadRevisionID: String
+    ) async throws -> Data? {
+        do {
+            return try await store.thumbnailData(
+                projectID: projectID,
+                expectedHeadRevisionID: expectedHeadRevisionID
+            )
+        } catch RoomProjectStoreError.assetReferenceNotStaged(_) {
+            return nil
+        }
     }
 
     // Store-owned derived hero cache passthroughs: the UI receives bytes,

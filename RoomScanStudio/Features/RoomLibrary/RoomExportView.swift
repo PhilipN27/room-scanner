@@ -62,13 +62,14 @@ struct RoomExportView: View {
         .sheet(isPresented: $presentingShare, onDismiss: {
             guard !shareCompletionHandled else { return }
             shareCompletionHandled = true
-            Task { await coordinator.completeShare(completed: false) }
+            Task { await coordinator.completeShare(outcome: .cancelled) }
         }) {
             if let result = coordinator.readyResult {
-                RoomExportShareSheet(archiveURL: result.archiveURL) { completed in
+                SystemShareSheet(activityItems: [result.archiveURL]) { outcome in
+                    guard !shareCompletionHandled else { return }
                     shareCompletionHandled = true
                     presentingShare = false
-                    Task { await coordinator.completeShare(completed: completed) }
+                    Task { await coordinator.completeShare(outcome: outcome) }
                 }
             }
         }
@@ -151,21 +152,47 @@ struct RoomExportView: View {
 /// UIKit is used for the native Files/share handoff so the finalized URL and
 /// owned lease survive until its completion callback. `ShareLink` intentionally
 /// is not used because it does not offer this scoped lifetime control.
+struct SystemShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let onOutcome: (SystemShareSheetOutcome) -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        makeSystemShareController(activityItems: activityItems, onOutcome: onOutcome)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// Archive-specific compatibility wrapper around the reusable typed system
+/// Share Sheet boundary.
 struct RoomExportShareSheet: UIViewControllerRepresentable {
     let archiveURL: URL
     let onCompletion: (Bool) -> Void
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: [archiveURL], applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, completed, _, _ in
-            onCompletion(completed)
+        makeSystemShareController(activityItems: [archiveURL]) { outcome in
+            onCompletion(outcome == .completed)
         }
-        if let popover = controller.popoverPresentationController {
-            popover.sourceView = controller.view
-            popover.sourceRect = controller.view.bounds
-        }
-        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+@MainActor
+private func makeSystemShareController(
+    activityItems: [Any],
+    onOutcome: @escaping (SystemShareSheetOutcome) -> Void
+) -> UIActivityViewController {
+    let controller = UIActivityViewController(
+        activityItems: activityItems,
+        applicationActivities: nil
+    )
+    controller.completionWithItemsHandler = { _, completed, _, error in
+        onOutcome(SystemShareSheetOutcome(completed: completed, error: error))
+    }
+    if let popover = controller.popoverPresentationController {
+        popover.sourceView = controller.view
+        popover.sourceRect = controller.view.bounds
+    }
+    return controller
 }

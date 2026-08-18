@@ -4,9 +4,11 @@
 - Branch: `agent/ai-redesign-platform-plan`
 - Baseline HEAD retained: `362c8cd862f38b1d159647d901ba75c6ef749efd`
 - Scope: Slice 2 only — live and finish-time quality guidance
-- Claim boundary: implementation and local/Simulator evidence complete;
-  controlled physical LiDAR iPhone acceptance pending; physical iPad
-  owner-waived and unverified
+- Claim boundary: implementation and local/Simulator evidence complete; the
+  owner accepts physical LiDAR iPhone behavior based on direct observation,
+  with only three physical-run screenshots retained rather than a complete
+  independent artifact/device-metadata matrix; physical iPad owner-waived and
+  unverified
 
 ## Outcome and ownership
 
@@ -141,7 +143,7 @@ Fresh final results:
 The only build diagnostics were existing Swift concurrency/deprecation/API
 warnings; both builds and both complete schemes exited successfully.
 
-## Screenshot matrix and critique
+## Simulator screenshot matrix and critique
 
 The authoritative focused runs are
 `/private/tmp/Slice2Quality-iPhone-final2.xcresult` and
@@ -152,7 +154,7 @@ XXXL Dynamic Type.
 
 | Form factor | Retained images | Manifest SHA-256 |
 | --- | ---: | --- |
-| iPhone | 16 | `ee4387cf1a88b0414a85a4e5e2e11ed12ed70d70bb877165cf48e9e2711521ee` |
+| iPhone Simulator | 16 | `ee4387cf1a88b0414a85a4e5e2e11ed12ed70d70bb877165cf48e9e2711521ee` |
 | iPad Simulator | 16 | `9907d5df233b9f8f775cd3260423af1f1e2aca1f3cf81b09218864a36649e9ae` |
 
 Visual critique rejected earlier iterations whose legend collided with the top
@@ -168,22 +170,27 @@ entries, and VoiceOver descriptions in addition to color. The persisted view
 shows all four independent states and the exact Save Anyway acknowledgement;
 no aggregate room-accuracy score is shown. Earlier screenshot directories are
 retained as superseded iteration evidence; `final2-iphone` and `final2-ipad`
-are authoritative.
+are authoritative for the Simulator UI matrix. They are separate from the
+three retained physical-run screenshots and do not fill the missing physical
+artifact/device-metadata matrix.
 
 ## Physical evidence, rollback, and completion boundary
 
-`xcrun devicectl list devices` found the paired iPhone 17 Pro in `unavailable`
-state and no physical iPad. Therefore no physical Slice 2 claim is made for
-real blur localization, missed-region mapping, tracking degradation, RoomPlan
-semantic uncertainty, Finish behavior, Save Anyway persistence, or reopen.
-The exact seven-case good/bad protocol is recorded in
-`Docs/real-device-test-plan.md`.
+At the original 2026-08-13 verification checkpoint, `xcrun devicectl list
+devices` found the paired iPhone 17 Pro in `unavailable` state and no physical
+iPad, so no physical Slice 2 claim was made then. The owner subsequently
+accepted Slice 2 on the physical LiDAR iPhone based on direct observation.
+Only three physical-run screenshots were retained, not a complete independent
+artifact/device-metadata matrix across the exact seven-case good/bad protocol
+in `Docs/real-device-test-plan.md`. This records owner acceptance without
+claiming independently reproducible proof of every region/evidence, Finish,
+Save Anyway, and reopen result. The generic `regions` label and repeated
+tracking guidance observed in the accepted flow remain known limitations.
 
 The owner waived physical-iPad acceptance for the present program. Complete
 iPad Simulator evidence is retained, but physical-iPad behavior is unverified,
-not passed or failed. The owner accepted Slice 1 orientation behavior on the
-physical LiDAR iPhone; that acceptance is not reused as Slice 2 evidence. The
-Norwalk YMCA example remains deferred until the entire application is complete.
+not passed or failed. The Norwalk YMCA example remains deferred until the
+entire application is complete.
 
 Rollback is byte-safe: omit/ignore the optional manifest report and disable the
 advisory UI/post-stop analyzer; legacy revisions require no migration. No
@@ -191,6 +198,8 @@ server, portal, upload, account, authentication, billing, credential,
 production configuration, external system, or external data changed. The final
 audit confirmed no files were staged or committed.
 
-Slice 2 is locally implemented and Simulator-complete but is not genuinely
-complete for the owner-approved iPhone scope until the controlled physical
-LiDAR iPhone protocol passes. Slice 3 remains next and has not started.
+Slice 2 is locally implemented, Simulator-complete, and owner-accepted on the
+physical LiDAR iPhone. The limited retained physical evidence does not become a
+complete independent artifact/device-metadata matrix by virtue of that
+acceptance. Slice 3 implementation is governed by
+`Docs/superpowers/plans/2026-08-16-ai-redesign-platform-slice-3.md`.

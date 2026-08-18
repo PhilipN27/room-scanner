@@ -93,6 +93,73 @@ final class RoomExportAppTests: XCTestCase {
         XCTAssertEqual(cleaner.cleanedWorkspaces, [workspace])
     }
 
+    func testSystemShareOutcomeTreatsAnActualErrorAsFailureRegardlessOfCompletionFlag() {
+        XCTAssertEqual(
+            SystemShareSheetOutcome(completed: true, error: InjectedShareError.failed),
+            .failed
+        )
+        XCTAssertEqual(
+            SystemShareSheetOutcome(completed: false, error: InjectedShareError.failed),
+            .failed
+        )
+        XCTAssertEqual(SystemShareSheetOutcome(completed: true, error: nil), .completed)
+        XCTAssertEqual(SystemShareSheetOutcome(completed: false, error: nil), .cancelled)
+    }
+
+    func testShareErrorIsSurfacedOnlyAfterItsExactLeaseIsCleaned() async throws {
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "RoomExportShareError-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let provider = FakeRoomExportProvider(result: makeResult(workspace: workspace))
+        var stateDuringCleanup: RoomExportCoordinatorState?
+        var errorDuringCleanup: String?
+        var coordinator: RoomExportCoordinator!
+        let cleaner = FakeRoomExportWorkspaceCleaner(onCleanupAttempt: {
+            stateDuringCleanup = coordinator.state
+            errorDuringCleanup = coordinator.errorMessage
+        })
+        coordinator = RoomExportCoordinator(provider: provider, cleaner: cleaner)
+
+        await coordinator.prepare(projectID: "project-001", expectedHeadRevisionID: "revision-001")
+        await coordinator.completeShare(outcome: .failed)
+
+        XCTAssertEqual(cleaner.cleanupAttempts, [workspace])
+        XCTAssertEqual(cleaner.cleanedWorkspaces, [workspace])
+        XCTAssertEqual(stateDuringCleanup, .ready)
+        XCTAssertNil(errorDuringCleanup)
+        XCTAssertEqual(coordinator.state, .failed)
+        XCTAssertNil(coordinator.readyResult)
+        XCTAssertTrue(coordinator.errorMessage?.contains("Share Sheet could not complete") == true)
+    }
+
+    func testDuplicateShareOutcomesDoNotRetryCleanupAndDeferredErrorSurfacesAfterExplicitRetry() async throws {
+        let workspace = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "RoomExportShareIdempotence-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let provider = FakeRoomExportProvider(result: makeResult(workspace: workspace))
+        let cleaner = FakeRoomExportWorkspaceCleaner(failuresBeforeSuccess: 1)
+        let coordinator = RoomExportCoordinator(provider: provider, cleaner: cleaner)
+
+        await coordinator.prepare(projectID: "project-001", expectedHeadRevisionID: "revision-001")
+        await coordinator.completeShare(outcome: .failed)
+        await coordinator.completeShare(outcome: .cancelled)
+
+        XCTAssertEqual(coordinator.state, .cleanupFailed)
+        XCTAssertEqual(cleaner.cleanupAttempts, [workspace])
+        XCTAssertTrue(cleaner.cleanedWorkspaces.isEmpty)
+        XCTAssertTrue(coordinator.errorMessage?.contains("Retry cleanup") == true)
+
+        await coordinator.retryCleanup()
+
+        XCTAssertEqual(cleaner.cleanupAttempts, [workspace, workspace])
+        XCTAssertEqual(cleaner.cleanedWorkspaces, [workspace])
+        XCTAssertEqual(coordinator.state, .failed)
+        XCTAssertNil(coordinator.readyResult)
+        XCTAssertTrue(coordinator.errorMessage?.contains("Share Sheet could not complete") == true)
+    }
+
     /// This is an in-process `AppEnvironment` bootstrap/integration oracle,
     /// not an XCUITest app-process launch or a physical Share Sheet proof.
     /// It covers the current local-only route through simulated capture, save,
@@ -424,19 +491,31 @@ private final class FakeRoomExportProvider: RoomExportProviding {
 @MainActor
 private final class FakeRoomExportWorkspaceCleaner: RoomExportWorkspaceCleaning {
     private var failuresRemaining: Int
+    private let onCleanupAttempt: (() -> Void)?
+    private(set) var cleanupAttempts: [URL] = []
     private(set) var cleanedWorkspaces: [URL] = []
 
-    init(failuresBeforeSuccess: Int = 0) {
+    init(
+        failuresBeforeSuccess: Int = 0,
+        onCleanupAttempt: (() -> Void)? = nil
+    ) {
         failuresRemaining = failuresBeforeSuccess
+        self.onCleanupAttempt = onCleanupAttempt
     }
 
     func cleanup(workspaceURL: URL) throws {
+        cleanupAttempts.append(workspaceURL)
+        onCleanupAttempt?()
         if failuresRemaining > 0 {
             failuresRemaining -= 1
             throw RoomExportError.cleanupFailed("Injected cleanup failure.")
         }
         cleanedWorkspaces.append(workspaceURL)
     }
+}
+
+private enum InjectedShareError: Error {
+    case failed
 }
 
 @MainActor

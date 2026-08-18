@@ -50,9 +50,12 @@
 - Slice 2 quality findings are advisory heuristics, not measurement accuracy.
   Deterministic fixtures and Simulator screenshots prove schema, persistence,
   independent warnings, throttling, overlays, and explicit Save Anyway flow;
-  they do not prove real motion-blur localization, physical missed-region
-  mapping, RoomPlan semantic confidence, or ARKit tracking behavior. Controlled
-  good/bad scans on a supported LiDAR iPhone remain required.
+  they do not independently prove real motion-blur localization, physical
+  missed-region mapping, RoomPlan semantic confidence, or ARKit tracking
+  behavior. The owner accepts Slice 2 on the physical LiDAR iPhone based on
+  direct observation, but only three physical-run screenshots were retained,
+  not a complete independent artifact/device-metadata matrix. The generic
+  `regions` label and repeated tracking guidance remain known limitations.
 - The owner waived physical-iPad acceptance for the present development
   program. The complete iPad Simulator scheme remains required and physical
   iPad quality/orientation behavior is recorded as unverified—not passed or
@@ -61,3 +64,24 @@
   hook. No AI Room Package archive, hosted upload, publication route, portal,
   server SDK, account, authentication, billing, or raw-evidence upload was
   created. Those later-slice capabilities cannot be inferred from this record.
+- The Norwalk YMCA Computer Lab example remains deferred until the entire app
+  is complete. No room- or classification-specific claim is made from the
+  generic Slice 2 owner acceptance.
+- Slice 3 local/Simulator implementation and verification are complete: 266/266
+  Core tests; complete 219/219 schemes (185 app + 34 UI) on each iPhone 16 Pro
+  and iPad (10th generation) Simulator; and focused Slice 3 UI evidence of 5/5
+  per form factor. The local matrix also proves deterministic AI-ready and
+  Complete archive extraction/closure, authenticated finalized-package Concept
+  automatic mapping, and local Share Sheet lease cleanup. Those results do not
+  establish physical-system behavior.
+- Slice 3's provider instruction files are offline, provider-neutral/package
+  metadata with provider-tailored wording. The production `AIRedesign` path has
+  no provider/model/authentication/direct-HTTP client. It does not verify a
+  provider's current product behavior, privacy terms, account requirements,
+  output quality, or compliance with instructions, and it does not make the
+  entire target network-free because explicit private CloudKit backup remains
+  separately scoped.
+- Physical LiDAR iPhone proof remains required for actual outbound Share Sheet
+  targets, security-scoped imports, system cancellation/error/dismissal paths,
+  and lease cleanup. All physical-iPad checks remain waived and unverified, not
+  passed or failed.

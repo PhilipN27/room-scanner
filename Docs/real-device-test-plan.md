@@ -3,11 +3,15 @@
 ## Purpose
 
 These tests are not satisfied by the deterministic fixture or Simulator
-driver. The owner has accepted Slice 1 orientation behavior on a supported
-LiDAR iPhone. The owner does not currently have an iPad and has waived physical
-iPad acceptance for the present development program; all physical-iPad behavior
-remains explicitly unverified. Device-dependent protocols continue to document
-the evidence required for claims that have not yet been observed.
+driver. The owner has accepted Slice 1 orientation behavior and Slice 2 quality
+behavior on a supported LiDAR iPhone; the Slice 2 acceptance is based on direct
+observation, and only three screenshots were retained, not a complete
+independent artifact/device-metadata matrix. The owner does not currently have
+an iPad and has waived physical iPad acceptance for the present development
+program; all physical-iPad behavior remains explicitly unverified.
+Device-dependent protocols continue to document the evidence required for
+claims that have not yet been observed and for any future independently
+auditable rerun.
 
 1. Verify `RoomCaptureSession.isSupported` gates live capture. Verify optional
    scene reconstruction only controls the raw-mesh omission status, never the
@@ -216,15 +220,62 @@ quality report, and reopen/persistence result for each case.
    acknowledgement, project/revision/epoch bindings, reason codes, evidence,
    and affected regions with the Finish review.
 
-Use good and bad controls for each case. Pass requires the displayed region to
-correspond to the deliberately affected physical location, unaffected
-dimensions to remain independent, the advisory gate never to reject or delete
-the scan, and the original revision bytes never to be rewritten. Simulator and
-installed-SDK evidence cannot close this protocol.
+Use good and bad controls for each case. A future independently auditable run
+requires the displayed region to correspond to the deliberately affected
+physical location, unaffected dimensions to remain independent, the advisory
+gate never to reject or delete the scan, and the original revision bytes never
+to be rewritten. Simulator and installed-SDK evidence cannot supply that
+physical evidence.
+
+Status (reconciled 2026-08-16): **owner-accepted on the physical LiDAR iPhone
+based on direct observation.** Only three physical-run screenshots were
+retained; they are not a complete independent artifact/device-metadata matrix
+for the seven cases above. The generic `regions` label and repeated tracking
+guidance remain known limitations. Keep this protocol for any future retained,
+independently auditable rerun; do not reinterpret owner acceptance as a full
+artifact matrix.
 
 The owner has waived the physical-iPad Slice 2 protocol. Continue the complete
 iPad Simulator scheme, but record physical-iPad behavior as unverified and make
 no physical-iPad claim.
+
+## Slice 3 AI Room Package and Concept Set acceptance
+
+Run this protocol on a supported LiDAR iPhone after the final local Slice 3
+matrix is recorded. Retain device model, OS/build, app build, source
+project/revision/coordinate-space epoch, exact package profile, test asset
+hashes, and the Share Sheet/import target for every case. Do not use provider
+output quality as an oracle and do not upload a real room unless the owner has
+made a separate informed decision.
+
+1. Start with a validated source revision with confirmed/manual orientation,
+   a nonempty redesign request, and a quality carrier. Build AI-ready, inspect
+   the disclosure inventory, exclude/replace a selected image, and confirm the
+   prior approval becomes stale before a fresh review. Verify precise GPS,
+   world maps, private notes, and raw RGB/depth/confidence are absent.
+2. Build Complete only after the exact raw-evidence disclosure approval.
+   Change the profile, selection, or source revision after approval and confirm
+   sharing is blocked until a new review. Verify Complete still excludes precise
+   GPS and world maps.
+3. Share a validated package to Files, AirDrop, and one installed external app;
+   separately exercise completion, cancellation, error, and sheet dismissal.
+   Confirm the temporary archive remains available during activity, cleanup is
+   exactly once, and no source package/revision/semantic geometry/evidence is
+   deleted or rewritten.
+4. Import a known-safe loose JPEG/PNG and a known-safe packaged Concept Set;
+   reject malformed, mislabeled, trailing-payload, unsupported, stale, and
+   source-rebound controls. Confirm automatic mapping only for exact declared
+   canonical views, manual mapping only from current canonical IDs, and
+   unmatched otherwise. Archive/delete/reopen must affect only the selected
+   Concept Set.
+5. Exercise backgrounding and foreground recovery during review, build, share,
+   and import. Confirm no pending approval, staging directory, export lease, or
+   partial Concept Set becomes shareable/published after cancellation or
+   interruption.
+
+Status (2026-08-17): not run because the physical LiDAR iPhone is unavailable.
+Physical iPad is owner-waived and remains unverified. Simulator evidence cannot
+close this device/system Share Sheet and security-scoped-import protocol.
 
 ## Deferred end-of-program field test: Norwalk YMCA Computer Lab
 

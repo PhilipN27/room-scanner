@@ -16,6 +16,7 @@ struct ExistingRoomsView: View {
     @ObservedObject var exportCoordinator: RoomExportCoordinator
     @ObservedObject var cloudBackupCoordinator: RoomCloudBackupCoordinator
     @ObservedObject var meshColoringCoordinator: RoomMeshColoringJobCoordinator
+    let aiRedesignModelFactory: RoomAIRedesignModelFactory
     let privacyPolicyURL: URL?
     @State private var filter: LibraryFilter = .active
     @StateObject private var previewCache = RoomFloorPlanPreviewCache()
@@ -142,6 +143,7 @@ struct ExistingRoomsView: View {
                             exportCoordinator: exportCoordinator,
                             cloudBackupCoordinator: cloudBackupCoordinator,
                             meshColoringCoordinator: meshColoringCoordinator,
+                            aiRedesignModelFactory: aiRedesignModelFactory,
                             privacyPolicyURL: privacyPolicyURL
                         )
                     } label: {

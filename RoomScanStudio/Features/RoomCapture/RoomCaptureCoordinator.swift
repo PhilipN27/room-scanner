@@ -366,7 +366,10 @@ final class RoomCaptureCoordinator: ObservableObject {
     /// Moves the attempt's recorded photoreal capture bundle out of scratch
     /// (which is about to be deleted) into the per-project bundle library.
     /// Best-effort: a bundle failure never fails the save that just happened.
-    private func adoptCaptureBundleIfPresent(forProject projectID: String) {
+    private func adoptCaptureBundleIfPresent(
+        forProject projectID: String,
+        revisionID: String
+    ) async {
         guard let workspace else { return }
         let bundleURL = workspace.directoryURL.appendingPathComponent(
             RoomCaptureBundleRecorder.bundleSubdirectoryName,
@@ -378,9 +381,28 @@ final class RoomCaptureCoordinator: ObservableObject {
             isDirectory.boolValue
         else { return }
         do {
-            try RoomCaptureBundleLibrary.adoptBundle(at: bundleURL, forProject: projectID)
+            let sourceRevision = try await controller.redesignSourceBinding(
+                projectID: projectID,
+                revisionID: revisionID
+            )
+            try RoomCaptureBundleLibrary.adoptBoundBundle(
+                at: bundleURL,
+                forProject: projectID,
+                sourceRevision: sourceRevision
+            )
         } catch {
-            print("RoomScanStudio capture bundle adoption failed: \(error)")
+            // Preserve the pre-Slice-3 local viewer/training behavior if the
+            // exact lineage sidecar cannot be produced, but keep the bundle
+            // deliberately unavailable to AI-package selection.
+            do {
+                try RoomCaptureBundleLibrary.adoptBundle(
+                    at: bundleURL,
+                    forProject: projectID
+                )
+                print("RoomScanStudio capture bundle adopted without AI lineage: \(error)")
+            } catch {
+                print("RoomScanStudio capture bundle adoption failed: \(error)")
+            }
         }
     }
 
@@ -521,7 +543,10 @@ final class RoomCaptureCoordinator: ObservableObject {
                 let savedSummary = try await controller.commitInitialCapture(commit, decision: .save)
                 guard isActive(attempt, phase: .saving) else { return }
                 if let savedSummary {
-                    adoptCaptureBundleIfPresent(forProject: savedSummary.projectID)
+                    await adoptCaptureBundleIfPresent(
+                        forProject: savedSummary.projectID,
+                        revisionID: savedSummary.headRevisionID
+                    )
                     if let suggestion = preparedReview?.orientationSuggestion {
                         do {
                             try await controller.saveOrientationSuggestion(

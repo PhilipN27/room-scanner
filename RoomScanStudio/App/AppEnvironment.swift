@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     let libraryController: RoomLibraryController
     let rescanProvider: any RoomRescanProviding
     let exportCoordinator: RoomExportCoordinator
+    let aiRedesignModelFactory: RoomAIRedesignModelFactory
     let cloudBackupCoordinator: RoomCloudBackupCoordinator
     let meshColoringCoordinator: RoomMeshColoringJobCoordinator
     let meshNotificationRouter: RoomMeshNotificationRouter
@@ -214,6 +215,18 @@ final class AppEnvironment: ObservableObject {
                 derivedProvider: UIKitRoomExportDerivedProvider()
             ),
             cleaner: exportWorkspaceFactory
+        )
+        let aiRedesignRoots = RoomAIRedesignRootResolver.resolve(
+            arguments: arguments,
+            projectRootURL: rootURL,
+            fileManager: .default
+        )
+        aiRedesignModelFactory = RoomAIRedesignModelFactory(
+            controller: libraryController,
+            workspaceFactory: exportWorkspaceFactory,
+            projectRootURL: rootURL,
+            conceptRootURL: aiRedesignRoots.concepts,
+            conceptImportScratchRootURL: aiRedesignRoots.importScratch
         )
         let usesFakeCloudBackup = arguments.contains("--use-fake-cloud-backup")
         privacyPolicyURL = PrivacyPolicyURLResolver.resolve(

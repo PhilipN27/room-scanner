@@ -60,6 +60,23 @@ struct RoomCaptureBundleManifest: Codable, Equatable, Sendable {
     var notes: [String]
 }
 
+/// Local capture bundles predate immutable revision bindings. Only bundles
+/// adopted through the explicit Slice 3 path receive this sidecar; legacy
+/// bundles remain viewable but cannot silently become AI-package evidence.
+struct RoomCaptureBundleSourceBinding: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = "roomscan-capture-bundle-source-binding-v1"
+
+    var schemaVersion: String
+    var sourceRevision: RoomRedesignSourceRevision
+    var bundleManifestSHA256: String
+}
+
+struct RoomCaptureBundleBoundEvidence: Sendable, Equatable {
+    var directoryURL: URL
+    var manifest: RoomCaptureBundleManifest
+    var sourceBinding: RoomCaptureBundleSourceBinding
+}
+
 enum RoomCapturePoseSelection {
     static let minimumTranslationMeters = 0.05
     static let minimumRotationRadians = 3.0 * .pi / 180
@@ -127,8 +144,27 @@ enum RoomCapturePhotometricMetadata {
 /// a later roadmap step.
 enum RoomCaptureBundleLibrary {
     static let manifestFileName = "bundle-manifest.json"
+    static let sourceBindingFileName = "source-revision-binding.json"
     static let sceneMeshFileName = "scene-mesh.ply"
     static let framesSubdirectoryName = "frames"
+    private static let maximumManifestByteCount = 16 * 1_024 * 1_024
+    private static let maximumBindingByteCount = 64 * 1_024
+
+    /// Capture manifests are allowed to name only a single local file under
+    /// `frames`. Treat those names as untrusted even though they originate
+    /// from our recorder: a sealed bundle can still be damaged on disk.
+    static func isSafeCaptureFileLeaf(_ value: String) -> Bool {
+        guard !value.isEmpty,
+              value.count <= 255,
+              value != ".",
+              value != "..",
+              !value.hasPrefix(".")
+        else { return false }
+        let allowed = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_."
+        )
+        return value.unicodeScalars.allSatisfy(allowed.contains)
+    }
 
     private static func rootURL() throws -> URL {
         let base = try FileManager.default.url(
@@ -145,26 +181,22 @@ enum RoomCaptureBundleLibrary {
             at: directory,
             withIntermediateDirectories: true
         )
-        return directory
+        return try validatedOwnedDirectory(directory, within: directory)
     }
 
     static func bundleDirectory(forProject projectID: String) -> URL? {
-        guard let root = try? rootURL() else { return nil }
+        guard isSafeProjectIdentifier(projectID), let root = try? rootURL() else { return nil }
         let candidate = root.appendingPathComponent(projectID, isDirectory: true)
-        var isDirectory: ObjCBool = false
-        guard
-            FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDirectory),
-            isDirectory.boolValue
-        else {
-            return nil
-        }
-        return candidate
+        return try? validatedOwnedDirectory(candidate, within: root)
     }
 
     static func manifest(forProject projectID: String) -> RoomCaptureBundleManifest? {
         guard let directory = bundleDirectory(forProject: projectID) else { return nil }
         let manifestURL = directory.appendingPathComponent(manifestFileName)
-        guard let data = try? Data(contentsOf: manifestURL) else { return nil }
+        guard let data = try? boundedRegularFileData(
+            at: manifestURL,
+            maximumByteCount: maximumManifestByteCount
+        ) else { return nil }
         return try? RoomJSONCoding.makeDecoder().decode(
             RoomCaptureBundleManifest.self,
             from: data
@@ -172,20 +204,237 @@ enum RoomCaptureBundleLibrary {
     }
 
     /// Moves a recorded scratch bundle into the per-project library slot,
-    /// replacing any previous bundle for the project.
+    /// replacing any previous bundle for the project. This compatibility path
+    /// deliberately strips any binding: callers must use `adoptBoundBundle`
+    /// when they possess the authoritative immutable revision identity.
     static func adoptBundle(at sourceURL: URL, forProject projectID: String) throws {
+        _ = try validatedOwnedDirectory(sourceURL, within: sourceURL)
+        let staleBinding = sourceURL.appendingPathComponent(sourceBindingFileName)
+        if pathEntryExists(at: staleBinding) {
+            try FileManager.default.removeItem(at: staleBinding)
+        }
+        try moveBundle(at: sourceURL, forProject: projectID)
+    }
+
+    static func adoptBoundBundle(
+        at sourceURL: URL,
+        forProject projectID: String,
+        sourceRevision: RoomRedesignSourceRevision
+    ) throws {
+        try sourceRevision.validate()
+        guard isSafeProjectIdentifier(projectID),
+              sourceRevision.projectID == projectID
+        else {
+            throw RoomProjectStoreError.invalidPackage(
+                "Capture evidence must bind to the same safe project identifier."
+            )
+        }
+        let sourceDirectory = try validatedOwnedDirectory(sourceURL, within: sourceURL)
+        let manifestURL = sourceDirectory.appendingPathComponent(manifestFileName)
+        let manifestData = try boundedRegularFileData(
+            at: manifestURL,
+            maximumByteCount: maximumManifestByteCount
+        )
+        let manifest = try RoomJSONCoding.makeDecoder().decode(
+            RoomCaptureBundleManifest.self,
+            from: manifestData
+        )
+        guard manifest.schemaVersion == RoomCaptureBundleManifest.currentSchemaVersion else {
+            throw RoomProjectStoreError.invalidPackage(
+                "New AI evidence requires the current capture-bundle manifest schema."
+            )
+        }
+        try validateManifestArtifactLeaves(manifest)
+        let binding = RoomCaptureBundleSourceBinding(
+            schemaVersion: RoomCaptureBundleSourceBinding.currentSchemaVersion,
+            sourceRevision: sourceRevision,
+            bundleManifestSHA256: RoomSHA256.hexDigest(of: manifestData)
+        )
+        let bindingData = try RoomJSONCoding.makeEncoder().encode(binding)
+        guard bindingData.count <= maximumBindingByteCount else {
+            throw RoomProjectStoreError.invalidPackage("Capture source binding is unexpectedly large.")
+        }
+        let bindingURL = sourceDirectory.appendingPathComponent(sourceBindingFileName)
+        if pathEntryExists(at: bindingURL) {
+            try FileManager.default.removeItem(at: bindingURL)
+        }
+        try bindingData.write(
+            to: bindingURL,
+            options: .atomic
+        )
+        try moveBundle(at: sourceDirectory, forProject: projectID)
+    }
+
+    static func boundEvidence(
+        forProject projectID: String,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) -> RoomCaptureBundleBoundEvidence? {
+        guard isSafeProjectIdentifier(projectID),
+              expectedSourceRevision.projectID == projectID,
+              (try? expectedSourceRevision.validate()) != nil,
+              let directory = bundleDirectory(forProject: projectID)
+        else { return nil }
+        do {
+            let bindingData = try boundedRegularFileData(
+                at: directory.appendingPathComponent(sourceBindingFileName),
+                maximumByteCount: maximumBindingByteCount
+            )
+            let binding = try RoomJSONCoding.makeDecoder().decode(
+                RoomCaptureBundleSourceBinding.self,
+                from: bindingData
+            )
+            guard binding.schemaVersion == RoomCaptureBundleSourceBinding.currentSchemaVersion,
+                  binding.sourceRevision == expectedSourceRevision,
+                  (try? binding.sourceRevision.validate()) != nil
+            else { return nil }
+
+            let manifestData = try boundedRegularFileData(
+                at: directory.appendingPathComponent(manifestFileName),
+                maximumByteCount: maximumManifestByteCount
+            )
+            guard RoomSHA256.hexDigest(of: manifestData) == binding.bundleManifestSHA256 else {
+                return nil
+            }
+            let manifest = try RoomJSONCoding.makeDecoder().decode(
+                RoomCaptureBundleManifest.self,
+                from: manifestData
+            )
+            guard manifest.schemaVersion == RoomCaptureBundleManifest.currentSchemaVersion else {
+                return nil
+            }
+            try validateManifestArtifactLeaves(manifest)
+            return RoomCaptureBundleBoundEvidence(
+                directoryURL: directory,
+                manifest: manifest,
+                sourceBinding: binding
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private static func moveBundle(at sourceURL: URL, forProject projectID: String) throws {
+        guard isSafeProjectIdentifier(projectID) else {
+            throw RoomProjectStoreError.invalidPackage("Unsafe capture-bundle project identifier.")
+        }
+        _ = try validatedOwnedDirectory(sourceURL, within: sourceURL)
         let root = try rootURL()
         let destination = root.appendingPathComponent(projectID, isDirectory: true)
-        if FileManager.default.fileExists(atPath: destination.path) {
+        if pathEntryExists(at: destination) {
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.moveItem(at: sourceURL, to: destination)
     }
 
+    private static func boundedRegularFileData(
+        at fileURL: URL,
+        maximumByteCount: Int
+    ) throws -> Data {
+        let values = try fileURL.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]
+        )
+        guard values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize,
+              fileSize > 0,
+              fileSize <= maximumByteCount
+        else {
+            throw RoomProjectStoreError.invalidPackage("Capture evidence sidecar is unsafe or out of bounds.")
+        }
+        let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+        guard data.count == fileSize else {
+            throw RoomProjectStoreError.invalidPackage("Capture evidence sidecar changed while being read.")
+        }
+        return data
+    }
+
+    private static func validateManifestArtifactLeaves(
+        _ manifest: RoomCaptureBundleManifest
+    ) throws {
+        for frame in manifest.frames {
+            guard isSafeCaptureFileLeaf(frame.fileName) else {
+                throw RoomProjectStoreError.invalidPackage("Capture frame name is not a safe file leaf.")
+            }
+            guard let depth = frame.depth else { continue }
+            guard isSafeCaptureFileLeaf(depth.fileName) else {
+                throw RoomProjectStoreError.invalidPackage("Capture depth name is not a safe file leaf.")
+            }
+            if let confidenceFileName = depth.confidenceFileName,
+               !isSafeCaptureFileLeaf(confidenceFileName) {
+                throw RoomProjectStoreError.invalidPackage("Capture confidence name is not a safe file leaf.")
+            }
+        }
+    }
+
+    private static func validatedOwnedDirectory(
+        _ directory: URL,
+        within root: URL
+    ) throws -> URL {
+        let normalizedRoot = root.standardizedFileURL
+        let normalizedDirectory = directory.standardizedFileURL
+        guard isSameOrDescendant(normalizedDirectory, of: normalizedRoot) else {
+            throw RoomProjectStoreError.invalidPackage("Capture evidence directory escapes its owned root.")
+        }
+        try requireOwnedDirectory(normalizedRoot)
+        guard normalizedDirectory != normalizedRoot else { return normalizedRoot }
+
+        let rootPath = normalizedRoot.path
+        let directoryPath = normalizedDirectory.path
+        let separator = rootPath == "/" ? "" : "/"
+        let suffix = directoryPath.dropFirst(rootPath.count + separator.count)
+        var current = normalizedRoot
+        for component in suffix.split(separator: "/") {
+            current.appendPathComponent(String(component), isDirectory: true)
+            try requireOwnedDirectory(current)
+        }
+        return normalizedDirectory
+    }
+
+    private static func requireOwnedDirectory(_ url: URL) throws {
+        do {
+            let values = try url.resourceValues(
+                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            )
+            guard values.isDirectory == true, values.isSymbolicLink != true else {
+                throw RoomProjectStoreError.invalidPackage(
+                    "Capture evidence directory must be owned and cannot be a symbolic link."
+                )
+            }
+        } catch let error as RoomProjectStoreError {
+            throw error
+        } catch {
+            throw RoomProjectStoreError.invalidPackage(
+                "Capture evidence directory is unavailable or unsafe."
+            )
+        }
+    }
+
+    private static func isSameOrDescendant(_ candidate: URL, of root: URL) -> Bool {
+        let candidatePath = candidate.path
+        let rootPath = root.path
+        return candidatePath == rootPath
+            || candidatePath.hasPrefix(rootPath == "/" ? rootPath : rootPath + "/")
+    }
+
+    private static func pathEntryExists(at url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey])) != nil
+    }
+
+    private static func isSafeProjectIdentifier(_ value: String) -> Bool {
+        guard !value.isEmpty, value.count <= 128 else { return false }
+        let allowed = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        )
+        return value.unicodeScalars.allSatisfy(allowed.contains)
+    }
+
     static func removeBundle(forProject projectID: String) throws {
+        guard isSafeProjectIdentifier(projectID) else {
+            throw RoomProjectStoreError.invalidPackage("Unsafe capture-bundle project identifier.")
+        }
         let root = try rootURL()
         let destination = root.appendingPathComponent(projectID, isDirectory: true)
-        if FileManager.default.fileExists(atPath: destination.path) {
+        if pathEntryExists(at: destination) {
             try FileManager.default.removeItem(at: destination)
         }
     }

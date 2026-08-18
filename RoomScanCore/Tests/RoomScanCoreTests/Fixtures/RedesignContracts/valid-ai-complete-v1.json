@@ -11,160 +11,137 @@
     "semanticSHA256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "revisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
   },
-  "artifactPlanSHA256": "6fd50b773ed9f61977a09d799509f13c5e43f902d43527a1b35acb253219b377",
-  "selectionSHA256": "9bbe66d19661ba53eeaec56670a1489e9cc56addafbb158ef77f558cda82d424",
+  "artifactPlan": [
+    {"artifactID": "artifact-normalized-semantics", "artifactClass": "normalizedSemantics"},
+    {"artifactID": "artifact-revision-lineage", "artifactClass": "revisionLineage"},
+    {"artifactID": "artifact-orientation", "artifactClass": "orientation"},
+    {"artifactID": "artifact-floor-plan", "artifactClass": "floorPlan"},
+    {"artifactID": "artifact-canonical-view-corner", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-canonical-view-entry", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-canonical-view-orbit", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-canonical-view-perspective", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-canonical-view-top-down", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-canonical-view-wall", "artifactClass": "canonicalView"},
+    {"artifactID": "artifact-reference-image", "artifactClass": "selectedReferenceImage"},
+    {"artifactID": "artifact-materials", "artifactClass": "materials"},
+    {"artifactID": "artifact-quality-report", "artifactClass": "qualityReport"},
+    {"artifactID": "artifact-room-brief", "artifactClass": "roomBrief"},
+    {"artifactID": "artifact-redesign-intent", "artifactClass": "redesignIntent"},
+    {"artifactID": "instructions-chatgpt", "artifactClass": "providerInstructions"},
+    {"artifactID": "instructions-claude", "artifactClass": "providerInstructions"},
+    {"artifactID": "instructions-grok", "artifactClass": "providerInstructions"},
+    {"artifactID": "instructions-provider-neutral", "artifactClass": "providerInstructions"},
+    {"artifactID": "artifact-mesh", "artifactClass": "mesh"},
+    {"artifactID": "artifact-texture", "artifactClass": "texture"},
+    {"artifactID": "artifact-raw-rgb", "artifactClass": "rawRGB"},
+    {"artifactID": "artifact-raw-depth", "artifactClass": "rawDepth"},
+    {"artifactID": "artifact-raw-confidence", "artifactClass": "rawConfidence"},
+    {"artifactID": "artifact-diagnostics", "artifactClass": "diagnostics"}
+  ],
+  "artifactPlanSHA256": "0bde24949b82281f3fd09267384f0fbd3b96b5bfa1aac59fd7e60c3193ca291a",
+  "selectionSHA256": "e7fab5d9db92c2041ef7429e513e77f6a5c03961b7f15593d268a7cb698405dc",
   "disclosureReview": {
     "reviewID": "disclosure-complete",
     "reviewedAt": "2026-08-12T12:00:00Z",
     "decision": "approved",
     "sourceRevisionID": "revision-001",
     "sourceRevisionManifestSHA256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-    "reviewedSelectionSHA256": "9bbe66d19661ba53eeaec56670a1489e9cc56addafbb158ef77f558cda82d424",
+    "reviewedSelectionSHA256": "e7fab5d9db92c2041ef7429e513e77f6a5c03961b7f15593d268a7cb698405dc",
     "preciseGPSExcluded": true,
     "rawEvidenceDisclosureAccepted": true,
-    "reviewedArtifactPlanSHA256": "6fd50b773ed9f61977a09d799509f13c5e43f902d43527a1b35acb253219b377"
+    "reviewedArtifactPlanSHA256": "0bde24949b82281f3fd09267384f0fbd3b96b5bfa1aac59fd7e60c3193ca291a"
   },
   "artifacts": [
     {
-      "artifactID": "artifact-normalized-semantics",
-      "artifactClass": "normalizedSemantics",
-      "disposition": "included",
-      "relativePath": "documents/semantic-room.json",
-      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-      "byteCount": 1024,
-      "mediaType": "application/json"
+      "artifactID": "artifact-normalized-semantics", "artifactClass": "normalizedSemantics", "disposition": "included",
+      "relativePath": "truth/semantic-model.json", "sha256": "1111111111111111111111111111111111111111111111111111111111111111", "byteCount": 1024, "mediaType": "application/json"
     },
     {
-      "artifactID": "artifact-orientation",
-      "artifactClass": "orientation",
-      "disposition": "included",
-      "relativePath": "documents/orientation.json",
-      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-      "byteCount": 512,
-      "mediaType": "application/json"
+      "artifactID": "artifact-revision-lineage", "artifactClass": "revisionLineage", "disposition": "included",
+      "relativePath": "truth/revision-lineage.json", "sha256": "1212121212121212121212121212121212121212121212121212121212121212", "byteCount": 640, "mediaType": "application/json"
     },
     {
-      "artifactID": "artifact-floor-plan",
-      "artifactClass": "floorPlan",
-      "disposition": "included",
-      "relativePath": "documents/floor-plan.svg",
-      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-      "byteCount": 2048,
-      "mediaType": "image/svg+xml"
+      "artifactID": "artifact-orientation", "artifactClass": "orientation", "disposition": "included",
+      "relativePath": "truth/orientation.json", "sha256": "2222222222222222222222222222222222222222222222222222222222222222", "byteCount": 512, "mediaType": "application/json"
     },
     {
-      "artifactID": "artifact-canonical-view",
-      "artifactClass": "canonicalView",
-      "disposition": "included",
-      "relativePath": "images/canonical-entry.jpg",
-      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
-      "byteCount": 4096,
-      "mediaType": "image/jpeg"
+      "artifactID": "artifact-floor-plan", "artifactClass": "floorPlan", "disposition": "included",
+      "relativePath": "derivatives/floor-plan.png", "sha256": "3333333333333333333333333333333333333333333333333333333333333333", "byteCount": 2048, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-reference-image",
-      "artifactClass": "selectedReferenceImage",
-      "disposition": "included",
-      "relativePath": "images/reference-001.jpg",
-      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
-      "byteCount": 4096,
-      "mediaType": "image/jpeg"
+      "artifactID": "artifact-canonical-view-corner", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/corner.png", "sha256": "4040404040404040404040404040404040404040404040404040404040404040", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-materials",
-      "artifactClass": "materials",
-      "disposition": "unavailable",
-      "reasonCode": "not-captured"
+      "artifactID": "artifact-canonical-view-entry", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/entry.png", "sha256": "4141414141414141414141414141414141414141414141414141414141414141", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-quality-report",
-      "artifactClass": "qualityReport",
-      "disposition": "included",
-      "relativePath": "documents/quality.json",
-      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
-      "byteCount": 768,
-      "mediaType": "application/json"
+      "artifactID": "artifact-canonical-view-orbit", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/orbit.png", "sha256": "4242424242424242424242424242424242424242424242424242424242424242", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-room-brief",
-      "artifactClass": "roomBrief",
-      "disposition": "included",
-      "relativePath": "documents/room-brief.txt",
-      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
-      "byteCount": 384,
-      "mediaType": "text/plain"
+      "artifactID": "artifact-canonical-view-perspective", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/perspective.png", "sha256": "4343434343434343434343434343434343434343434343434343434343434343", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-redesign-intent",
-      "artifactClass": "redesignIntent",
-      "disposition": "included",
-      "relativePath": "documents/redesign-intent.json",
-      "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
-      "byteCount": 512,
-      "mediaType": "application/json"
+      "artifactID": "artifact-canonical-view-top-down", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/top-down.png", "sha256": "4444444444444444444444444444444444444444444444444444444444444444", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-provider-instructions",
-      "artifactClass": "providerInstructions",
-      "disposition": "included",
-      "relativePath": "documents/provider-instructions.txt",
-      "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
-      "byteCount": 256,
-      "mediaType": "text/plain"
+      "artifactID": "artifact-canonical-view-wall", "artifactClass": "canonicalView", "disposition": "included",
+      "relativePath": "derivatives/canonical-views/wall.png", "sha256": "4545454545454545454545454545454545454545454545454545454545454545", "byteCount": 4096, "mediaType": "image/png"
     },
     {
-      "artifactID": "artifact-mesh",
-      "artifactClass": "mesh",
-      "disposition": "included",
-      "relativePath": "geometry/room.usdz",
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "byteCount": 8192,
-      "mediaType": "model/vnd.usdz+zip"
+      "artifactID": "artifact-reference-image", "artifactClass": "selectedReferenceImage", "disposition": "included",
+      "relativePath": "references/reference-001.jpg", "sha256": "5555555555555555555555555555555555555555555555555555555555555555", "byteCount": 4096, "mediaType": "image/jpeg"
+    },
+    {"artifactID": "artifact-materials", "artifactClass": "materials", "disposition": "unavailable", "reasonCode": "not-captured"},
+    {
+      "artifactID": "artifact-quality-report", "artifactClass": "qualityReport", "disposition": "included",
+      "relativePath": "quality/quality-report-carrier.json", "sha256": "6666666666666666666666666666666666666666666666666666666666666666", "byteCount": 768, "mediaType": "application/json"
     },
     {
-      "artifactID": "artifact-texture",
-      "artifactClass": "texture",
-      "disposition": "included",
-      "relativePath": "textures/room.png",
-      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "byteCount": 4096,
-      "mediaType": "image/png"
+      "artifactID": "artifact-room-brief", "artifactClass": "roomBrief", "disposition": "included",
+      "relativePath": "brief/room-brief.txt", "sha256": "7777777777777777777777777777777777777777777777777777777777777777", "byteCount": 384, "mediaType": "text/plain"
     },
     {
-      "artifactID": "artifact-concept-attachment",
-      "artifactClass": "conceptAttachment",
-      "disposition": "unavailable",
-      "reasonCode": "no-approved-concept"
+      "artifactID": "artifact-redesign-intent", "artifactClass": "redesignIntent", "disposition": "included",
+      "relativePath": "intent/redesign-intent.json", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "byteCount": 512, "mediaType": "application/json"
     },
     {
-      "artifactID": "artifact-raw-rgb",
-      "artifactClass": "rawRGB",
-      "disposition": "included",
-      "relativePath": "raw/rgb/frame-0001.heic",
-      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "byteCount": 16384,
-      "mediaType": "image/heic"
+      "artifactID": "instructions-chatgpt", "artifactClass": "providerInstructions", "disposition": "included",
+      "relativePath": "instructions/chatgpt.txt", "sha256": "9090909090909090909090909090909090909090909090909090909090909090", "byteCount": 256, "mediaType": "text/plain"
     },
     {
-      "artifactID": "artifact-raw-depth",
-      "artifactClass": "rawDepth",
-      "disposition": "included",
-      "relativePath": "raw/depth/frame-0001.bin",
-      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "byteCount": 8192,
-      "mediaType": "application/octet-stream"
+      "artifactID": "instructions-claude", "artifactClass": "providerInstructions", "disposition": "included",
+      "relativePath": "instructions/claude.txt", "sha256": "9191919191919191919191919191919191919191919191919191919191919191", "byteCount": 256, "mediaType": "text/plain"
     },
     {
-      "artifactID": "artifact-raw-confidence",
-      "artifactClass": "rawConfidence",
-      "disposition": "unavailable",
-      "reasonCode": "not-captured"
+      "artifactID": "instructions-grok", "artifactClass": "providerInstructions", "disposition": "included",
+      "relativePath": "instructions/grok.txt", "sha256": "9292929292929292929292929292929292929292929292929292929292929292", "byteCount": 256, "mediaType": "text/plain"
     },
     {
-      "artifactID": "artifact-diagnostics",
-      "artifactClass": "diagnostics",
-      "disposition": "excluded",
-      "reasonCode": "user-excluded"
-    }
+      "artifactID": "instructions-provider-neutral", "artifactClass": "providerInstructions", "disposition": "included",
+      "relativePath": "instructions/provider-neutral.txt", "sha256": "9393939393939393939393939393939393939393939393939393939393939393", "byteCount": 256, "mediaType": "text/plain"
+    },
+    {
+      "artifactID": "artifact-mesh", "artifactClass": "mesh", "disposition": "included",
+      "relativePath": "geometry/room.usdz", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "byteCount": 8192, "mediaType": "model/vnd.usdz+zip"
+    },
+    {
+      "artifactID": "artifact-texture", "artifactClass": "texture", "disposition": "included",
+      "relativePath": "appearance/textures/room.png", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "byteCount": 4096, "mediaType": "image/png"
+    },
+    {
+      "artifactID": "artifact-raw-rgb", "artifactClass": "rawRGB", "disposition": "included",
+      "relativePath": "raw/artifact-raw-rgb.heic", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "byteCount": 16384, "mediaType": "image/heic"
+    },
+    {
+      "artifactID": "artifact-raw-depth", "artifactClass": "rawDepth", "disposition": "included",
+      "relativePath": "raw/artifact-raw-depth.bin", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "byteCount": 8192, "mediaType": "application/octet-stream"
+    },
+    {"artifactID": "artifact-raw-confidence", "artifactClass": "rawConfidence", "disposition": "unavailable", "reasonCode": "not-captured"},
+    {"artifactID": "artifact-diagnostics", "artifactClass": "diagnostics", "disposition": "excluded", "reasonCode": "user-excluded"}
   ]
 }

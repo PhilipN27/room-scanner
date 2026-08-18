@@ -87,6 +87,24 @@
 		F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000004 /* AppleCloudBackupTransport.swift */; };
 		F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000005 /* RoomCloudBackupViews.swift */; };
 		F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000006 /* RoomCloudBackupAppTests.swift */; };
+		530000000000000000000001 /* RoomAIImageSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000002 /* RoomAIImageSanitizerTests.swift */; };
+		530000000000000000000003 /* RoomAIImageSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000004 /* RoomAIImageSanitizer.swift */; };
+		530000000000000000000006 /* RoomAISensitiveContentAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000007 /* RoomAISensitiveContentAnalyzerTests.swift */; };
+		530000000000000000000008 /* RoomAISensitiveContentAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000009 /* RoomAISensitiveContentAnalyzer.swift */; };
+		530000000000000000000010 /* RoomAIDisclosureCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000011 /* RoomAIDisclosureCoordinatorTests.swift */; };
+		530000000000000000000012 /* RoomAIDisclosureCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000013 /* RoomAIDisclosureCoordinator.swift */; };
+		530000000000000000000014 /* RoomAIRoomPackageServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000015 /* RoomAIRoomPackageServiceTests.swift */; };
+		530000000000000000000016 /* RoomAIRoomPackageAppService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000017 /* RoomAIRoomPackageAppService.swift */; };
+		530000000000000000000018 /* RoomAIRoomPackageDerivativeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000019 /* RoomAIRoomPackageDerivativeRenderer.swift */; };
+		530000000000000000000020 /* RoomConceptImportCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000021 /* RoomConceptImportCoordinatorTests.swift */; };
+		530000000000000000000022 /* RoomConceptImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000023 /* RoomConceptImportCoordinator.swift */; };
+		530000000000000000000024 /* RoomAIRoomPackageMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000025 /* RoomAIRoomPackageMaterializer.swift */; };
+		530000000000000000000026 /* RoomAIRedesignView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000027 /* RoomAIRedesignView.swift */; };
+		530000000000000000000028 /* RoomAIRedesignUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000029 /* RoomAIRedesignUITests.swift */; };
+		530000000000000000000031 /* RoomAIRedesignProductionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000032 /* RoomAIRedesignProductionModel.swift */; };
+		530000000000000000000033 /* RoomAIRedesignModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000034 /* RoomAIRedesignModelFactory.swift */; };
+		530000000000000000000035 /* RoomAIRedesignHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000036 /* RoomAIRedesignHostView.swift */; };
+		530000000000000000000037 /* RoomAIRedesignProductionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +196,24 @@
 		F61000000000000000000004 /* AppleCloudBackupTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleCloudBackupTransport.swift; sourceTree = "<group>"; };
 		F61000000000000000000005 /* RoomCloudBackupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupViews.swift; sourceTree = "<group>"; };
 		F61000000000000000000006 /* RoomCloudBackupAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupAppTests.swift; sourceTree = "<group>"; };
+		530000000000000000000002 /* RoomAIImageSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIImageSanitizerTests.swift; sourceTree = "<group>"; };
+		530000000000000000000004 /* RoomAIImageSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIImageSanitizer.swift; sourceTree = "<group>"; };
+		530000000000000000000007 /* RoomAISensitiveContentAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAISensitiveContentAnalyzerTests.swift; sourceTree = "<group>"; };
+		530000000000000000000009 /* RoomAISensitiveContentAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAISensitiveContentAnalyzer.swift; sourceTree = "<group>"; };
+		530000000000000000000011 /* RoomAIDisclosureCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIDisclosureCoordinatorTests.swift; sourceTree = "<group>"; };
+		530000000000000000000013 /* RoomAIDisclosureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIDisclosureCoordinator.swift; sourceTree = "<group>"; };
+		530000000000000000000015 /* RoomAIRoomPackageServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRoomPackageServiceTests.swift; sourceTree = "<group>"; };
+		530000000000000000000017 /* RoomAIRoomPackageAppService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRoomPackageAppService.swift; sourceTree = "<group>"; };
+		530000000000000000000019 /* RoomAIRoomPackageDerivativeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRoomPackageDerivativeRenderer.swift; sourceTree = "<group>"; };
+		530000000000000000000021 /* RoomConceptImportCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomConceptImportCoordinatorTests.swift; sourceTree = "<group>"; };
+		530000000000000000000023 /* RoomConceptImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomConceptImportCoordinator.swift; sourceTree = "<group>"; };
+		530000000000000000000025 /* RoomAIRoomPackageMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRoomPackageMaterializer.swift; sourceTree = "<group>"; };
+		530000000000000000000027 /* RoomAIRedesignView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignView.swift; sourceTree = "<group>"; };
+		530000000000000000000029 /* RoomAIRedesignUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignUITests.swift; sourceTree = "<group>"; };
+		530000000000000000000032 /* RoomAIRedesignProductionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignProductionModel.swift; sourceTree = "<group>"; };
+		530000000000000000000034 /* RoomAIRedesignModelFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignModelFactory.swift; sourceTree = "<group>"; };
+		530000000000000000000036 /* RoomAIRedesignHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignHostView.swift; sourceTree = "<group>"; };
+		530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignProductionIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -255,6 +291,7 @@
 				B30000000000000000000005 /* RoomCapture */,
 				ABCE00000000000000000001 /* RoomViewer */,
 				ABCE00000000000000000002 /* RoomEditor */,
+				530000000000000000000030 /* AIRedesign */,
 			);
 			path = RoomScanStudio/Features;
 			sourceTree = "<group>";
@@ -334,6 +371,12 @@
 				7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */,
 				7C0000000000000000000002 /* RoomMeshColoringJobTests.swift */,
 				7B00000000000000000000A2 /* SplatCameraControllerTests.swift */,
+				530000000000000000000002 /* RoomAIImageSanitizerTests.swift */,
+				530000000000000000000007 /* RoomAISensitiveContentAnalyzerTests.swift */,
+				530000000000000000000011 /* RoomAIDisclosureCoordinatorTests.swift */,
+				530000000000000000000015 /* RoomAIRoomPackageServiceTests.swift */,
+				530000000000000000000021 /* RoomConceptImportCoordinatorTests.swift */,
+				530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -342,6 +385,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000011 /* RoomScanStudioUITests.swift */,
+				530000000000000000000029 /* RoomAIRedesignUITests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioUITests;
 			sourceTree = "<group>";
@@ -384,6 +428,7 @@
 				D30000000000000000000001 /* Capture */,
 				ED3000000000000000000001 /* Export */,
 				F62000000000000000000001 /* CloudBackup */,
+				530000000000000000000005 /* AIRedesign */,
 			);
 			path = RoomScanStudio/Infrastructure;
 			sourceTree = "<group>";
@@ -395,6 +440,31 @@
 				7C0000000000000000000008 /* RoomMeshColoringNotifications.swift */,
 			);
 			path = Background;
+			sourceTree = "<group>";
+		};
+		530000000000000000000005 /* AIRedesign */ = {
+			isa = PBXGroup;
+			children = (
+				530000000000000000000004 /* RoomAIImageSanitizer.swift */,
+				530000000000000000000009 /* RoomAISensitiveContentAnalyzer.swift */,
+				530000000000000000000013 /* RoomAIDisclosureCoordinator.swift */,
+				530000000000000000000017 /* RoomAIRoomPackageAppService.swift */,
+				530000000000000000000019 /* RoomAIRoomPackageDerivativeRenderer.swift */,
+				530000000000000000000025 /* RoomAIRoomPackageMaterializer.swift */,
+				530000000000000000000023 /* RoomConceptImportCoordinator.swift */,
+				530000000000000000000034 /* RoomAIRedesignModelFactory.swift */,
+			);
+			path = AIRedesign;
+			sourceTree = "<group>";
+		};
+		530000000000000000000030 /* AIRedesign */ = {
+			isa = PBXGroup;
+			children = (
+				530000000000000000000027 /* RoomAIRedesignView.swift */,
+				530000000000000000000032 /* RoomAIRedesignProductionModel.swift */,
+				530000000000000000000036 /* RoomAIRedesignHostView.swift */,
+			);
+			path = AIRedesign;
 			sourceTree = "<group>";
 		};
 		B30000000000000000000002 /* Persistence */ = {
@@ -681,6 +751,17 @@
 				F60000000000000000000003 /* RoomCloudBackupService.swift in Sources */,
 				F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */,
 				F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */,
+				530000000000000000000003 /* RoomAIImageSanitizer.swift in Sources */,
+				530000000000000000000008 /* RoomAISensitiveContentAnalyzer.swift in Sources */,
+				530000000000000000000012 /* RoomAIDisclosureCoordinator.swift in Sources */,
+				530000000000000000000016 /* RoomAIRoomPackageAppService.swift in Sources */,
+				530000000000000000000018 /* RoomAIRoomPackageDerivativeRenderer.swift in Sources */,
+				530000000000000000000024 /* RoomAIRoomPackageMaterializer.swift in Sources */,
+				530000000000000000000022 /* RoomConceptImportCoordinator.swift in Sources */,
+				530000000000000000000026 /* RoomAIRedesignView.swift in Sources */,
+				530000000000000000000031 /* RoomAIRedesignProductionModel.swift in Sources */,
+				530000000000000000000033 /* RoomAIRedesignModelFactory.swift in Sources */,
+				530000000000000000000035 /* RoomAIRedesignHostView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -699,6 +780,12 @@
 				7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */,
 				7C0000000000000000000001 /* RoomMeshColoringJobTests.swift in Sources */,
 				7B00000000000000000000A1 /* SplatCameraControllerTests.swift in Sources */,
+				530000000000000000000001 /* RoomAIImageSanitizerTests.swift in Sources */,
+				530000000000000000000006 /* RoomAISensitiveContentAnalyzerTests.swift in Sources */,
+				530000000000000000000010 /* RoomAIDisclosureCoordinatorTests.swift in Sources */,
+				530000000000000000000014 /* RoomAIRoomPackageServiceTests.swift in Sources */,
+				530000000000000000000020 /* RoomConceptImportCoordinatorTests.swift in Sources */,
+				530000000000000000000037 /* RoomAIRedesignProductionIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -707,6 +794,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A40000000000000000000010 /* RoomScanStudioUITests.swift in Sources */,
+				530000000000000000000028 /* RoomAIRedesignUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

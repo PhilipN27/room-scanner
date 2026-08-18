@@ -68,8 +68,8 @@ final class RoomRedesignContractFixtureTests: XCTestCase {
 
     func testCanonicalSelectionDigestsMatchPortableJSONGoldenVectors() throws {
         let aiExpected = [
-            "valid-ai-ready-v1.json": "38731f6be89c586800628967f91ecc692613687e7d6aecce11b9932a4a4bf83d",
-            "valid-ai-complete-v1.json": "9bbe66d19661ba53eeaec56670a1489e9cc56addafbb158ef77f558cda82d424"
+            "valid-ai-ready-v1.json": "2939da89c7042ff142e36f81f9de43c402c6572051cc42eb8c9337fa2b89fa1a",
+            "valid-ai-complete-v1.json": "e7fab5d9db92c2041ef7429e513e77f6a5c03961b7f15593d268a7cb698405dc"
         ]
         for (fixture, expected) in aiExpected {
             let package: RoomAIRoomPackage = try aiPackageFixture(named: fixture)
@@ -353,21 +353,31 @@ final class RoomRedesignContractFixtureTests: XCTestCase {
 
     func testAIReadyRejectsIncludedRawEvidence() throws {
         var package: RoomAIRoomPackage = try aiPackageFixture(named: "valid-ai-ready-v1.json")
-        let index = try XCTUnwrap(package.artifacts.firstIndex { $0.artifactClass == .rawRGB })
-        package.artifacts[index] = RoomAIRoomPackageArtifact(
-            artifactID: package.artifacts[index].artifactID,
+        let rawSlot = RoomAIArtifactSlot(
+            artifactID: "artifact-raw-rgb",
+            artifactClass: .rawRGB
+        )
+        package.artifactPlan.append(rawSlot)
+        package.artifacts.append(RoomAIRoomPackageArtifact(
+            artifactID: rawSlot.artifactID,
             artifactClass: .rawRGB,
             disposition: .included,
-            relativePath: "raw/rgb/frame-0001.heic",
+            relativePath: "raw/artifact-raw-rgb.heic",
             sha256: String(repeating: "c", count: 64),
             byteCount: 16_384,
             mediaType: "image/heic"
+        ))
+        package.artifactPlanSHA256 = try RoomRedesignContractDigests.aiArtifactPlanSHA256(
+            sourceRevision: package.sourceRevision,
+            profile: package.profile,
+            slots: package.artifactPlan
         )
+        package.disclosureReview.reviewedArtifactPlanSHA256 = package.artifactPlanSHA256
         try rebindSelection(&package)
 
         assertInvalidValue(
             try encoded(package),
-            path: "artifacts",
+            path: "artifactPlan",
             label: "AI-ready raw-default guard"
         )
     }

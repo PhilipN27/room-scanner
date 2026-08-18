@@ -37,6 +37,23 @@ enum RoomExportCoordinatorState: Equatable {
     case cleanupFailed
 }
 
+/// The only durable result needed from a system Share Sheet. UIKit's optional
+/// activity type and returned items are intentionally not retained, and an
+/// actual callback error takes precedence over the completion flag.
+enum SystemShareSheetOutcome: Equatable, Sendable {
+    case completed
+    case cancelled
+    case failed
+
+    init(completed: Bool, error: Error?) {
+        if error != nil {
+            self = .failed
+        } else {
+            self = completed ? .completed : .cancelled
+        }
+    }
+}
+
 /// Owns the finalized archive lifetime through the system share completion.
 /// Cancelling the share sheet still cleans the lease; a cleanup failure remains
 /// actionable rather than silently retaining an unbounded scratch directory.
@@ -49,6 +66,7 @@ final class RoomExportCoordinator: ObservableObject {
     private let provider: any RoomExportProviding
     private let cleaner: any RoomExportWorkspaceCleaning
     private var cleanupWorkspaceURL: URL?
+    private var pendingShareOutcome: SystemShareSheetOutcome?
 
     init(
         provider: any RoomExportProviding,
@@ -63,6 +81,7 @@ final class RoomExportCoordinator: ObservableObject {
         state = .preparing
         readyResult = nil
         cleanupWorkspaceURL = nil
+        pendingShareOutcome = nil
         errorMessage = nil
         do {
             readyResult = try await provider.exportHead(
@@ -83,21 +102,25 @@ final class RoomExportCoordinator: ObservableObject {
         }
     }
 
-    func completeShare(completed: Bool) async {
-        guard let result = readyResult else { return }
-        // `completed` is intentionally not a success claim: either outcome
-        // ends the external handoff and begins scoped lease cleanup.
-        _ = completed
+    func completeShare(outcome: SystemShareSheetOutcome) async {
+        // UIKit may deliver both its terminal callback and a presentation
+        // dismissal. Only the first terminal outcome owns this exact lease;
+        // cleanup retries remain an explicit user action after a failure.
+        guard state == .ready, let result = readyResult else { return }
+        pendingShareOutcome = outcome
         do {
             try cleaner.cleanup(workspaceURL: result.workspaceURL)
-            readyResult = nil
-            cleanupWorkspaceURL = nil
-            errorMessage = nil
-            state = .idle
+            finishCleanup(shareOutcome: outcome)
         } catch {
-            errorMessage = "The export finished, but its temporary handoff workspace could not be removed. Retry cleanup."
+            errorMessage = "The Share Sheet closed, but its temporary handoff workspace could not be removed. Retry cleanup."
             state = .cleanupFailed
         }
+    }
+
+    /// Compatibility entry point for legacy callers that only observed the
+    /// completion flag. Cancellation remains terminal and still cleans.
+    func completeShare(completed: Bool) async {
+        await completeShare(outcome: completed ? .completed : .cancelled)
     }
 
     func retryCleanup() async {
@@ -106,10 +129,7 @@ final class RoomExportCoordinator: ObservableObject {
         else { return }
         do {
             try cleaner.cleanup(workspaceURL: workspaceURL)
-            readyResult = nil
-            cleanupWorkspaceURL = nil
-            errorMessage = nil
-            state = .idle
+            finishCleanup(shareOutcome: pendingShareOutcome)
         } catch {
             errorMessage = "Temporary export cleanup still needs attention. The room package remains unchanged."
         }
@@ -130,6 +150,7 @@ final class RoomExportCoordinator: ObservableObject {
             try cleaner.cleanup(workspaceURL: result.workspaceURL)
             readyResult = nil
             cleanupWorkspaceURL = nil
+            pendingShareOutcome = nil
             errorMessage = nil
             state = .idle
             return true
@@ -143,7 +164,22 @@ final class RoomExportCoordinator: ObservableObject {
     func resetFailure() {
         guard state == .failed else { return }
         state = .idle
+        pendingShareOutcome = nil
         errorMessage = nil
+    }
+
+    private func finishCleanup(shareOutcome: SystemShareSheetOutcome?) {
+        readyResult = nil
+        cleanupWorkspaceURL = nil
+        pendingShareOutcome = nil
+        switch shareOutcome {
+        case .failed:
+            errorMessage = "The Share Sheet could not complete the export handoff. Its temporary workspace was removed. Prepare the export and try again."
+            state = .failed
+        case .completed, .cancelled, nil:
+            errorMessage = nil
+            state = .idle
+        }
     }
 
     private func message(for error: RoomExportError) -> String {

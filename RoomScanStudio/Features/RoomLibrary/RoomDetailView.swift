@@ -1038,6 +1038,7 @@ struct RoomDetailView: View {
     @ObservedObject var exportCoordinator: RoomExportCoordinator
     @ObservedObject var cloudBackupCoordinator: RoomCloudBackupCoordinator
     @ObservedObject var meshColoringCoordinator: RoomMeshColoringJobCoordinator
+    let aiRedesignModelFactory: RoomAIRedesignModelFactory
     let privacyPolicyURL: URL?
     var openColoredMeshOnAppear = false
 
@@ -1069,10 +1070,14 @@ struct RoomDetailView: View {
     @State private var showingOpenRoomChoices = false
     @State private var showingSpatialReview = false
     @State private var showingPropertyGrouping = false
+    @State private var aiRedesignModel: RoomAIRedesignProductionModel?
+    @State private var showingAIRedesign = false
+    @State private var preparingAIRedesign = false
+    @State private var aiRedesignErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 20) {
                 if let package {
                     detailContent(package)
@@ -1273,6 +1278,13 @@ struct RoomDetailView: View {
                 controller: controller
             )
         }
+        .sheet(isPresented: $showingAIRedesign, onDismiss: {
+            aiRedesignModel = nil
+        }) {
+            if let aiRedesignModel {
+                RoomAIRedesignHostView(model: aiRedesignModel)
+            }
+        }
         .confirmationDialog(
             "Permanently delete this room package?",
             isPresented: $showingDeleteConfirmation,
@@ -1303,6 +1315,8 @@ struct RoomDetailView: View {
             openRoomSection(package)
 
             spatialTruthSection
+
+            aiRedesignSection
 
             // Capture quality remains bound to the immutable revision that
             // produced it. Later edits do not rebind or copy that report, so
@@ -1439,6 +1453,59 @@ struct RoomDetailView: View {
         .buttonStyle(InstrumentButtonStyle(role: .secondary))
         .accessibilityIdentifier("detail.propertyGrouping")
         .accessibilityHint("Groups independent room projects only; no alignment or connectivity is inferred.")
+    }
+
+    private var aiRedesignSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("AI ROOM PACKAGE / CONCEPT SETS")
+                .font(AppTypography.measurement)
+                .tracking(1.2)
+                .foregroundStyle(AppPalette.blueprint)
+            Text("Prepare a provider-neutral, revision-bound package; inspect its disclosure; then import visual concepts without changing room truth.")
+                .font(AppTypography.callout)
+                .foregroundStyle(AppPalette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Task { await openAIRedesign() }
+            } label: {
+                if preparingAIRedesign {
+                    ProgressView()
+                } else {
+                    Label("Open AI package workspace", systemImage: "shippingbox.and.arrow.backward")
+                }
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .primary))
+            .disabled(preparingAIRedesign)
+            .accessibilityIdentifier("detail.aiRedesign")
+            .accessibilityHint("Requires a confirmed room orientation. No room data is uploaded automatically.")
+            if let aiRedesignErrorMessage {
+                Label(aiRedesignErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.aiRedesignError")
+            }
+        }
+        .padding(16)
+        .background(
+            AppPalette.raisedSurface,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+    }
+
+    private func openAIRedesign() async {
+        guard !preparingAIRedesign else { return }
+        preparingAIRedesign = true
+        defer { preparingAIRedesign = false }
+        do {
+            aiRedesignModel = try await aiRedesignModelFactory.makeModel(
+                projectID: projectID
+            )
+            aiRedesignErrorMessage = nil
+            showingAIRedesign = true
+        } catch {
+            aiRedesignModel = nil
+            aiRedesignErrorMessage = error.localizedDescription
+        }
     }
 
     private var heroState: RoomHeroMediaState {

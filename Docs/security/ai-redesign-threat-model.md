@@ -1,9 +1,9 @@
 # AI redesign platform threat model
 
-- Version: 1.0
-- Date: 2026-08-12
-- Applies to: approved RoomScanStudio AI redesign platform design and Slice 0
-  contracts
+- Version: 1.1
+- Date: 2026-08-17
+- Applies to: approved RoomScanStudio AI redesign platform design and local
+  Slice 0–3 contracts/implementation
 - Does not assert: production deployment, penetration testing, legal
   compliance, physical-device behavior, or vendor configuration
 
@@ -62,6 +62,28 @@ The relevant boundaries are:
 No client crosses one of these boundaries merely because it knows a project ID,
 object key, email address, or other user's opaque identifier.
 
+Slice 3 concretely enforces the local outbound/inbound boundaries. AI-ready
+cannot plan raw capture slots; both profiles exclude world maps and precise GPS;
+Complete raw inclusion must exactly match a single-use source/plan/selection-
+bound approval. Selected outbound images are decoded/re-encoded and advisory
+sensitive-content flags never claim perfect detection. Every built archive is
+independently extracted for canonical manifest and exact entry/digest closure
+before sharing.
+
+Concept import uses bounded link-free staging outside the room package, strict
+archive/media/source validation, a second image re-encode, same-root atomic
+promotion, and ownership-checked cleanup. Automatic view mapping requires an
+authenticated finalized-package binding (the exact local canonical
+manifest/ledger evidence, not account authentication); otherwise it is manual
+or unmatched. The production AIRedesign path has no provider/model/auth/direct
+HTTP-client dependency, and the static detector includes an injected-client
+positive control. This does not describe the target's separately scoped private
+CloudKit backup transport. The completed local/Simulator matrix also exercised
+AI-ready/Complete deterministic extraction closure and one-shot Share Sheet
+lease cleanup. These local controls do not establish physical Share Sheet/import
+behavior, provider behavior/terms, or any future hosted
+authorization/deployment control.
+
 ## Threats, controls, and proof obligations
 
 | Threat | Abuse case and impact | Required controls | Proof before release |
@@ -93,7 +115,7 @@ object key, email address, or other user's opaque identifier.
 | Resource exhaustion and cost abuse | Huge uploads, repeated derivatives, portal scraping, link guessing, or comment spam exhaust compute/storage/egress. | Declared and enforced quotas; upload size/count/time bounds; per-principal/link/network rate limits; asynchronous bounded workers; derivative caching by immutable digest; spend alarms and publication kill switch; warnings, never silent deletion. | Boundary/load tests for small/median/large rooms, retry storms, portal traffic, and quota messages; reconcile measured usage to billing. |
 | Cross-parser or path-identity differential | Duplicate JSON members select different values in Swift and the hosted service, escaped key spellings bypass duplicate checks, or case/Unicode-equivalent paths collide on materialization. | Reject decoded duplicate member names before object materialization; decode typed models only from the same validated tree; use portable ASCII v1 paths and case-folded collision identity; revalidate the completed tree. | Top-level/nested/escaped duplicate keys, case aliases, and NFC/NFD-style non-ASCII paths fail, while distinct safe controls pass in every implementation. |
 | Supply-chain or deployment compromise | Dependency/update or CI credential alters validator, publication allowlist, or production code. | Pinned dependencies, lockfile verification, read-only CI by default, reviewed provenance, least-privilege deployment identity, separated environments, artifact/SBOM scanning, protected production promotion. | Lockfile and built-artifact inspection, dependency/license scan, unauthorized-deploy denial, and rollback drill. |
-| Hosted bootstrap couples or observes guest workflows | Startup authentication, remote configuration, telemetry, entitlement lookup, or hosted SDK initialization blocks or emits data during guest/local capture, export, AI-package construction, Concept Set import, or Share Sheet preparation. | Keep local workflow dependencies below a network-free boundary; do not require a hosted client, account, remote flag, or telemetry startup for guest paths; make hosted adapters explicit opt-in dependencies after account entry. | For the current executable route, bootstrap the real test environment and complete simulated capture/save, local load/edit, actual legacy export preparation, and lease cleanup; assert no request reaches the registered test trap. Independently reject production HTTP/auth clients with a source oracle whose injected `URLSession` control must fail, and prove the explicit fail-fast transport with a trapped request. Repeat against AI-package construction, Concept Set import, and physical Share Sheet preparation in their owning slices; Slice 0 does not claim those future/device routes. |
+| Hosted bootstrap couples or observes guest workflows | Startup authentication, remote configuration, telemetry, entitlement lookup, or hosted SDK initialization blocks or emits data during guest/local capture, export, AI-package construction, Concept Set import, or Share Sheet preparation. | Keep local workflow dependencies below a network-free boundary; do not require a hosted client, account, remote flag, or telemetry startup for guest paths; make hosted adapters explicit opt-in dependencies after account entry. | Bootstrap the real test environment and complete simulated capture/save, local load/edit, legacy export, AI-package construction, disclosure, lease cleanup, and Concept import; independently reject production HTTP/auth clients with a source oracle whose injected `URLSession` control must fail. Physical Share Sheet/import transport remains a device gate. |
 
 ## Device-only security claims
 

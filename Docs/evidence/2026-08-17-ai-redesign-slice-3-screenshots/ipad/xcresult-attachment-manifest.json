@@ -1,0 +1,149 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "95D3CA5C-B808-486C-8462-9071432BB081.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "10-accessibility-xxxl-concept-actions_0_83AADBC4-68B8-49EE-ABB8-E14D4502FE0C.png",
+        "timestamp" : 1787001335.874
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "B1F8E80E-6E44-4ECF-9558-F5F0B350633A.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "09-accessibility-xxxl-disclosure-actions_0_EF59E30F-0B50-491E-A9DC-350A56A46177.png",
+        "timestamp" : 1787001322.657
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testAccessibilityDynamicTypeKeepsCriticalActionsHittable()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testAccessibilityDynamicTypeKeepsCriticalActionsHittable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "5C921943-328A-4870-973B-6250A0B1EE54.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "08-light-portrait-delete-confirmation_0_A713ED1A-6450-4587-8E7D-20FC1F9310CD.png",
+        "timestamp" : 1787001355.363
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "E25A4767-5571-4C71-BB08-4099864A8131.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "07-light-portrait-original-concept-comparison_0_826D90BF-0B5C-4A51-BE11-203C7ED734D1.png",
+        "timestamp" : 1787001351.908
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "4B41261C-D5B6-4395-95A9-BB053C07F829.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "06-light-portrait-manual-mapping_0_3BC2DD4F-4DB5-46F5-8BD7-BB92D540DD2C.png",
+        "timestamp" : 1787001350.021
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "A4A7471A-3860-481E-B174-D467D01458C0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "05-light-portrait-persisted-packaged-concept_0_D1E85046-4CD1-4650-9BC3-7373C7C8EADE.png",
+        "timestamp" : 1787001346.986
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "3326AB27-7ED3-4B3B-BBEC-E2803D7FC082.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "04-light-portrait-concept-import_0_4FAEBD89-4B9C-498F-9B8D-6382459A2563.png",
+        "timestamp" : 1787001345.326
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testConceptImportMappingComparisonArchiveAndDeleteConfirmation()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testConceptImportMappingComparisonArchiveAndDeleteConfirmation"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "ED2F24F9-9CAB-497C-B833-C95884BE68E1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "12-dark-portrait-comparison_0_A6718959-DE0F-43A9-AB78-F7513E2231C1.png",
+        "timestamp" : 1787001367.871
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "6FADC2D9-C0BC-43E8-A745-FB41B62AC17E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "11-dark-portrait-profile_0_5A5D2D2A-0896-4C36-87B3-95F9861DAA4F.png",
+        "timestamp" : 1787001364.574
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testDarkModeKeepsProfileAndComparisonReadable()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testDarkModeKeepsProfileAndComparisonReadable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "2C0CB703-7151-4B5E-BB01-D4EE8B8C204B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "03-light-portrait-complete-approved-share_0_8F3F7295-F2F8-4E1E-ABAC-AFA64BD38D19.png",
+        "timestamp" : 1787001390.066
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "D3F422CA-4C8C-4AB6-9CB5-3F2477010DF1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "02-light-portrait-image-review-advisory_0_D70E62B7-8774-417C-9AE0-A1F242655D0B.png",
+        "timestamp" : 1787001379.128
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "E5D1A1F1-1DAA-4C07-B594-3AF99FE1241D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "01-light-portrait-profile-brief_0_AD5AE8AE-36BC-4022-960C-D954038B0C8A.png",
+        "timestamp" : 1787001374.865
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testPackageProfileDisclosureAndShareControls()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testPackageProfileDisclosureAndShareControls"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+        "deviceName" : "RoomScanStudio Baseline Stabilization iPad 20260812",
+        "exportedFileName" : "ABD776AC-7AFD-45C5-BB7F-579FC3CDD3B4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "13-light-portrait-readiness-failure_0_300DAB3B-BEFA-4A60-8AFF-B67B5E219C29.png",
+        "timestamp" : 1787001397.117
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testReadinessFailureIsExplicitAndBlocksPreparation()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testReadinessFailureIsExplicitAndBlocksPreparation"
+  }
+]

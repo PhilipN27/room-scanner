@@ -1,21 +1,25 @@
 # AI redesign contracts v1
 
-- Status: Slice 0 contracts plus additive Slice 1 and Slice 2 local contracts
-- Date: 2026-08-13
+- Status: Slice 0–3 local contracts; hosted/provider boundaries remain future
+- Date: 2026-08-17
 - Executable definitions:
-  `RoomScanCore/Sources/RoomScanCore/RoomRedesignContracts.swift` and
-  `RoomScanCore/Sources/RoomScanCore/RoomQuality.swift`
+  `RoomScanCore/Sources/RoomScanCore/RoomRedesignContracts.swift`,
+  `RoomAIArtifactSelection.swift`, `RoomAIRoomPackageBuilder.swift`,
+  `RoomAIRoomPackageArchive.swift`, `RoomConceptSet.swift`,
+  `RoomConceptSetArchive.swift`, `LocalRoomConceptStore.swift`, and
+  `RoomQuality.swift`
 - Canonical fixtures:
   `RoomScanCore/Tests/RoomScanCoreTests/Fixtures/RedesignContracts`
 
-These contracts describe future local and hosted boundaries without adding a
-server path. The redesign interchange documents are vendor-neutral public
-`Encodable` models with one fail-closed data validator; their top-level models
-deliberately do not expose `Decodable`. The revision-embedded quality report is
-`Codable` for legacy package compatibility, but standalone untrusted bytes must
-cross `RoomQualityReportDecoder.decodeCanonical`. The local package remains
-capture truth; these documents bind to a validated immutable revision and never
-rewrite it.
+These contracts describe implemented local Slice 3 boundaries and future
+hosted boundaries without adding a server path. The redesign interchange
+documents are vendor-neutral public `Encodable` models with one fail-closed data
+validator; their top-level models deliberately do not expose `Decodable`. The
+revision-embedded quality report is `Codable` for legacy package compatibility,
+but standalone untrusted bytes must cross
+`RoomQualityReportDecoder.decodeCanonical`. The local package remains capture
+truth; these documents bind to a validated immutable revision and never rewrite
+it.
 
 ## Compatibility policy
 
@@ -33,6 +37,7 @@ models identified by `schemaVersion` and have no interchange `contractKind`:
 | Future quality carrier | standalone provider-neutral model | `roomscan-quality-report-carrier-v1` |
 | Hosted API resource | `hostedAPIResource` | `roomscan-hosted-api-resource-v1` |
 | AI Room Package | `aiRoomPackage` | `roomscan-ai-room-package-v1` |
+| Concept Set | standalone local/import model (no `contractKind`) | `roomscan-concept-set-v1` |
 | Working-project sync | `workingProjectSync` | `roomscan-working-project-sync-v1` |
 | Portal snapshot | `portalSnapshot` | `roomscan-portal-snapshot-v1` |
 
@@ -213,6 +218,52 @@ artifact in either profile.
 
 Precise GPS has no v1 AI-package field or artifact class. Injecting a GPS key is
 an unknown-key failure even when the profile is Complete.
+
+Slice 3 realizes this contract with a dynamic, source-bound artifact plan.
+Repeated classes use distinct stable slots: six canonical views derive from
+the confirmed/manual canonical cameras; provider-neutral, ChatGPT, Claude, and
+Grok instructions occupy four separate slots; and selected reference imagery
+is bounded to four images for AI-ready or eight for Complete. AI-ready plans
+structurally omit raw RGB/depth/confidence/diagnostic slots rather than merely
+marking raw bytes excluded. Complete may plan available raw slots, but the
+approval bit must exactly match whether any raw artifact is actually included.
+
+The builder freezes a full ledger before final approval. The canonical
+manifest binds source revision, profile, package ID, ordered plan and plan
+digest, selected-artifact digest, disclosure review, and every disposition.
+The deterministic ZIP32 STORE writer re-reads frozen sources, writes the
+archive into an owned lease, then independently extracts it into a separate
+empty owned directory. A package is not shareable unless canonical manifest
+bytes, source/profile binding, exact archive-entry closure, and every included
+path/digest/byte count all revalidate. Staging and the final share lease remain
+outside the authoritative source package.
+
+Final local/Simulator verification exercised that independent extraction
+closure for both AI-ready and Complete. The finalized package can authenticate
+Concept provenance only through its exact locally validated canonical manifest
+and complete view ledger; this is integrity/provenance authentication, not an
+account or provider-authentication feature.
+
+## Concept Set
+
+`roomscan-concept-set-v1` is additive companion state for one exact immutable
+source revision. Its source binding repeats project, revision,
+coordinate-space epoch, revision-manifest digest, and semantic digest. Loose
+imports contain exactly one app-re-encoded attachment and no source-package
+claim. Packaged imports require a source AI-package identity; any automatic
+canonical mapping additionally requires that authenticated finalized-package
+binding and a camera ID declared both by that package and by the current source
+orientation. Without that evidence the import remains manual or unmatched;
+image-content confidence is never invented.
+
+The Concept archive extractor enforces portable flat attachment paths, strict
+entry/size/CRC/digest closure, byte-verified JPEG/PNG media, no links or remote
+references, and exact source binding. The app performs a second safe image
+decode/re-encode before atomic marker-owned promotion into
+`LocalRoomConceptStore`. Review updates are atomic and may change only mapping,
+approval, and comments; source identity, provenance, and attachment identity
+remain immutable. Archive/unarchive/delete target only the selected Concept
+Set and never write captured room truth.
 
 ## Working-project sync
 

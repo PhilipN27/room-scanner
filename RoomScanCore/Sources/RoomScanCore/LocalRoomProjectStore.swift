@@ -1006,6 +1006,46 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    /// Reads a thumbnail only while the requested immutable revision is still
+    /// the project head. This keeps comparison UI from labelling a newer
+    /// project-level preview as evidence for an older Concept Set revision.
+    public func thumbnailData(
+        projectID: String,
+        expectedHeadRevisionID: String
+    ) throws -> Data {
+        try validateIdentifier(projectID)
+        try validateIdentifier(expectedHeadRevisionID)
+        let root = try canonicalRootURL()
+        return try withRootLock(root) {
+            let package = try loadLocked(root: root, projectID: projectID)
+            guard package.manifest.headRevisionID == expectedHeadRevisionID else {
+                throw RoomProjectStoreError.parentDoesNotMatchHead(
+                    projectID: projectID,
+                    expected: expectedHeadRevisionID,
+                    actual: package.manifest.headRevisionID
+                )
+            }
+            guard let thumbnail = package.metadata.thumbnailRelativePath else {
+                throw RoomProjectStoreError.assetReferenceNotStaged(
+                    "thumbnails/thumbnail.png"
+                )
+            }
+            let projectURL = try projectDirectory(root: root, projectID: projectID)
+            let thumbnailURL = projectURL.appendingPathComponent(thumbnail.value)
+            try assertNoSymbolicLinks(root: root, through: thumbnailURL)
+            guard try isRegularFile(thumbnailURL) else {
+                throw RoomProjectStoreError.assetReferenceNotStaged(thumbnail.value)
+            }
+            do {
+                return try Data(contentsOf: thumbnailURL)
+            } catch {
+                throw RoomProjectStoreError.storageFailure(
+                    "Unable to read the room thumbnail."
+                )
+            }
+        }
+    }
+
     // MARK: - Hero cache (derived data)
 
     /// Reads the store-owned derived hero snapshot, or nil when absent or

@@ -1,0 +1,149 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "E0F968A3-630E-4DA8-B048-24101120A9F6.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "10-accessibility-xxxl-concept-actions_0_B0D920C2-1316-4E5B-963E-863B6F1F9398.png",
+        "timestamp" : 1787001167.227
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "15F82DA4-1BDE-4FDE-BBAC-40FE99A6ACFD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "09-accessibility-xxxl-disclosure-actions_0_5B1E4D73-05CF-467E-BCB0-4CFD0A7B6C85.png",
+        "timestamp" : 1787001143.814
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testAccessibilityDynamicTypeKeepsCriticalActionsHittable()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testAccessibilityDynamicTypeKeepsCriticalActionsHittable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "8D2D9066-4888-46D5-9CD5-4B207206DFD7.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "08-light-portrait-delete-confirmation_0_511B6E5A-1DD2-4D67-8A88-D4235407E161.png",
+        "timestamp" : 1787001189.394
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "D135AD74-7818-4B24-98D6-1A5D03A5C61C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "07-light-portrait-original-concept-comparison_0_4382FB2D-EFB8-4786-B1C7-74E2A1CD3280.png",
+        "timestamp" : 1787001186.058
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "C352282E-1A8C-4C97-87BF-A25BE76A0D81.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "06-light-portrait-manual-mapping_0_EDE99A26-56CA-4788-BD25-283823F52293.png",
+        "timestamp" : 1787001183.929
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "BF38015A-137E-4FE2-BD1A-2E13F59CFB36.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "05-light-portrait-persisted-packaged-concept_0_822B66CB-F2B3-4E7D-8D99-BC49C5641A68.png",
+        "timestamp" : 1787001180.469
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "ABE50185-93EB-4AD8-BB98-4B24314A4076.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "04-light-portrait-concept-import_0_90A32967-CCD3-4774-81C0-ABB6B9E42F4A.png",
+        "timestamp" : 1787001176.315
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testConceptImportMappingComparisonArchiveAndDeleteConfirmation()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testConceptImportMappingComparisonArchiveAndDeleteConfirmation"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "972A4DA5-DA56-484F-9BEE-7B7533845869.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "12-dark-portrait-comparison_0_E00454D6-6DFE-4CCD-8BB2-73466063034D.png",
+        "timestamp" : 1787001202.064
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "460F4157-A60A-4518-9450-1760A1D446A1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "11-dark-portrait-profile_0_FCAAAC6F-8BC9-4F2E-ACBB-6E3128BFB9CE.png",
+        "timestamp" : 1787001198.456
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testDarkModeKeepsProfileAndComparisonReadable()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testDarkModeKeepsProfileAndComparisonReadable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "DF4BA28E-2205-4FD8-BA04-B2495DD35074.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "03-light-portrait-complete-approved-share_0_460CE7AA-0C6E-447D-8764-25CB9CB34537.png",
+        "timestamp" : 1787001223.464
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "D3D72D24-FC21-4EF3-8D38-914C99B1A63D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "02-light-portrait-image-review-advisory_0_6EB55C34-3D4C-4D7F-B11F-17E33DDE228B.png",
+        "timestamp" : 1787001212.86
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "8A5EABCC-8122-4A8D-926A-3CEE05C762CE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "01-light-portrait-profile-brief_0_00DF703D-B6DA-4F39-907B-9F046B42577E.png",
+        "timestamp" : 1787001208.768
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testPackageProfileDisclosureAndShareControls()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testPackageProfileDisclosureAndShareControls"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+        "deviceName" : "iPhone 16 Pro",
+        "exportedFileName" : "D73A41B0-F155-4897-A5EB-FB5FE56783DB.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "13-light-portrait-readiness-failure_0_A9E483B2-C72D-4AF8-B9C5-6A601788ABC4.png",
+        "timestamp" : 1787001232.494
+      }
+    ],
+    "testIdentifier" : "RoomAIRedesignUITests/testReadinessFailureIsExplicitAndBlocksPreparation()",
+    "testIdentifierURL" : "test://com.apple.xcode/RoomScanStudio/RoomScanStudioUITests/RoomAIRedesignUITests/testReadinessFailureIsExplicitAndBlocksPreparation"
+  }
+]

@@ -112,6 +112,177 @@ final class RoomScanStudioTests: XCTestCase {
         XCTAssertEqual(summaries.count, 1)
     }
 
+    func testOrientationSuggestionMergePreservesExistingIntentPropertyAndConceptMetadata() throws {
+        let source = RoomRedesignSourceRevision(
+            projectID: "project-001",
+            revisionID: "revision-001",
+            coordinateSpaceEpochID: "epoch-001",
+            packageSchemaVersion: RoomProjectSchemaVersion.v2.rawValue,
+            semanticSHA256: String(repeating: "a", count: 64),
+            revisionManifestSHA256: String(repeating: "b", count: 64)
+        )
+        let bounds = RoomNormalizedBounds(
+            minimum: .init(x: -2, y: 0, z: -2),
+            maximum: .init(x: 2, y: 3, z: 2)
+        )
+        let confirmed = try RoomCanonicalCameraGenerator.makeOrientation(
+            sourceRevision: source,
+            input: .init(
+                source: .confirmed,
+                confidence: 1,
+                entryPositionMeters: .init(x: 0, y: 0, z: -2),
+                inwardDirection: .init(x: 0, y: 0, z: 1),
+                roomBounds: bounds,
+                referenceWallFeatureID: nil
+            )
+        )
+        let suggestion = try RoomCanonicalCameraGenerator.makeOrientation(
+            sourceRevision: source,
+            input: .init(
+                source: .suggested,
+                confidence: 0.75,
+                entryPositionMeters: .init(x: 1, y: 0, z: -2),
+                inwardDirection: .init(x: 0, y: 0, z: 1),
+                roomBounds: bounds,
+                referenceWallFeatureID: nil
+            )
+        )
+        let intent = RoomRedesignIntentV2(
+            request: "Keep the fireplace and make the room calmer.",
+            scope: .stage,
+            constraints: nil,
+            permissions: [.init(featureID: "fireplace-001", permission: .preserve)]
+        )
+        let property = RoomPropertyMembershipContract(
+            propertyID: "property-001",
+            roomProjectIDs: [source.projectID]
+        )
+        let timestamp = Date(timeIntervalSince1970: 1_704_067_200)
+        let concept = RoomConceptMetadataV2(
+            conceptSetID: "concept-001",
+            sourceRevision: source,
+            request: intent.request,
+            scope: intent.scope,
+            provider: "Provider disclosed by user",
+            sourceAIRoomPackageSchemaVersion: RoomRedesignContractKind.aiRoomPackage.supportedSchemaVersion,
+            sourceAIRoomPackageID: "package-001",
+            createdAt: timestamp,
+            importedAt: timestamp,
+            mappingStatus: .unmatched,
+            attachments: [],
+            comments: ["Review locally"],
+            approvalState: .pending,
+            archiveState: .active
+        )
+        let existing = RoomLocalRedesignExtensionV2(
+            sourceRevision: source,
+            orientation: confirmed,
+            redesignIntent: intent,
+            propertyMembership: property,
+            conceptMetadata: [concept]
+        )
+
+        let merged = try RoomLibraryController.mergingOrientationSuggestion(
+            suggestion,
+            sourceRevision: source,
+            existing: existing
+        )
+
+        XCTAssertEqual(merged.orientation, suggestion)
+        XCTAssertEqual(merged.redesignIntent, intent)
+        XCTAssertEqual(merged.propertyMembership, property)
+        XCTAssertEqual(merged.conceptMetadata, [concept])
+        XCTAssertEqual(existing.orientation, confirmed)
+    }
+
+    func testRedesignIntentMergePreservesOrientationPropertyAndConceptMetadata() throws {
+        let source = RoomRedesignSourceRevision(
+            projectID: "project-001",
+            revisionID: "revision-001",
+            coordinateSpaceEpochID: "epoch-001",
+            packageSchemaVersion: RoomProjectSchemaVersion.v2.rawValue,
+            semanticSHA256: String(repeating: "a", count: 64),
+            revisionManifestSHA256: String(repeating: "b", count: 64)
+        )
+        let bounds = RoomNormalizedBounds(
+            minimum: .init(x: -2, y: 0, z: -3),
+            maximum: .init(x: 2, y: 2.5, z: 3)
+        )
+        let orientation = try RoomCanonicalCameraGenerator.makeOrientation(
+            sourceRevision: source,
+            input: .init(
+                source: .confirmed,
+                confidence: 1,
+                entryPositionMeters: .init(x: 0, y: 0, z: -3),
+                inwardDirection: .init(x: 0, y: 0, z: 1),
+                roomBounds: bounds,
+                referenceWallFeatureID: nil
+            )
+        )
+        let oldIntent = RoomRedesignIntentV2(
+            request: "Keep the original layout.",
+            scope: .stage,
+            constraints: nil,
+            permissions: []
+        )
+        let replacement = RoomRedesignIntentV2(
+            request: "Make the room warmer while preserving the fireplace.",
+            scope: .renovate,
+            constraints: .init(
+                purpose: ["Reading"],
+                style: ["Warm modern"],
+                budget: "Moderate",
+                householdNeeds: [],
+                accessibility: [],
+                circulation: [],
+                materials: ["Oak"],
+                colors: ["Ochre"],
+                referenceImageIDs: [],
+                desiredObjects: ["Reading chair"]
+            ),
+            permissions: [.init(featureID: "fireplace-001", permission: .preserve)]
+        )
+        let property = RoomPropertyMembershipContract(
+            propertyID: "property-001",
+            roomProjectIDs: [source.projectID]
+        )
+        let timestamp = Date(timeIntervalSince1970: 1_704_067_200)
+        let concept = RoomConceptMetadataV2(
+            conceptSetID: "concept-001",
+            sourceRevision: source,
+            request: oldIntent.request,
+            scope: oldIntent.scope,
+            provider: "Provider disclosed by user",
+            sourceAIRoomPackageSchemaVersion: RoomRedesignContractKind.aiRoomPackage.supportedSchemaVersion,
+            sourceAIRoomPackageID: "package-001",
+            createdAt: timestamp,
+            importedAt: timestamp,
+            mappingStatus: .unmatched,
+            attachments: [],
+            comments: [],
+            approvalState: .pending,
+            archiveState: .active
+        )
+        let existing = RoomLocalRedesignExtensionV2(
+            sourceRevision: source,
+            orientation: orientation,
+            redesignIntent: oldIntent,
+            propertyMembership: property,
+            conceptMetadata: [concept]
+        )
+
+        let merged = try RoomLibraryController.mergingRedesignIntent(
+            replacement,
+            sourceRevision: source,
+            existing: existing
+        )
+
+        XCTAssertEqual(merged.orientation, orientation)
+        XCTAssertEqual(merged.redesignIntent, replacement)
+        XCTAssertEqual(merged.propertyMembership, property)
+        XCTAssertEqual(merged.conceptMetadata, [concept])
+    }
+
     func testSemanticVisualStylesRemainDistinctBeyondColorLabels() {
         let tokens = RoomSemanticRole.allCases.map(RoomSemanticPresentation.token(for:))
         XCTAssertEqual(Set(tokens.map(\.symbolName)).count, RoomSemanticRole.allCases.count)
