@@ -178,7 +178,7 @@ The final artifact is
 
 - `git diff --check`: passed.
 - `git diff --cached --quiet`: passed; the staged diff is empty.
-- Branch/HEAD/merge base:
+- Pre-commit branch/HEAD/merge base:
   `agent/ai-redesign-platform-slice3` /
   `fa864d39ee230cfaa6994dec1574e344770556a9` /
   `fa864d39ee230cfaa6994dec1574e344770556a9`.
@@ -187,8 +187,27 @@ The final artifact is
 - Slice 3 direct static checker: `[]`.
 - In-memory negative controls: `[]`.
 - Full static verifier: only the known `DEVELOPMENT_TEAM` exception.
-- No staging, commit, push, provider request, upload, or other external action
-  occurred.
+- At the time this local evidence was captured, no staging, commit, push,
+  provider request, upload, or other external action had occurred.
+
+## Delivery closure (2026-08-18)
+
+- The reviewed 92-file Slice 3 implementation snapshot was committed as
+  `28fcecc90ed1530cbacacdf84eb3bcd406c77cbb` with subject
+  `Implement AI redesign platform Slice 3` and pushed to
+  `origin/agent/ai-redesign-platform-slice3`.
+- Local `HEAD`, the configured upstream, and the remote branch were verified at
+  that exact implementation commit with zero ahead/behind divergence before
+  this evidence-only closure update.
+- The pre-commit rerun passed 266/266 Core tests, the unsigned generic-Simulator
+  build, the direct Slice 3 structural checker, and every in-memory mutation
+  control. Broad concurrent Simulator reruns exposed order/timing-sensitive UI
+  automation failures; every failed case then passed in isolated serial reruns
+  (iPhone 2/2 and final 1/1; iPad 6/6). No product or test source was changed to
+  mask those results. The retained 219/219 green bundles above remain the
+  canonical complete-scheme evidence.
+- No pull request, merge, `main` update, provider request, room-data upload,
+  purchase, provisioning, or production-configuration change occurred.
 
 ## Remaining non-simulator proof
 
