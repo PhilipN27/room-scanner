@@ -12,6 +12,11 @@ Xcode 16.4 build and iPhone/iPad Simulator matrix passed. Physical RoomPlan
 capture, independent ZIP/render inspection, CloudKit development-container,
 signing, and physical-device proof remain separately gated. The implementation
 is local-first and one-room only; Slice 3 adds no hosted/provider dependency.
+Slice 4 adds an optional, default-off professional-service foundation under
+`HostedService/` and a lazily constructed iOS professional boundary. Local
+lane evidence exists, but whole-slice PostgreSQL/composition acceptance,
+non-production provider evidence, physical Face ID evidence, and production
+provisioning/release remain separately gated.
 
 ## Architectural boundaries
 
@@ -29,6 +34,10 @@ is local-first and one-room only; Slice 3 adds no hosted/provider dependency.
 | Export boundary | Generates native and verified optional deliverables. | USD/USDZ required; manifest reports generated/skipped/failed formats. |
 | AI package boundary | Plans and builds one source-bound provider-neutral archive after exact disclosure review. | Offline; complete ledger/closure; source immutable; no provider/model client. |
 | Concept boundary | Validates, sanitizes, persists, reviews, compares, archives, and deletes additive concept media. | Separate store; untrusted imports; atomic promotion; never captured truth. |
+| Professional entry boundary | Lazily enters optional account/workspace behavior after an explicit user action. | Default off; guest launch constructs no hosted/auth client and makes no hosted request. |
+| App-owned API boundary | Normalizes the sealed Slice 4 HTTP API, app-owned opaque sessions, authorization, flags, and provider adapters. | Clients never receive database, AWS, service-role, Cognito, or provider credentials/tokens. |
+| Professional persistence boundary | Stores canonical principals, sessions, workspaces, memberships, subscription/quota state, and bounded audit state. | PostgreSQL 16; forced RLS; lane-specific non-owner/non-`BYPASSRLS` roles; server-derived tenant context. |
+| Professional object boundary | Holds private, versioned server-owned tenant/quarantine objects. | S3 never authorizes; only narrow server-issued capabilities cross the client boundary. |
 
 ## Package-first room layout
 
@@ -119,6 +128,64 @@ and Complete archive extraction/manifest/ledger closure, exact
 finalized-package Concept automatic mapping, and local Share Sheet lease
 cleanup. It does not prove real provider behavior or terms, physical Share
 Sheet/import behavior on iPhone, or any physical-iPad behavior.
+
+## Slice 4 optional professional-service boundary
+
+The professional service is a control plane beside—not underneath—the local
+capture/package system. Strict TypeScript on Node.js 24 provides the app-owned
+service and AWS CDK v2 definitions. API Gateway HTTP API payload v2 and Lambda
+form the private request boundary; Aurora PostgreSQL Serverless v2 in
+`us-east-1` is the canonical identity/membership/subscription/audit store; and
+private versioned S3 uses server-owned tenant prefixes. Cognito is only the
+Apple/custom-auth substrate, SES is the bounded mail adapter, and Stripe enters
+through a raw-body app-owned billing adapter. Provider and database types do
+not enter `RoomScanCore` or the public package/resource contracts.
+
+The sealed Slice 4 v3 route manifest has 19 operations for health,
+verified-email request/candidate request/browser confirmation/app redemption,
+Apple sign-in and candidate proof, session refresh/logout, Stripe ingress,
+workspace bootstrap/activation and workspace/membership/subscription/quota
+reads, plus deliberate identity mutation. It contains no Slice 5
+synchronization/upload, Slice 6 portal or publication, or Slice 7 lifecycle
+endpoint. Every protected route resolves an app-owned opaque access digest and
+runs central authorization plus repository work in one database transaction.
+The server derives workspace scope from the canonical principal and active
+membership; no caller workspace path, internal UUID, quota period, Stripe
+binding, or object key supplies authority.
+
+The verified-email v3 handshake separates mailbox confirmation from app
+credential delivery. The requesting app retains a 32-byte verifier; PostgreSQL
+stores only its S256 challenge plus keyed digests. A static, no-store browser
+page performs no work until a trusted submit, then confirms the one-time link
+and displays an eight-character transfer code without receiving a session.
+Only the app holding the completion ID, verifier, exact purpose, and displayed
+code may redeem. Exact lost-response replay returns an original result only
+while that session or identity receipt remains live. The design supports
+cross-device confirmation without letting an attacker who merely requested a
+victim's address claim a blindly clicked link.
+
+Apple finish uses an explicit API → Cognito challenge → app-session chain. The
+API validates the app-owned state/nonce/S256 attempt, exchanges the code,
+generates raw app access/refresh tokens and keyed hashes, and waits for Cognito
+custom-auth success. Only the auth-challenge runtime may atomically consume the
+one-time Apple bridge and issue the app session. The API discards Cognito
+tokens and resolves its own new access hash before returning app-owned public
+identity and raw app tokens. Local concrete repositories and composition do
+not substitute for the still-required non-production Cognito/Apple exercise.
+
+Three versioned server flags fail closed: `professional_sign_in_enabled`,
+`hosted_operations_enabled`, and `publication_enabled`. Guest launch never
+fetches them. Rollback disables professional sign-in and hosted operations and
+revokes affected sessions while preserving local packages, AI Room Package
+export, Concept Sets, legacy export, and Share Sheet preparation. Publication
+is reserved and remains disabled until Slice 6.
+
+The current decisions are recorded in
+[ADR 0002](decisions/0002-ai-redesign-slice-4-service-foundation.md), the
+provider-neutral boundary in
+[the service contract](contracts/ai-redesign-service-contracts-v1.md), and
+honest completion status in
+[the Slice 4 evidence ledger](evidence/2026-08-19-ai-redesign-slice-4-verification.md).
 
 The live asset layout may add Encodable CapturedRoomData, a CapturedRoom-native
 USD/USDZ export, optional raw mesh, optional ARWorldMap, photos, and provenance
@@ -417,10 +484,14 @@ operator setup and unverified device/container gates are in
 
 ## Local-first and privacy posture
 
-The app has no server, login, analytics, active iCloud entitlement, provisioning
-team, default cloud behavior, automatic upload, or background synchronization.
-Phase 6 stores only a local opt-in preference (false by default); changing it
-does not call CloudKit. `RoomProjectIndexRecord` is a small SwiftData
+Guest/local use has no login, analytics, default hosted/cloud behavior,
+automatic upload, or background synchronization. The optional Slice 4
+professional service is default-off and lazily constructed only after explicit
+entry; it is not a prerequisite for launch, capture, save, view/edit, legacy
+export, AI Room Package construction, Concept Set work, or Share Sheet
+preparation. No production provider account or endpoint is configured. Phase 6
+stores only a local opt-in preference (false by default); changing it does not
+call CloudKit. `RoomProjectIndexRecord` is a small SwiftData
 projection of package summaries and uses `ModelConfiguration` with explicit
 `groupContainer: .none` and `cloudKitDatabase: .none`, both for persistent and in-memory fallback
 configuration. It is rebuilt only after authoritative package enumeration
@@ -554,3 +625,38 @@ retention. Run 31359458769 passed that complete matrix on Xcode 16.4 at commit
 and 25 UI tests on each selected simulator. No Phase 7 change adds a team,
 entitlement, container, background network behavior, or source-of-truth
 migration.
+
+## Slice 4 architecture reconciliation — 2026-08-21
+
+The current local architecture is a default-off iOS professional boundary over
+three service-owned composition roots, route contract
+`roomscan-slice4-routes-v3` with 19 routes, seven least-privilege PostgreSQL
+runtime roles, and the offline infrastructure assembly. Accepted service proof
+records explicit context clearing before identity/workspace pre-resolution so
+stale pooled transaction-local scope cannot participate in that resolution.
+The database then establishes the authorized transaction scope through the
+frozen capability surface rather than caller-supplied tenant authority.
+
+Current local/offline evidence is Node 24.15.0 service typecheck/build plus
+277/277 tests; a 43-command disposable PostgreSQL 16 matrix with 53/53
+integration cases, 14/14 legacy mutations and 46/46 `0007` mutations; and
+offline infrastructure at 104/104 tests and 17/17 mutations. The synthesized
+delivery has exactly nine declared assets across 28 files, complete migration,
+VPC and IAM roots, no orphan/stub markers, and no Slice 7 resources. No Slice 5
+project-synchronization implementation is included.
+
+This is not a whole-slice release claim. Local implementation is complete: the
+hosted umbrella, Core, complete iPhone/iPad schemes, focused selectors,
+Simulator/generic-device artifact inspection, scoped static controls and
+bounded Terra reviews are recorded. The controller retains only a final
+diff/docs/cleanup handoff audit. Live provider semantics require a separately
+authorized non-production packet; physical Face ID/passcode requires owner
+evidence; production provisioning and release approval remain pending by
+design. No external action, real data, commit, push, PR or deployment occurred,
+and the repository is not production-ready.
+
+The final IAM composition removes unconditional Lambda-role `kms:Decrypt` on
+the SecretsKey. The allowed path is guarded by an exact Secrets Manager
+`ViaService` + `SecretARN` synth oracle and restored mutation. Its focused live
+test was observed RED before the fix and GREEN after restoration; live AWS
+policy evaluation remains an external gate.

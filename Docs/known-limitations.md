@@ -20,8 +20,11 @@
 - A private CloudKit backup is one explicit record/one CKAsset snapshot, not
   synchronization. The local 512 MiB safety bound does not prove CloudKit asset
   acceptance; development-container recovery remains untested.
-- There is no background sync, account system, collaboration, public link,
-  public/shared database, analytics, or automatic upload path.
+- Guest/local workflows have no background sync, required account, analytics,
+  or automatic upload path. Slice 4 now contains an optional, default-off
+  professional account/service foundation and local infrastructure definitions,
+  but no endpoint/provider account is deployed and no project synchronization,
+  collaboration, public link, or portal behavior is implemented.
 - Slice 0 defines vendor-neutral AI-redesign, sync, hosted-resource, and portal
   contracts but does not build AI package archives, upload anything, create an
   account, provision AWS, publish a portal, charge a subscription, or establish
@@ -85,3 +88,49 @@
   targets, security-scoped imports, system cancellation/error/dismissal paths,
   and lease cleanup. All physical-iPad checks remain waived and unverified, not
   passed or failed.
+- Slice 4 service/adapters, database migrations, offline infrastructure, and
+  iOS professional/Face ID code have local lane evidence. Local PostgreSQL is
+  complete for its disposable scope. The hosted umbrella, Core, complete
+  iPhone/iPad schemes, focused selectors, artifact inspection and scoped static
+  controls close local implementation. The controller retains a final
+  diff/docs/cleanup handoff audit. Local completion is not release approval.
+- No authorized non-production AWS/API Gateway/Lambda/Data API/Aurora/S3/KMS/
+  CloudTrail/Cognito/SES, Apple, Stripe, DNS, email, or alarm-delivery exercise
+  has occurred. Offline CDK synthesis and provider fakes cannot close those
+  gates.
+- Physical Face ID/device-passcode success, cancellation, failure, lockout,
+  fallback, no-passcode state, background/foreground, Keychain prompt, and
+  enrollment/domain-state change remain unverified. Biometric/domain state is
+  device-only and cannot establish server identity or recent authentication.
+- Production prices and quota values, credential initialization/rotation,
+  account/region topology, on-call/alert ownership, break-glass drill, privacy
+  disclosures, provisioning, deployment, and release approval remain pending.
+  Checked-in quota values are test-only.
+- Immediate portal-link/protected-asset revocation belongs to Slice 6. Full
+  production deletion, restore, backup expiry, load/pricing, and release
+  lifecycle belong to Slice 7; neither is implied by Slice 4.
+
+## 2026-08-21 status reconciliation
+
+The earlier Slice 4 checkpoint counts above remain historical. Current formal
+status is:
+
+1. **Local implementation — complete.** Service 277/277,
+   typecheck/build, route v3/19, infrastructure 104/104 plus 17/17, the hosted
+   13-step umbrella, Core 266/266, complete iPhone/iPad 259/259 schemes,
+   focused 32/32 and 8/8 selectors, artifact inspection, scoped static controls
+   and bounded Terra reviews are recorded. The controller's final
+   diff/docs/cleanup audit is a handoff check, not an open implementation lane.
+2. **Local PostgreSQL — complete.** The disposable PostgreSQL 16 matrix passed
+   43 commands, 53/53 integration cases, 14/14 legacy mutations and 46/46
+   `0007` mutations for seven runtime roles; `0007` SHA-256 is
+   `c2a3af7db980d3d32933f008c17da6b68e8bdf94408e10c8bc694c5968841030`.
+3. **Provider/infrastructure — external evidence pending authorization.** The
+   offline synth/artifact result is not an AWS/Apple/Cognito/SES/Stripe result.
+4. **Physical Face ID/passcode — pending owner worksheet.** Simulator/source/
+   build evidence cannot substitute for it.
+5. **Production provisioning/release — pending by design.** The repository is
+   not production-ready or release-approved.
+
+No external action, real data, Slice 5 implementation, Slice 7 resource,
+commit, push, PR or deployment is claimed by this update.

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.test-dist/
+cdk.out/
+cdk.context.json
+evidence/*.log
+evidence/*.json

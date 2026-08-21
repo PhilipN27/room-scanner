@@ -30,7 +30,16 @@ offline-capable, and it is not background synchronization, a source-of-truth
 migration, subscriptions, simultaneous editing, or iCloud Documents. No
 CloudKit call occurs at launch or merely when the local preference changes.
 
-## Phase-1 library through Phase-6 backup status
+Slice 4 adds the local foundation for an optional paid professional service:
+verified-email and Sign in with Apple authentication, app-owned canonical
+principals/sessions, centralized workspace authorization, subscription/quota
+state, least-privilege PostgreSQL/AWS boundaries, server kill switches, and a
+default-off iOS professional/Face ID boundary. It does not deploy an endpoint,
+provision a provider account, upload/synchronize projects, or add portal
+behavior. Guest/local launch and all existing package, AI export, Concept Set,
+legacy export, and Share Sheet preparation paths remain independent.
+
+## Local app through Slice 4 foundation status
 
 The repository now contains:
 
@@ -335,13 +344,23 @@ CloudKit, export-consumer, and system-share checks have not.
 
 ## Data and privacy posture
 
-Local use remains offline and independent of iCloud. There is no server,
-login, analytics, active entitlement, default cloud action, or automatic cloud
-upload. Phase 6 exposes a local opt-in preference (default false) and separate
-Check, List, Back up, and Recover actions; toggling it does not contact
-CloudKit. Camera and when-in-use location descriptions are explicit, while
-manual location remains usable if location access is denied. Measurements are
-estimates and are never presented as survey-grade evidence.
+Guest/local use remains offline-capable and independent of iCloud or a
+professional account. The optional professional service is default-off and is
+constructed only after explicit entry; guest launch performs no hosted/auth
+initialization or request. No production endpoint, account, credential, price,
+or quota policy is configured by this repository. Phase 6 exposes a separate
+local private-backup preference (default false) and explicit Check, List, Back
+up, and Recover actions; toggling it does not contact CloudKit. Camera and
+when-in-use location descriptions are explicit, manual location remains usable
+after denial, and measurements are never presented as survey-grade evidence.
+
+At the 2026-08-19 documentation checkpoint, local implementation and whole-
+slice PostgreSQL/composition acceptance were still being frozen; that historical
+state is superseded by the dated reconciliation below. Non-production AWS/
+Apple/Cognito/SES/Stripe and physical Face ID/passcode evidence remain
+incomplete; production provisioning/release remains pending. See
+[the Slice 4 evidence ledger](Docs/evidence/2026-08-19-ai-redesign-slice-4-verification.md)
+and [professional-service runbook](Docs/operations/professional-service-runbook.md).
 
 The Home **Settings and privacy** route displays an in-app Privacy Policy link
 only when the release operator supplies a valid absolute HTTPS
@@ -378,3 +397,57 @@ Release operating material lives in [Docs/setup.md](Docs/setup.md),
 [Docs/known-limitations.md](Docs/known-limitations.md),
 [Docs/release-checklist.md](Docs/release-checklist.md), and
 [Docs/dependencies.md](Docs/dependencies.md).
+
+## Slice 4 closure reconciliation — 2026-08-21
+
+The current local professional-service evidence has advanced beyond the
+historical 2026-08-19 checkpoint: Node 24.15.0 service typecheck/build passed
+with 277/277 tests, route contract v3 has 19 routes, disposable PostgreSQL 16
+passed its 43-command matrix with 53/53 integration cases, 14/14 legacy
+mutations and 46/46 `0007` mutations, and offline infrastructure passed 104/104
+tests plus 17/17 mutations. The accepted database has seven runtime roles;
+offline artifact inspection found exactly nine declared assets across 28 files,
+complete migration/VPC/IAM roots, no orphan or stub markers, and no Slice 7
+resources. These are local/offline results, not deployment evidence.
+
+The fresh 13-step hosted verifier exited 0/PASS under Node v24.15.0 and emitted
+a 148-component CycloneDX 1.6 SBOM plus a secret-scan-passing 128-file artifact
+manifest. Core passed 266/266; the full iPhone Simulator scheme passed 259/259
+on iOS 26.3.1 build 23D8133. Exact commands, paths and hashes are in the current
+evidence ledger. Bounded Terra service/infrastructure and iOS/documentation
+reviews ended with no Critical or Important finding after an RVI/`tcpdump`
+worksheet finding was fixed and re-reviewed; this is not certification or an
+independent security audit.
+
+The final local follow-up also passed the full iPad scheme at 259/259, focused
+professional at 32/32 and focused magic completion at 8/8. Fresh Simulator and
+unsigned generic arm64 Debug/Release artifacts passed inspection; the physical-
+harness marker/flag/type is present only in Debug. Scoped static controls and
+both positive controls passed, and Python passed 30/30. The direct full scaffold
+verifier still reports exactly the documented pre-existing `DEVELOPMENT_TEAM`
+exception, so it is not described as a green full scanner.
+
+The final IAM hardening removed unconditional Lambda-role `kms:Decrypt` on the
+SecretsKey and added an exact Secrets Manager `ViaService` + `SecretARN` synth
+oracle and mutation. Its focused live test was observed RED before the fix and
+GREEN after restoration. The fresh 13-step umbrella remained PASS; current
+template, assets, inspection, verification and manifest hashes supersede the
+pre-fix values in the dated evidence ledger.
+
+The formal Slice 4 status is intentionally split:
+
+1. local implementation — **complete**: hosted umbrella, Core, complete iPhone
+   and iPad schemes, focused 32/8 selectors, Simulator/generic-device artifact
+   inspection and scoped static controls are recorded; the controller retains
+   only a final diff/docs/cleanup handoff audit;
+2. local PostgreSQL — **complete** for the disposable PostgreSQL scope;
+3. provider/infrastructure — **external evidence pending authorization**;
+4. physical Face ID/passcode — **pending the owner worksheet**; and
+5. production provisioning/release — **pending by design**.
+
+RoomScanStudio is therefore **not production-ready or release-approved**. No
+AWS, Apple, Cognito, SES, Stripe, DNS, email, hosting or CloudKit action, real
+credential/customer data, Slice 5 implementation, Slice 7 resource, commit,
+push, pull request or deployment is claimed by this reconciliation. See the
+[current Slice 4 ledger](Docs/evidence/2026-08-19-ai-redesign-slice-4-verification.md)
+for exact hashes and open evidence slots.

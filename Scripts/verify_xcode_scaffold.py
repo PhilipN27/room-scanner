@@ -103,37 +103,663 @@ def expect(condition: bool, message: str, errors: list[str]) -> None:
 
 
 def guest_hosted_boundary_errors(production_sources: dict[Path, str]) -> list[str]:
-    """Reject hosted/auth transports from the production guest dependency graph.
+    """Reject every guest route to privileged auth/network implementation.
 
-    Private CloudKit backup is an existing explicit, user-triggered boundary and
-    is intentionally not rejected here. Remote Swift packages are constrained
-    separately by the exact package-pin verifier.
+    URLSession is structurally exclusive to one exact audited transport file.
+    Professional adapters may depend only on `ProfessionalHTTPTransport`; they
+    never receive a path exemption for Foundation, Network.framework, streams,
+    or sockets. The graph independently rejects privileged files reachable from
+    the app launch roots.
     """
-    forbidden_patterns = {
+    globally_forbidden_patterns = {
+        "hosted authentication vendor SDK": re.compile(
+            r"(?m)^\s*import\s+(?:AWS\w*|Amplify|Cognito|Supabase|Auth0|OAuthSwift|Apollo|FirebaseAuth)\b|"
+            r"\b(?:AWS\w*|Amplify|Cognito|Supabase|Auth0|OAuthSwift|ApolloClient|FirebaseAuth)\b"
+        ),
+        "hosted billing SDK": re.compile(
+            r"(?m)^\s*import\s+(?:Stripe\w*|StripePaymentSheet)\b|"
+            r"\b(?:Stripe\w*|PaymentSheet|STP[A-Za-z0-9_]*)\b"
+        ),
+    }
+    low_level_transport_patterns = {
         "Foundation HTTP client": re.compile(
-            r"\b(?:URLSession|NSURLSession|URLRequest|NSMutableURLRequest|URLProtocol)\b"
+            r"\b(?:URLSession(?:Configuration|"
+            r"(?:Data|Download|Upload|Stream|WebSocket)?Task)?|"
+            r"NSURLSession|URLRequest|"
+            r"NSMutableURLRequest|URLProtocol)\b"
         ),
         "Network.framework client": re.compile(
-            r"(?m)^\s*import\s+Network\b|\b(?:NWConnection|NWBrowser|NWTCPConnection)\b"
+            r"(?m)^\s*import\s+Network\b|\b(?:NWConnection|NWBrowser|NWListener|"
+            r"NWEndpoint|NWTCPConnection)\b"
         ),
         "raw socket/stream client": re.compile(
-            r"\b(?:CFStreamCreatePairWithSocketToHost|CFSocketCreate|CFSocketConnectToAddress)\b"
+            r"\b(?:CFReadStream|CFWriteStream|InputStream|OutputStream|"
+            r"CFStreamCreatePairWithSocketToHost|CFSocketCreate|"
+            r"CFSocketConnectToAddress|CFSocket|CFStream|getaddrinfo|addrinfo|"
+            r"sockaddr|SOCK_STREAM|socket|connect)\b"
         ),
-        "hosted authentication SDK": re.compile(
-            r"(?m)^\s*import\s+AuthenticationServices\b|"
-            r"\b(?:ASAuthorization|Amplify|Cognito|Supabase|Auth0|OAuthSwift|ApolloClient|FirebaseAuth)\b"
-        ),
-        "hosted billing SDK": re.compile(r"\b(?:Stripe|STPAPIClient)\b"),
     }
+    system_auth_pattern = re.compile(
+        r"(?m)^\s*import\s+(?:AuthenticationServices|LocalAuthentication)\b|"
+        r"\b(?:ASAuthorization|LAContext)\b"
+    )
+    audited_transport_path = (
+        ROOT / "RoomScanStudio" / "Professional" / "ProfessionalTransportBoundary.swift"
+    )
     errors: list[str] = []
     for path, source in sorted(production_sources.items(), key=lambda item: str(item[0])):
-        for description, pattern in forbidden_patterns.items():
-            if pattern.search(source):
+        code = swift_code_without_comments_or_literals(source)
+        for description, pattern in globally_forbidden_patterns.items():
+            if pattern.search(code):
                 errors.append(
-                    "guest production boundary contains "
+                    "production boundary contains globally forbidden "
                     f"{description}: {path.relative_to(ROOT)}"
                 )
+
+        for description in ("Network.framework client", "raw socket/stream client"):
+            if low_level_transport_patterns[description].search(code):
+                errors.append(
+                    f"production boundary contains forbidden {description}: "
+                    f"{path.relative_to(ROOT)}"
+                )
+
+        if path == audited_transport_path:
+            errors.extend(audited_professional_transport_errors(source))
+            if system_auth_pattern.search(code):
+                errors.append(
+                    "audited professional transport contains system authentication API: "
+                    f"{path.relative_to(ROOT)}"
+                )
+            continue
+
+        if low_level_transport_patterns["Foundation HTTP client"].search(code):
+            errors.append(
+                "production boundary contains Foundation HTTP client outside the exact "
+                f"audited transport: {path.relative_to(ROOT)}"
+            )
+
+        if is_professional_client_adapter(path):
+            if system_auth_pattern.search(code):
+                errors.append(
+                    "professional client adapter contains system authentication API: "
+                    f"{path.relative_to(ROOT)}"
+                )
+            for description, pattern in adapter_alternate_io_patterns().items():
+                if pattern.search(code):
+                    errors.append(
+                        "professional client adapter contains forbidden alternate "
+                        f"I/O ({description}): {path.relative_to(ROOT)}"
+                    )
+            for reason in swift_unmodelled_adapter_entry_errors(path, source):
+                errors.append(
+                    "dedicated professional adapter has an unmodelled executable "
+                    f"entry point ({reason}): {path.relative_to(ROOT)}"
+                )
+            continue
+
+        if is_device_authentication_adapter(path):
+            for reason in swift_unmodelled_adapter_entry_errors(path, source):
+                errors.append(
+                    "dedicated authentication adapter has an unmodelled executable "
+                    f"entry point ({reason}): {path.relative_to(ROOT)}"
+                )
+            continue
+
+        if system_auth_pattern.search(code):
+            errors.append(
+                "guest/non-adapter production boundary contains system authentication "
+                f"adapter: {path.relative_to(ROOT)}"
+            )
+
+    reachable = guest_reachable_swift_paths(production_sources)
+    for path in sorted(reachable, key=str):
+        if is_privileged_professional_path(path):
+            errors.append(
+                "guest composition reaches dedicated professional/auth adapter: "
+                f"{path.relative_to(ROOT)}"
+            )
     return errors
+
+
+def audited_professional_transport_errors(source: str) -> list[str]:
+    """Validate the one structurally exclusive observed URLSession send path."""
+    errors: list[str] = []
+    code = swift_code_without_comments_or_literals(source)
+    send_body = swift_function_body(code, "func send(\n        _ request") or ""
+    io_marker = "session.data(for: foundationRequest)"
+    observation_marker = "boundary.observe("
+    if "protocol ProfessionalHTTPTransport" not in code:
+        errors.append("audited professional transport misses app-owned protocol")
+    if "final class FoundationProfessionalHTTPTransport" not in code:
+        errors.append("audited professional transport misses concrete URLSession owner")
+    if len(re.findall(r"\bURLSession\b", code)) != 2:
+        errors.append(
+            "audited professional transport must own exactly one injected URLSession"
+        )
+    if len(re.findall(r"\bsession\b", code)) != 5:
+        errors.append(
+            "audited professional transport contains an alternate session reference"
+        )
+    session_io_calls = re.findall(
+        r"\.\s*(?:data|bytes|upload|download|dataTask|downloadTask|"
+        r"uploadTask|streamTask|webSocketTask)\s*\(",
+        code,
+    )
+    if session_io_calls != [".data("]:
+        errors.append(
+            "audited professional transport must have one recognized URLSession I/O operation"
+        )
+    if code.count(io_marker) != 1:
+        errors.append("audited professional transport must have exactly one URLSession I/O call")
+    if send_body.count(io_marker) != 1 or observation_marker not in send_body:
+        errors.append("audited professional transport send path is not singular and observed")
+    elif send_body.index(observation_marker) > send_body.index(io_marker):
+        errors.append("audited professional transport observes after URLSession I/O")
+    for description, pattern in adapter_alternate_io_patterns().items():
+        if pattern.search(code):
+            errors.append(
+                "audited professional transport contains forbidden alternate "
+                f"I/O ({description})"
+            )
+    return errors
+
+
+def adapter_alternate_io_patterns() -> dict[str, re.Pattern[str]]:
+    """Return I/O primitives that may not bypass the observed HTTP send path."""
+    return {
+        "URLSession task API": re.compile(
+            r"\bURLSession(?:Data|Download|Upload|Stream|WebSocket)?Task\b"
+        ),
+        "URL-loading contentsOf initializer": re.compile(
+            r"\b(?:Data|NSData|String)\s*\(\s*contentsOf\s*:"
+        ),
+        "stream or CFStream API": re.compile(
+            r"\b(?:InputStream|OutputStream|CFReadStream|CFWriteStream|"
+            r"CFStream|CFSocket)\b"
+        ),
+        "WebSocket API": re.compile(
+            r"\b(?:URLSessionWebSocketTask|NWProtocolWebSocket|WebSocket)\b|"
+            r"\.\s*webSocketTask\s*\("
+        ),
+        "raw socket API": re.compile(
+            r"\b(?:Darwin|Glibc)\s*\.\s*(?:socket|connect|send|recv)\b|"
+            r"\b(?:socket|connect|getaddrinfo)\s*\(|"
+            r"\b(?:sockaddr|SOCK_STREAM)\b"
+        ),
+    }
+
+
+def is_professional_client_adapter(path: Path) -> bool:
+    try:
+        relative = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return False
+    return relative.startswith(
+        "RoomScanStudio/Infrastructure/Professional/Adapters/"
+    )
+
+
+def is_device_authentication_adapter(path: Path) -> bool:
+    try:
+        relative = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return False
+    return relative in {
+        "RoomScanStudio/Infrastructure/DeviceAuthentication/AppleDeviceAuthenticationContext.swift",
+        "RoomScanStudio/Infrastructure/DeviceAuthentication/ProfessionalKeychainAccessPolicy.swift",
+    }
+
+
+def is_privileged_professional_path(path: Path) -> bool:
+    return (
+        is_professional_client_adapter(path)
+        or is_device_authentication_adapter(path)
+        or path
+        == ROOT / "RoomScanStudio" / "Professional" / "ProfessionalTransportBoundary.swift"
+    )
+
+
+def guest_reachable_swift_paths(production_sources: dict[Path, str]) -> set[Path]:
+    """Build a conservative file graph from declared/referenced Swift symbols.
+
+    Reachability models the Release compilation view for exact ``#if DEBUG``
+    blocks. The broader boundary scan still inspects the complete source, so a
+    DEBUG block cannot hide a network, vendor-SDK, or unmodelled-I/O primitive.
+    This projection only prevents a deliberately DEBUG-only, locally gated
+    physical-evidence composition from being misclassified as a production
+    guest dependency.
+
+    Every production file contributes nominals, extensions/members, top-level
+    functions, and top-level globals. This detects guest root -> ordinary helper
+    -> privileged adapter chains. Comments and string literals are blanked both
+    while indexing declarations and while reading references, preventing prose
+    or labels from manufacturing graph edges.
+    """
+    declaration = re.compile(
+        r"\b(?:actor|class|enum|protocol|struct|typealias)\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    token = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+    declarations: dict[str, set[Path]] = {}
+    cleaned_sources: dict[Path, str] = {}
+    for path, source in production_sources.items():
+        code = swift_code_without_comments_or_literals(
+            swift_release_projection(source)
+        )
+        cleaned_sources[path] = code
+        for symbol in declaration.findall(code):
+            declarations.setdefault(symbol, set()).add(path)
+        for symbol in swift_adapter_entry_symbols(code):
+            declarations.setdefault(symbol, set()).add(path)
+
+    roots = {
+        ROOT / "RoomScanStudio" / "App" / "RoomScanStudioApp.swift",
+        ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
+    } & production_sources.keys()
+    reachable = set(roots)
+    pending = list(roots)
+    while pending:
+        source_path = pending.pop()
+        for symbol in set(token.findall(cleaned_sources[source_path])):
+            for dependency_path in declarations.get(symbol, set()):
+                if dependency_path not in reachable:
+                    reachable.add(dependency_path)
+                    pending.append(dependency_path)
+    return reachable
+
+
+def swift_release_projection(source: str) -> str:
+    """Remove exact ``#if DEBUG`` branches while preserving line positions.
+
+    Other Swift compilation conditions remain conservative: both branches are
+    retained for graph analysis. Nested conditions inside a suppressed DEBUG
+    branch stay suppressed. A DEBUG ``#else`` becomes unconditional Release
+    text, which matches Swift's compilation behavior.
+    """
+
+    directive = re.compile(r"^(?P<indent>\s*)#(?P<kind>if|elseif|else|endif)\b(?P<condition>[^\r\n]*)")
+    frames: list[dict[str, object]] = []
+    active = True
+    projected: list[str] = []
+
+    def blank_line(line: str) -> str:
+        if line.endswith("\r\n"):
+            return "\r\n"
+        if line.endswith("\n") or line.endswith("\r"):
+            return line[-1]
+        return ""
+
+    for line in source.splitlines(keepends=True):
+        match = directive.match(line)
+        if match is None:
+            projected.append(line if active else blank_line(line))
+            continue
+
+        kind = match.group("kind")
+        condition = match.group("condition").strip()
+        if kind == "if":
+            is_debug = condition == "DEBUG"
+            frames.append({"debug": is_debug, "parent": active})
+            if is_debug:
+                active = False
+                projected.append(blank_line(line))
+            else:
+                projected.append(line if active else blank_line(line))
+            continue
+
+        if not frames:
+            # Malformed input remains visible to the existing conservative
+            # parser instead of silently dropping a possible dependency.
+            projected.append(line if active else blank_line(line))
+            continue
+
+        frame = frames[-1]
+        parent_active = bool(frame["parent"])
+        is_debug = bool(frame["debug"])
+        if kind == "elseif":
+            if is_debug:
+                # ``#if DEBUG / #elseif CONDITION`` projects to
+                # ``#if CONDITION`` for Release. Other conditions remain
+                # deliberately unevaluated by this graph.
+                frame["debug"] = False
+                active = parent_active
+                ending = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                projected.append(
+                    f'{match.group("indent")}#if {condition}{ending}'
+                    if parent_active
+                    else blank_line(line)
+                )
+            else:
+                active = parent_active
+                projected.append(line if active else blank_line(line))
+            continue
+
+        if kind == "else":
+            if is_debug:
+                active = parent_active
+                projected.append(blank_line(line))
+            else:
+                active = parent_active
+                projected.append(line if active else blank_line(line))
+            continue
+
+        frames.pop()
+        active = parent_active
+        projected.append(blank_line(line) if is_debug else (line if active else blank_line(line)))
+
+    if frames:
+        # Fail conservative on malformed/unbalanced source: the compiler will
+        # reject it, and reachability must not gain a path exemption.
+        return source
+    return "".join(projected)
+
+
+def swift_adapter_entry_symbols(source: str) -> set[str]:
+    """Return file entry symbols that do not require a nominal type name.
+
+    This is deliberately conservative across every production file. It models
+    top-level functions/globals, extension targets, and immediate extension
+    members (including protocol extensions and static helpers).
+    """
+    depths: list[int] = [0] * (len(source) + 1)
+    depth = 0
+    for index, character in enumerate(source):
+        depths[index] = depth
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth = max(0, depth - 1)
+    depths[len(source)] = depth
+
+    symbols = swift_entry_symbols_at_depth(
+        source,
+        depths,
+        target_depth=0,
+        start=0,
+        end=len(source),
+    )
+
+    extension = re.compile(
+        r"\bextension\s+([A-Za-z_][A-Za-z0-9_.]*)[^\{]*\{"
+    )
+    for match in extension.finditer(source):
+        extension_depth = depths[match.start()]
+        if extension_depth != 0:
+            continue
+        symbols.add(match.group(1).split(".")[-1])
+        opening = source.find("{", match.start(), match.end())
+        if opening < 0:
+            continue
+        closing = swift_matching_brace(source, opening)
+        if closing is None:
+            # A malformed/unmodelled extension is conservatively reachable.
+            symbols.add("AppEnvironment")
+            continue
+        symbols.update(
+            swift_entry_symbols_at_depth(
+                source,
+                depths,
+                target_depth=extension_depth + 1,
+                start=opening + 1,
+                end=closing,
+            )
+        )
+    return symbols
+
+
+def swift_entry_symbols_at_depth(
+    source: str,
+    depths: list[int],
+    target_depth: int,
+    start: int,
+    end: int,
+) -> set[str]:
+    """Index functions and every binding in declarations at one brace depth."""
+    symbols: set[str] = set()
+    function_declaration = re.compile(
+        r"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    for match in function_declaration.finditer(source, start, end):
+        if depths[match.start()] == target_depth:
+            symbols.add(match.group(1))
+
+    binding_keyword = re.compile(r"\b(?:let|var)\b")
+    for match in binding_keyword.finditer(source, start, end):
+        if depths[match.start()] != target_depth:
+            continue
+        declaration_end = swift_binding_declaration_end(source, match.end(), end)
+        payload = source[match.end():declaration_end]
+        for component in swift_split_top_level_bindings(payload):
+            name = re.match(
+                r"\s*(?:@[A-Za-z_][A-Za-z0-9_.]*(?:\([^\n]*\))?\s+)*"
+                r"(?:`([A-Za-z_][A-Za-z0-9_]*)`|([A-Za-z_][A-Za-z0-9_]*))"
+                r"\s*(?=[:=]|$)",
+                component,
+            )
+            if name:
+                symbols.add(name.group(1) or name.group(2))
+    return symbols
+
+
+def swift_binding_declaration_end(source: str, start: int, limit: int) -> int:
+    """Find the end of a possibly multi-line, multi-binding declaration."""
+    paren_depth = 0
+    bracket_depth = 0
+    brace_depth = 0
+    index = start
+    while index < limit:
+        character = source[index]
+        if character == "(":
+            paren_depth += 1
+        elif character == ")":
+            paren_depth = max(0, paren_depth - 1)
+        elif character == "[":
+            bracket_depth += 1
+        elif character == "]":
+            bracket_depth = max(0, bracket_depth - 1)
+        elif character == "{":
+            brace_depth += 1
+        elif character == "}":
+            if brace_depth == 0:
+                return index
+            brace_depth -= 1
+        elif character == ";" and not (paren_depth or bracket_depth or brace_depth):
+            return index
+        elif character == "\n" and not (paren_depth or bracket_depth or brace_depth):
+            preceding = source[start:index].rstrip()
+            if not preceding.endswith((",", "=", ":", "(", "[")):
+                return index
+        index += 1
+    return limit
+
+
+def swift_split_top_level_bindings(payload: str) -> list[str]:
+    """Split declaration bindings while retaining commas in values/types."""
+    parts: list[str] = []
+    start = 0
+    paren_depth = 0
+    bracket_depth = 0
+    brace_depth = 0
+    for index, character in enumerate(payload):
+        if character == "(":
+            paren_depth += 1
+        elif character == ")":
+            paren_depth = max(0, paren_depth - 1)
+        elif character == "[":
+            bracket_depth += 1
+        elif character == "]":
+            bracket_depth = max(0, bracket_depth - 1)
+        elif character == "{":
+            brace_depth += 1
+        elif character == "}":
+            brace_depth = max(0, brace_depth - 1)
+        elif character == "," and not (paren_depth or bracket_depth or brace_depth):
+            parts.append(payload[start:index])
+            start = index + 1
+    parts.append(payload[start:])
+    return parts
+
+
+def swift_unmodelled_adapter_entry_errors(path: Path, source: str) -> list[str]:
+    """Reject executable adapter roots that cannot be resolved by name."""
+    source = swift_code_without_comments_or_literals(source)
+    depths: list[int] = [0] * (len(source) + 1)
+    depth = 0
+    for index, character in enumerate(source):
+        depths[index] = depth
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth = max(0, depth - 1)
+    depths[len(source)] = depth
+
+    reasons: list[str] = []
+    if path.name == "main.swift":
+        reasons.append("main.swift")
+    for match in re.finditer(r"@main\b", source):
+        if depths[match.start()] == 0:
+            reasons.append("@main")
+            break
+    for match in re.finditer(r"\bfunc\s+([^\s(]+)", source):
+        if depths[match.start()] == 0 and not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*", match.group(1)
+        ):
+            reasons.append("operator function")
+            break
+    for match in re.finditer(r"\b(?:let|var)\s+([^\s=:]+)", source):
+        if depths[match.start()] == 0 and not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]*", match.group(1)
+        ):
+            reasons.append("destructured global")
+            break
+    for match in re.finditer(
+        r"(?m)^[ \t]*(?:try[!?]?[ \t]+|await[ \t]+)*"
+        r"([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?:\(|\{)",
+        source,
+    ):
+        if depths[match.start()] == 0:
+            reasons.append("top-level executable statement")
+            break
+    for match in re.finditer(r"(?m)^[ \t]*_[ \t]*=", source):
+        if depths[match.start()] == 0:
+            reasons.append("top-level executable assignment")
+            break
+    return reasons
+
+
+def swift_matching_brace(source: str, opening: int) -> int | None:
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def swift_code_without_comments_or_literals(source: str) -> str:
+    """Blank Swift prose but retain executable string interpolation code.
+
+    The small Swift-aware lexer preserves offsets/newlines, handles nested block
+    comments, normal/raw/multiline strings, and recursively scans interpolation
+    expressions (including nested parentheses, strings, comments, and escapes).
+    """
+    result = list(source)
+
+    def blank(start: int, end: int) -> None:
+        for offset in range(start, min(end, len(source))):
+            if source[offset] not in "\r\n":
+                result[offset] = " "
+
+    def string_opening(index: int) -> tuple[int, int, int] | None:
+        cursor = index
+        while cursor < len(source) and source[cursor] == "#":
+            cursor += 1
+        hash_count = cursor - index
+        if cursor >= len(source) or source[cursor] != '"':
+            return None
+        quote_count = 3 if source.startswith('"""', cursor) else 1
+        return hash_count, quote_count, hash_count + quote_count
+
+    def scan_block_comment(index: int) -> int:
+        depth = 1
+        blank(index, index + 2)
+        index += 2
+        while index < len(source) and depth:
+            if source.startswith("/*", index):
+                blank(index, index + 2)
+                depth += 1
+                index += 2
+            elif source.startswith("*/", index):
+                blank(index, index + 2)
+                depth -= 1
+                index += 2
+            else:
+                blank(index, index + 1)
+                index += 1
+        return index
+
+    def scan_string(
+        index: int,
+        hash_count: int,
+        quote_count: int,
+        opening_length: int,
+    ) -> int:
+        blank(index, index + opening_length)
+        index += opening_length
+        closing = ('"' * quote_count) + ("#" * hash_count)
+        interpolation = "\\" + ("#" * hash_count) + "("
+        while index < len(source):
+            if source.startswith(closing, index):
+                blank(index, index + len(closing))
+                return index + len(closing)
+            if source.startswith(interpolation, index):
+                # The marker itself is syntax; keep the opening parenthesis so
+                # nested-expression depth can be tracked, but blank its slash
+                # and raw-string hashes to avoid manufacturing tokens.
+                blank(index, index + len(interpolation) - 1)
+                index = scan_code(index + len(interpolation), 1)
+                continue
+            if source[index] == "\\" and hash_count == 0:
+                blank(index, index + 1)
+                index += 1
+                if index < len(source):
+                    blank(index, index + 1)
+                    index += 1
+                continue
+            blank(index, index + 1)
+            index += 1
+        return index
+
+    def scan_code(index: int, interpolation_depth: int | None = None) -> int:
+        while index < len(source):
+            if source.startswith("//", index):
+                end = source.find("\n", index)
+                if end < 0:
+                    end = len(source)
+                blank(index, end)
+                index = end
+                continue
+            if source.startswith("/*", index):
+                index = scan_block_comment(index)
+                continue
+            opening = string_opening(index)
+            if opening is not None:
+                index = scan_string(index, *opening)
+                continue
+            if interpolation_depth is not None:
+                if source[index] == "(":
+                    interpolation_depth += 1
+                elif source[index] == ")":
+                    interpolation_depth -= 1
+                    if interpolation_depth == 0:
+                        return index + 1
+            index += 1
+        return index
+
+    scan_code(0)
+    return "".join(result)
 
 
 def slice1_spatial_contract_errors(production_sources: dict[Path, str]) -> list[str]:
@@ -547,6 +1173,7 @@ def read_guest_production_sources() -> dict[Path, str]:
         ROOT / "RoomScanStudio" / "App",
         ROOT / "RoomScanStudio" / "Features",
         ROOT / "RoomScanStudio" / "Infrastructure",
+        ROOT / "RoomScanStudio" / "Professional",
     ]
     sources: dict[Path, str] = {}
     for root in roots:
@@ -555,6 +1182,336 @@ def read_guest_production_sources() -> dict[Path, str]:
         for path in root.rglob("*.swift"):
             sources[path] = path.read_text(encoding="utf-8")
     return sources
+
+
+def slice4_professional_contract_errors(
+    production_sources: dict[Path, str],
+    pbx: str,
+) -> list[str]:
+    """Check Slice 4's lazy professional and device-authentication boundary."""
+    errors: list[str] = []
+    paths = {
+        "app": ROOT / "RoomScanStudio" / "App" / "RoomScanStudioApp.swift",
+        "environment": ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
+        "home": ROOT / "RoomScanStudio" / "Features" / "Home" / "HomeView.swift",
+        "ai_factory": ROOT / "RoomScanStudio" / "Infrastructure" / "AIRedesign" / "RoomAIRedesignModelFactory.swift",
+        "professional": ROOT / "RoomScanStudio" / "Professional" / "ProfessionalEnvironment.swift",
+        "transport_boundary": ROOT / "RoomScanStudio" / "Professional" / "ProfessionalTransportBoundary.swift",
+        "coordinator": ROOT / "RoomScanStudio" / "Infrastructure" / "DeviceAuthentication" / "DeviceAuthenticationCoordinator.swift",
+        "apple": ROOT / "RoomScanStudio" / "Infrastructure" / "DeviceAuthentication" / "AppleDeviceAuthenticationContext.swift",
+        "keychain": ROOT / "RoomScanStudio" / "Infrastructure" / "DeviceAuthentication" / "ProfessionalKeychainAccessPolicy.swift",
+        "view": ROOT / "RoomScanStudio" / "Features" / "Professional" / "ProfessionalAccessView.swift",
+    }
+    for path in paths.values():
+        expect(
+            path in production_sources,
+            f"Slice 4 production source is missing: {path.relative_to(ROOT)}",
+            errors,
+        )
+    tests_path = (
+        ROOT
+        / "RoomScanStudio"
+        / "RoomScanStudioTests"
+        / "ProfessionalBoundaryTests.swift"
+    )
+    expect(tests_path.is_file(), "Slice 4 professional unit tests are missing", errors)
+    export_tests_path = (
+        ROOT / "RoomScanStudio" / "RoomScanStudioTests" / "RoomExportAppTests.swift"
+    )
+    ai_integration_tests_path = (
+        ROOT
+        / "RoomScanStudio"
+        / "RoomScanStudioTests"
+        / "RoomAIRedesignProductionIntegrationTests.swift"
+    )
+    expect(export_tests_path.is_file(), "Slice 4 guest export oracle is missing", errors)
+    expect(
+        ai_integration_tests_path.is_file(),
+        "Slice 4 guest AI/Concept workflow oracle is missing",
+        errors,
+    )
+    if errors:
+        return errors
+
+    sources = {name: production_sources[path] for name, path in paths.items()}
+    professional = sources["professional"]
+    transport_boundary = sources["transport_boundary"]
+    coordinator = sources["coordinator"]
+    apple = sources["apple"]
+    keychain = sources["keychain"]
+    view = sources["view"]
+    app_composition = sources["app"] + sources["environment"] + sources["home"]
+
+    for symbol in (
+        "protocol ProfessionalHTTPTransport",
+        "protocol ProfessionalTransportRequestObserving",
+        "struct ProfessionalTransportObserverFactory",
+        "final class ProfessionalTransportBoundary",
+        "final class FoundationProfessionalHTTPTransport",
+    ):
+        expect(
+            symbol in transport_boundary,
+            f"Slice 4 production transport seam misses {symbol}",
+            errors,
+        )
+    errors.extend(audited_professional_transport_errors(transport_boundary))
+    expect(
+        "ProfessionalTransportBoundary" not in sources["environment"]
+        and "ProfessionalTransportObserverFactory" not in sources["environment"]
+        and "professionalTransportBoundary" not in sources["ai_factory"],
+        "Slice 4 guest/local factories retain an unused professional transport boundary",
+        errors,
+    )
+
+    for symbol in (
+        "protocol ProfessionalAvailabilityClient",
+        "protocol ProfessionalSessionClient",
+        "protocol ProfessionalEntitlementClient",
+        "protocol ProfessionalTelemetryClient",
+        "protocol ProfessionalRemoteConfigurationClient",
+        "final class ProfessionalEnvironmentFactory",
+        "struct ProfessionalPreparedSession",
+    ):
+        expect(symbol in professional, f"Slice 4 professional boundary misses {symbol}", errors)
+    entry_body = swift_function_body(
+        professional,
+        "func enterProfessionalWorkspace() async",
+    ) or ""
+    expect(
+        "let created = makeEnvironment()" in entry_body
+        and "fetchAvailability()" in entry_body,
+        "Slice 4 professional dependencies/kill switch are not constructed and fetched inside explicit entry",
+        errors,
+    )
+    expect(
+        professional.count("makeEnvironment()") == 1,
+        "Slice 4 professional dependency builder can execute outside explicit entry",
+        errors,
+    )
+    expect(
+        "static func defaultOff()" in professional
+        and "localConfiguration: .defaultOff" in professional
+        and "makeEnvironment: nil" in professional,
+        "Slice 4 professional factory is not locally default-off",
+        errors,
+    )
+    expect(
+        "AppleDeviceAuthenticationContextFactory" not in professional,
+        "provider-neutral professional boundary directly references the Apple auth adapter",
+        errors,
+    )
+    expect(
+        all(symbol not in app_composition for symbol in (
+            "AppleDeviceAuthenticationContextFactory",
+            "LAContext",
+            "URLSession",
+            "ProfessionalKeychainAccessPolicy",
+        )),
+        "guest composition directly references a dedicated professional/auth adapter",
+        errors,
+    )
+
+    expect(
+        apple.count(".deviceOwnerAuthentication") >= 2
+        and ".deviceOwnerAuthenticationWithBiometrics" not in apple,
+        "Slice 4 Apple adapter does not consistently use deviceOwnerAuthentication",
+        errors,
+    )
+    expect(
+        "AppleDeviceAuthenticationContext(context: LAContext())" in apple,
+        "Slice 4 Apple adapter does not create a fresh LAContext per attempt",
+        errors,
+    )
+    expect(
+        "domainState.biometry.stateHash" in apple
+        and "evaluatedPolicyDomainState" not in apple,
+        "Slice 4 Apple adapter does not use the current local-only biometry state hash API",
+        errors,
+    )
+    expect(
+        "canEvaluatePolicy" in apple
+        and "evaluatePolicy" in apple
+        and "Preflight means only" in apple,
+        "Slice 4 Apple adapter does not keep preflight distinct from evaluation success",
+        errors,
+    )
+    expect(
+        "Task { @MainActor" in coordinator,
+        "Slice 4 authentication completion is not handed back to MainActor",
+        errors,
+    )
+    for contract in (
+        "case userCancellation",
+        "case appCancellation",
+        "case systemCancellation",
+        "case authenticationFailed",
+        "case passcodeFallbackRequired",
+        "case unavailable",
+        "case notEnrolled",
+        "case noPasscode",
+        "case domainStateChanged",
+        "case .inactive:",
+        "case .background:",
+        "case .foreground:",
+        "min(max(maximumLocalProofAge, 0), 300)",
+    ):
+        expect(contract in coordinator, f"Slice 4 coordinator misses {contract}", errors)
+    expect(
+        "func refreshLocalProof" in coordinator
+        and "DeviceAuthenticationLocalProofRefresh" in coordinator
+        and "case revoked(DeviceAuthenticationLocalProofRevocation)" in coordinator
+        and "invalidateLocalTrust()" in coordinator
+        and "guard refreshProtectedState()" in professional
+        and "factory.refreshProtectedState()" in view,
+        "Slice 4 proof freshness is not centralized across sign-in and protected UI",
+        errors,
+    )
+    unlock_body = swift_function_body(professional, "func requestLocalUnlock(") or ""
+    unlock_refresh = unlock_body.find("refreshLocalProof()")
+    unlock_authenticate = unlock_body.find(".authenticate(")
+    expect(
+        "switch environment.deviceAuthentication.refreshLocalProof()" in unlock_body
+        and "case .revoked:" in unlock_body
+        and "relockProfessionalState(in: environment, advanceEpoch: true)" in unlock_body
+        and unlock_refresh >= 0
+        and unlock_authenticate > unlock_refresh,
+        "Slice 4 unlock does not revoke expired external/staged material before fresh evaluation",
+        errors,
+    )
+    expect(
+        "private var lifecycleEpoch" in professional
+        and "lifecycleEpoch &+= 1" in professional
+        and "activeSignInTask?.cancel()" in professional
+        and "lifecycleEpoch == operationEpoch" in professional
+        and "discardPreparedSession(" in professional
+        and "commitPreparedSession(" in professional
+        and "prepareSignIn(operationID:" in professional
+        and "replaceProfessionalSessionMaterial(" in professional,
+        "Slice 4 sign-in completion is not invalidated across background lifecycle",
+        errors,
+    )
+    expect(
+        "func relockProfessionalState" in professional
+        and "clearCommittedSessionMaterial()" in professional
+        and "clearProfessionalMaterialAndRequireUnlock()" in professional
+        and "case .noPasscode, .notEnrolled, .unavailable, .domainStateChanged:" in professional,
+        "Slice 4 relock does not clear both material owners for expiry/posture changes",
+        errors,
+    )
+    expect(
+        "private var observedDomainState" in coordinator
+        and "wrappedProfessionalMaterial = nil" in coordinator
+        and "plaintextProfessionalSessionMaterial = nil" in coordinator,
+        "Slice 4 local domain-state/session invalidation contract is incomplete",
+        errors,
+    )
+    expect(
+        "kSecAttrAccessibleWhenUnlockedThisDeviceOnly" in keychain
+        and ".userPresence" in keychain
+        and "SecItemAdd" not in keychain
+        and "SecItemUpdate" not in keychain,
+        "Slice 4 Keychain policy is missing this-device/user-presence protection or stores a credential",
+        errors,
+    )
+    expect(
+        "Face ID or device passcode" in view
+        and "Guest and local workflows remain available" in view
+        and "biometric-only" not in view.lower(),
+        "Slice 4 professional UI lacks Face ID-or-passcode/guest-availability language",
+        errors,
+    )
+    expect(
+        "handleProfessionalLifecycle(.inactive)" in sources["app"]
+        and "handleProfessionalLifecycle(.background)" in sources["app"]
+        and "handleProfessionalLifecycle(.foreground)" in sources["app"],
+        "Slice 4 app lifecycle is not forwarded to the professional boundary",
+        errors,
+    )
+
+    core_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "RoomScanCore" / "Sources").rglob("*.swift"))
+    )
+    expect(
+        "ProfessionalEnvironmentFactory" not in core_sources
+        and "ProfessionalSessionClient" not in core_sources,
+        "Slice 4 app-owned professional protocols leaked into RoomScanCore",
+        errors,
+    )
+
+    if tests_path.is_file():
+        tests = tests_path.read_text(encoding="utf-8")
+        for test_name in (
+            "testDefaultProfessionalFactoryIsOffAndConstructsNothingBeforeOrAfterEntry",
+            "testConfiguredFactoryConstructsEveryDependencyAndFetchesKillSwitchOnlyAfterExplicitEntry",
+            "testDisabledServerStatePresentsUnavailableAndNeverStartsSignIn",
+            "testAvailableProfessionalSignInStillRequiresSuccessfulLocalUnlock",
+            "testGuestAppEnvironmentLaunchDoesNotConstructOrQueryProfessionalDependencies",
+            "testProductionProfessionalHTTPTransportReportsAttemptThroughInjectedBoundaryBeforeIO",
+            "testSuccessfulUnlockUsesEvaluationAfterPreflightAndFreshContextPerAttempt",
+            "testEvaluationOutcomesModelCancellationFailureAndPasscodeFallback",
+            "testPreflightUnavailableNotEnrolledAndNoPasscodeNeverCountAsSuccess",
+            "testWorkspaceProofExpiresAtFiveMinutesAndSensitiveActionAlwaysEvaluatesFresh",
+            "testExpiredProofRelocksProtectedUIAndBlocksDirectSignInWithoutStartingSession",
+            "testExpiredProofBeforeImmediateReauthenticationClearsOldSessionAndRequiresNewSignIn",
+            "testExpiredProofBeforeFailedOrCancelledReauthenticationClearsOnceAndStaysLocked",
+            "testInactiveObscuresProtectedUIAndCancelsPendingEvaluation",
+            "testBackgroundClearsPlaintextSessionAndRequiresFreshUnlockOnForeground",
+            "testBackgroundDiscardsCancellationInsensitiveLateSignInSuccessAndClearsMaterial",
+            "testUnavailableSecurityPostureAfterUnlockRevokesBothMaterialOwnersAndBlocksSignIn",
+            "testStaleSignInCompletionCannotClearNewerCommittedSession",
+            "testStaleSignInCompletingBeforeNewerOperationDoesNotPoisonNewCommit",
+            "testMultipleBackgroundEpochsDiscardEveryOldCompletionWithoutClearingNewestSession",
+            "testEvaluationCompletionPublishesOutcomeOnMainActor",
+            "testDomainStateChangeAndNilTransitionInvalidateWrappedMaterialAndTrust",
+            "testKeychainPolicyRequiresThisDeviceWhenUnlockedAndUserPresenceWithoutStoringSecret",
+        ):
+            expect(test_name in tests, f"Slice 4 unit oracle misses {test_name}", errors)
+
+    if export_tests_path.is_file() and ai_integration_tests_path.is_file():
+        export_tests = export_tests_path.read_text(encoding="utf-8")
+        ai_tests = ai_integration_tests_path.read_text(encoding="utf-8")
+        expect(
+            "professionalEnvironmentFactory.hasConstructedEnvironment" in export_tests
+            and "professionalTransportBoundary" not in ai_tests
+            and "GuestProfessionalTransportAttemptRecorder" not in export_tests + ai_tests,
+            "Slice 4 named guest workflows retain a meaningless transport recorder or miss default-off construction proof",
+            errors,
+        )
+        expect(
+            "GuestOfflineHTTPTrap" not in export_tests + ai_tests
+            and "URLProtocol.registerClass" not in export_tests + ai_tests,
+            "Slice 4 guest oracle still claims unreliable global URLProtocol interception",
+            errors,
+        )
+        expect(
+            "let deletableID = try XCTUnwrap(" in ai_tests
+            and "if let deletableID" not in ai_tests,
+            "Slice 4 named Concept deletion workflow remains conditional",
+            errors,
+        )
+
+    app_phase = object_body(pbx, "A80000000000000000000001") or ""
+    unit_phase = object_body(pbx, "A80000000000000000000004") or ""
+    for filename in (
+        "ProfessionalEnvironment.swift",
+        "ProfessionalTransportBoundary.swift",
+        "DeviceAuthenticationCoordinator.swift",
+        "AppleDeviceAuthenticationContext.swift",
+        "ProfessionalKeychainAccessPolicy.swift",
+        "ProfessionalAccessView.swift",
+    ):
+        expect(
+            f"/* {filename} in Sources */" in app_phase,
+            f"Slice 4 app target misses source membership: {filename}",
+            errors,
+        )
+    expect(
+        "/* ProfessionalBoundaryTests.swift in Sources */" in unit_phase,
+        "Slice 4 unit-test target misses ProfessionalBoundaryTests.swift",
+        errors,
+    )
+    return errors
 
 
 def read_json(path: Path, errors: list[str]) -> dict:
@@ -1192,6 +2149,23 @@ def workflow_structure_errors(workflow: str) -> list[str]:
                 return True
         return False
 
+    def named_step_block(name: str) -> tuple[int | None, list[str]]:
+        expected_name = f"- name: {name}"
+        matching = [index for index in range(len(lines)) if content(index) == expected_name]
+        if len(matching) != 1:
+            errors.append(
+                f"Phase-7 CI named step must appear exactly once: {name}"
+            )
+            return None, []
+        start = matching[0]
+        step_indent = indentation(lines[start])
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            if lines[index].strip() and indentation(lines[index]) <= step_indent:
+                end = index
+                break
+        return start, lines[start:end]
+
     permissions = top_level_index("permissions:")
     expect(permissions is not None and block_contains(permissions, "contents: read"), "Phase-7 CI permissions block must be top-level contents: read", errors)
     concurrency = top_level_index("concurrency:")
@@ -1207,7 +2181,6 @@ def workflow_structure_errors(workflow: str) -> list[str]:
         "run: python3 -B Scripts/select_simulators.py --self-test",
         "run: swift test",
         "run: xcodebuild -resolvePackageDependencies -project RoomScanStudio.xcodeproj",
-        "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
     )
     positions: list[int] = []
     for step in ordered_steps:
@@ -1216,6 +2189,24 @@ def workflow_structure_errors(workflow: str) -> list[str]:
             errors.append(f"Phase-7 CI step must appear exactly once as YAML content: {step}")
         else:
             positions.append(matching[0])
+    upload_index, upload_block = named_step_block("Upload XCTest results")
+    for expected in (
+        "if: always()",
+        "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "${{ runner.temp }}/RoomScanStudio-iPhone.xcresult",
+        "${{ runner.temp }}/RoomScanStudio-iPad.xcresult",
+        "${{ runner.temp }}/RoomScanStudio-artifact-inspection.json",
+        "if-no-files-found: warn",
+        "retention-days: 7",
+    ):
+        matching = [line for line in upload_block if line.strip() == expected]
+        if len(matching) != 1:
+            errors.append(
+                "Phase-7 Upload XCTest results contract must appear exactly once "
+                f"inside its named step: {expected}"
+            )
+    if upload_index is not None:
+        positions.append(upload_index)
     if positions and positions != sorted(positions):
         errors.append("Phase-7 CI checkout/static/package/artifact steps are out of order")
     return errors
@@ -1226,6 +2217,13 @@ def verify_plists(errors: list[str]) -> None:
     privacy = read_plist(PRIVACY_PLIST, errors)
     expect(bool(info.get("NSCameraUsageDescription")), "missing camera usage description", errors)
     expect(bool(info.get("NSLocationWhenInUseUsageDescription")), "missing location usage description", errors)
+    face_id_copy = str(info.get("NSFaceIDUsageDescription", ""))
+    expect(bool(face_id_copy), "missing Face ID usage description", errors)
+    expect(
+        "Face ID or" in face_id_copy and "device passcode" in face_id_copy,
+        "Face ID usage copy must describe Face ID or device passcode",
+        errors,
+    )
     expect(info.get("CFBundleShortVersionString") == "$(MARKETING_VERSION)", "Info.plist must use MARKETING_VERSION substitution", errors)
     expect(info.get("CFBundleVersion") == "$(CURRENT_PROJECT_VERSION)", "Info.plist must use CURRENT_PROJECT_VERSION substitution", errors)
     expect("Prepare capture" in str(info.get("NSCameraUsageDescription", "")), "camera permission copy must describe the explicit Prepare capture action", errors)
@@ -2932,6 +3930,14 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
 
     guest_sources = read_guest_production_sources()
     app_environment_path = ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift"
+    url_session_task_types = (
+        "URLSessionTask",
+        "URLSessionDataTask",
+        "URLSessionDownloadTask",
+        "URLSessionUploadTask",
+        "URLSessionStreamTask",
+        "URLSessionWebSocketTask",
+    )
     if app_environment_path in guest_sources:
         injected_hosted_call = dict(guest_sources)
         injected_hosted_call[app_environment_path] += (
@@ -2941,6 +3947,546 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
         expect(
             bool(guest_hosted_boundary_errors(injected_hosted_call)),
             "verifier self-test did not detect an injected guest hosted request",
+            errors,
+        )
+        injected_interpolated_transport = dict(guest_sources)
+        injected_interpolated_transport[app_environment_path] += (
+            '\nprivate let injectedInterpolatedTransport = "\\('
+            'URLSession.shared.dataTask(with: URL(string: '
+            '"https://offline-guard.invalid")!).resume())"\n'
+        )
+        expect(
+            any(
+                "Foundation HTTP client outside the exact audited transport" in error
+                for error in guest_hosted_boundary_errors(
+                    injected_interpolated_transport
+                )
+            ),
+            "verifier self-test stripped executable guest string interpolation",
+            errors,
+        )
+        injected_network_framework = dict(guest_sources)
+        injected_network_framework[app_environment_path] += (
+            "\nimport Network\n"
+            "private let injectedGuestNetworkConnection: NWConnection? = nil\n"
+        )
+        expect(
+            any(
+                "Network.framework client" in error
+                for error in guest_hosted_boundary_errors(injected_network_framework)
+            ),
+            "verifier self-test did not detect an injected guest Network.framework client",
+            errors,
+        )
+        for task_type in url_session_task_types:
+            injected_guest_task = dict(guest_sources)
+            injected_guest_task[app_environment_path] += (
+                f"\nprivate func injectedGuestResume(_ task: {task_type}) {{ "
+                "task.resume() }\n"
+            )
+            expect(
+                any(
+                    "Foundation HTTP client outside the exact audited transport"
+                    in error
+                    for error in guest_hosted_boundary_errors(injected_guest_task)
+                ),
+                "verifier self-test allowed guest " + task_type + ".resume()",
+                errors,
+            )
+
+        similar_task_names = dict(guest_sources)
+        similar_task_names[app_environment_path] += (
+            "\n// URLSessionDataTask.resume() in prose is not executable.\n"
+            'private let injectedTaskLabel = "URLSessionDownloadTask"\n'
+            "private struct URLSessionTaskLike { func resume() {} }\n"
+            "private struct MyURLSessionUploadTask { func resume() {} }\n"
+            "private func injectedSimilarTaskNames(\n"
+            "    _ first: URLSessionTaskLike,\n"
+            "    _ second: MyURLSessionUploadTask\n"
+            ") { first.resume(); second.resume() }\n"
+        )
+        expect(
+            not guest_hosted_boundary_errors(similar_task_names),
+            "verifier self-test treated comments, strings, or similar app-owned "
+            "task names as Foundation transport",
+            errors,
+        )
+
+    if not guest_hosted_boundary_errors(guest_sources):
+        synthetic_adapter_path = (
+            ROOT
+            / "RoomScanStudio"
+            / "Infrastructure"
+            / "Professional"
+            / "Adapters"
+            / "InjectedHostedAdapter.swift"
+        )
+        allowlisted_adapter = dict(guest_sources)
+        allowlisted_adapter[synthetic_adapter_path] = (
+            "import Foundation\n"
+            "final class InjectedHostedAdapter {\n"
+            "    let transport: any ProfessionalHTTPTransport\n"
+            "    func send(_ request: ProfessionalHTTPRequest) async throws {\n"
+            "        _ = try await transport.send(request)\n"
+            "    }\n"
+            "}\n"
+        )
+        expect(
+            not guest_hosted_boundary_errors(allowlisted_adapter),
+            "graph-aware verifier rejected an isolated dedicated professional adapter",
+            errors,
+        )
+
+        for task_type in url_session_task_types:
+            task_bypassing_adapter = dict(guest_sources)
+            task_bypassing_adapter[synthetic_adapter_path] = (
+                "import Foundation\n"
+                "final class InjectedTaskBypassingAdapter {\n"
+                "    let transport: any ProfessionalHTTPTransport\n"
+                f"    func resume(_ task: {task_type}) {{ task.resume() }}\n"
+                "}\n"
+            )
+            expect(
+                any(
+                    "Foundation HTTP client outside the exact audited transport"
+                    in error
+                    for error in guest_hosted_boundary_errors(task_bypassing_adapter)
+                ),
+                "verifier self-test allowed isolated professional adapter "
+                + task_type
+                + ".resume()",
+                errors,
+            )
+
+        similar_task_adapter = dict(guest_sources)
+        similar_task_adapter[synthetic_adapter_path] = (
+            "final class InjectedSimilarTaskAdapter {\n"
+            "    let transport: any ProfessionalHTTPTransport\n"
+            "    func resume(_ task: URLSessionTaskLike) { task.resume() }\n"
+            "}\n"
+            "private struct URLSessionTaskLike { func resume() {} }\n"
+        )
+        expect(
+            not guest_hosted_boundary_errors(similar_task_adapter),
+            "verifier self-test rejected an isolated adapter for a similar "
+            "app-owned task name",
+            errors,
+        )
+
+        bypassing_adapter = dict(guest_sources)
+        bypassing_adapter[synthetic_adapter_path] = (
+            "import Foundation\n"
+            "final class InjectedBypassingAdapter {\n"
+            "    let session = URLSession.shared\n"
+            "}\n"
+        )
+        expect(
+            any(
+                "Foundation HTTP client outside the exact audited transport" in error
+                for error in guest_hosted_boundary_errors(bypassing_adapter)
+            ),
+            "verifier self-test allowed raw Foundation HTTP in a professional adapter",
+            errors,
+        )
+
+        observed_plus_bypass = dict(guest_sources)
+        observed_plus_bypass[synthetic_adapter_path] = (
+            "import Foundation\n"
+            "final class SplitPathAdapter {\n"
+            "    let transport: any ProfessionalHTTPTransport\n"
+            "    let session = URLSession.shared\n"
+            "    func observed(_ request: ProfessionalHTTPRequest) async throws {\n"
+            "        _ = try await transport.send(request)\n"
+            "    }\n"
+            "    func bypass(_ request: URLRequest) async throws {\n"
+            "        _ = try await session.data(for: request)\n"
+            "    }\n"
+            "}\n"
+        )
+        expect(
+            any(
+                "Foundation HTTP client outside the exact audited transport" in error
+                for error in guest_hosted_boundary_errors(observed_plus_bypass)
+            ),
+            "verifier self-test allowed an observed adapter method plus a bypass method",
+            errors,
+        )
+
+        for description, source, expected_error in (
+            (
+                "NWConnection adapter",
+                "import Network\nfinal class InjectedNetworkAdapter { "
+                "let connection: NWConnection? = nil }\n",
+                "Network.framework client",
+            ),
+            (
+                "raw stream adapter",
+                "import Foundation\nfunc injectedRawStream() { "
+                "_ = CFStreamCreatePairWithSocketToHost }\n",
+                "raw socket/stream client",
+            ),
+            (
+                "alternate URLSession configuration",
+                "import Foundation\nfinal class InjectedAlternateSessionAdapter { "
+                "let configuration = URLSessionConfiguration.ephemeral }\n",
+                "Foundation HTTP client outside the exact audited transport",
+            ),
+        ):
+            injected_transport = dict(guest_sources)
+            injected_transport[synthetic_adapter_path] = source
+            expect(
+                any(
+                    expected_error in error
+                    for error in guest_hosted_boundary_errors(injected_transport)
+                ),
+                "verifier self-test allowed " + description,
+                errors,
+            )
+
+        for description, initializer in (
+            ("Data(contentsOf:)", "Data(contentsOf: url)"),
+            ("NSData(contentsOf:)", "NSData(contentsOf: url)"),
+            (
+                "String(contentsOf:)",
+                "String(contentsOf: url, encoding: .utf8)",
+            ),
+        ):
+            alternate_loading_adapter = dict(guest_sources)
+            alternate_loading_adapter[synthetic_adapter_path] = (
+                "import Foundation\n"
+                "final class InjectedAlternateLoadingAdapter {\n"
+                "    func load(_ url: URL) throws {\n"
+                f"        _ = try {initializer}\n"
+                "    }\n"
+                "}\n"
+            )
+            expect(
+                any(
+                    "forbidden alternate I/O (URL-loading contentsOf initializer)"
+                    in error
+                    for error in guest_hosted_boundary_errors(
+                        alternate_loading_adapter
+                    )
+                ),
+                "verifier self-test allowed adapter " + description,
+                errors,
+            )
+
+        local_file_reader_path = (
+            ROOT
+            / "RoomScanStudio"
+            / "Infrastructure"
+            / "InjectedLocalFileReader.swift"
+        )
+        non_adapter_local_file = dict(guest_sources)
+        non_adapter_local_file[local_file_reader_path] = (
+            "import Foundation\n"
+            "func injectedLocalFileRead(_ url: URL) throws -> Data {\n"
+            "    try Data(contentsOf: url)\n"
+            "}\n"
+        )
+        expect(
+            not guest_hosted_boundary_errors(non_adapter_local_file),
+            "verifier self-test rejected non-adapter local-file Data(contentsOf:)",
+            errors,
+        )
+
+        reachable_adapter = dict(allowlisted_adapter)
+        reachable_adapter[app_environment_path] += (
+            "\nprivate let injectedGuestProfessionalDependency = "
+            "InjectedHostedAdapter()\n"
+        )
+        adapter_errors = guest_hosted_boundary_errors(reachable_adapter)
+        expect(
+            any(
+                "guest composition reaches dedicated professional/auth adapter"
+                in error
+                for error in adapter_errors
+            ),
+            "verifier self-test did not detect an injected guest adapter dependency",
+            errors,
+        )
+
+        helper_path = (
+            ROOT
+            / "RoomScanStudio"
+            / "Infrastructure"
+            / "InjectedProfessionalHelper.swift"
+        )
+        indirect_adapter = dict(allowlisted_adapter)
+        indirect_adapter[helper_path] = (
+            "func makeInjectedProfessionalHelper() {\n"
+            "    _ = InjectedHostedAdapter.self\n"
+            "}\n"
+        )
+        indirect_adapter[app_environment_path] += (
+            "\nprivate let injectedHelperReference = "
+            "makeInjectedProfessionalHelper\n"
+        )
+        expect(
+            any(
+                "guest composition reaches dedicated professional/auth adapter"
+                in error
+                for error in guest_hosted_boundary_errors(indirect_adapter)
+            ),
+            "verifier self-test missed guest -> normal helper -> adapter reachability",
+            errors,
+        )
+
+        secondary_binding_helper = dict(allowlisted_adapter)
+        secondary_binding_helper[helper_path] = (
+            "let harmless = 0, bridge: InjectedHostedAdapter.Type = "
+            "InjectedHostedAdapter.self\n"
+        )
+        secondary_binding_helper[app_environment_path] += (
+            "\nprivate let injectedSecondaryBindingReference = bridge\n"
+        )
+        expect(
+            any(
+                "guest composition reaches dedicated professional/auth adapter"
+                in error
+                for error in guest_hosted_boundary_errors(secondary_binding_helper)
+            ),
+            "verifier self-test missed a reachable secondary top-level binding",
+            errors,
+        )
+
+        comment_and_string_only = dict(allowlisted_adapter)
+        comment_and_string_only[app_environment_path] += (
+            "\n// InjectedHostedAdapter is intentionally unreachable.\n"
+            'private let harmlessAdapterLabel = "InjectedHostedAdapter"\n'
+        )
+        expect(
+            not guest_hosted_boundary_errors(comment_and_string_only),
+            "verifier self-test created adapter reachability from a comment/string",
+            errors,
+        )
+
+        adapter_entry_controls = {
+            "extension/static helper": (
+                "extension AppEnvironment {\n"
+                "    static func injectedProfessionalExtensionEntry() {\n"
+                "        _ = ProfessionalHTTPTransport.self\n"
+                "    }\n"
+                "}\n",
+                "\nprivate let injectedExtensionEntry = "
+                "AppEnvironment.injectedProfessionalExtensionEntry\n",
+            ),
+            "protocol extension/static helper": (
+                "extension InjectedGuestProfessionalProtocol {\n"
+                "    static func injectedProtocolExtensionEntry() {\n"
+                "        _ = ProfessionalHTTPTransport.self\n"
+                "    }\n"
+                "}\n",
+                "\nprivate protocol InjectedGuestProfessionalProtocol {}\n"
+                "private let injectedProtocolExtensionEntry = "
+                "InjectedGuestProfessionalProtocol.injectedProtocolExtensionEntry\n",
+            ),
+            "top-level function": (
+                "func injectedProfessionalFunctionEntry() {\n"
+                "    _ = ProfessionalHTTPTransport.self\n"
+                "}\n",
+                "\nprivate let injectedFunctionEntry = "
+                "injectedProfessionalFunctionEntry\n",
+            ),
+            "top-level global": (
+                "let injectedProfessionalGlobalEntry = ProfessionalHTTPTransport.self\n",
+                "\nprivate let injectedGlobalEntry = "
+                "injectedProfessionalGlobalEntry\n",
+            ),
+        }
+        for description, (adapter_source, guest_reference) in adapter_entry_controls.items():
+            reachable_entry = dict(guest_sources)
+            reachable_entry[synthetic_adapter_path] = adapter_source
+            reachable_entry[app_environment_path] += guest_reference
+            entry_errors = guest_hosted_boundary_errors(reachable_entry)
+            expect(
+                any(
+                    "guest composition reaches dedicated professional/auth adapter"
+                    in error
+                    for error in entry_errors
+                ),
+                "verifier self-test did not detect reachable adapter " + description,
+                errors,
+            )
+
+        stripe_payment_sheet = dict(guest_sources)
+        stripe_payment_sheet[synthetic_adapter_path] = (
+            "import StripePaymentSheet\n"
+            "private let injectedPaymentSheet: PaymentSheet? = nil\n"
+        )
+        expect(
+            any(
+                "globally forbidden hosted billing SDK" in error
+                for error in guest_hosted_boundary_errors(stripe_payment_sheet)
+            ),
+            "verifier self-test allowed StripePaymentSheet/PaymentSheet vendor symbols",
+            errors,
+        )
+
+        unmodelled_adapter = dict(guest_sources)
+        unmodelled_adapter[synthetic_adapter_path] = (
+            "@main struct InjectedProfessionalExecutableRoot {\n"
+            "    static func main() { _ = ProfessionalHTTPTransport.self }\n"
+            "}\n"
+        )
+        expect(
+            any(
+                "unmodelled executable entry point" in error
+                for error in guest_hosted_boundary_errors(unmodelled_adapter)
+            ),
+            "verifier self-test allowed an unmodelled adapter executable root",
+            errors,
+        )
+        top_level_adapter_execution = dict(guest_sources)
+        top_level_adapter_execution[synthetic_adapter_path] = (
+            "import Foundation\n"
+            "Task { _ = 1 }\n"
+        )
+        expect(
+            any(
+                "unmodelled executable entry point" in error
+                for error in guest_hosted_boundary_errors(top_level_adapter_execution)
+            ),
+            "verifier self-test allowed an unmodelled top-level adapter execution",
+            errors,
+        )
+
+        injected_local_auth = dict(guest_sources)
+        injected_local_auth[app_environment_path] += (
+            "\nimport LocalAuthentication\n"
+            "private let injectedGuestContext = LAContext()\n"
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(injected_local_auth)),
+            "verifier self-test did not detect injected guest LocalAuthentication",
+            errors,
+        )
+
+        globally_forbidden_adapter = dict(allowlisted_adapter)
+        globally_forbidden_adapter[synthetic_adapter_path] += (
+            "private let injectedVendor = Cognito.self\n"
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(globally_forbidden_adapter)),
+            "verifier self-test allowed a forbidden vendor SDK inside an adapter",
+            errors,
+        )
+
+    if not slice4_professional_contract_errors(guest_sources, pbx):
+        coordinator_path = (
+            ROOT
+            / "RoomScanStudio"
+            / "Infrastructure"
+            / "DeviceAuthentication"
+            / "DeviceAuthenticationCoordinator.swift"
+        )
+        professional_path = (
+            ROOT / "RoomScanStudio" / "Professional" / "ProfessionalEnvironment.swift"
+        )
+        transport_path = (
+            ROOT
+            / "RoomScanStudio"
+            / "Professional"
+            / "ProfessionalTransportBoundary.swift"
+        )
+        second_transport_io = dict(guest_sources)
+        second_transport_io[transport_path] = second_transport_io[
+            transport_path
+        ].replace(
+            "let (data, response) = try await session.data(for: foundationRequest)",
+            "_ = try await session.data(for: foundationRequest)\n"
+            "        let (data, response) = try await session.data(for: foundationRequest)",
+            1,
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(second_transport_io)),
+            "verifier self-test allowed a second URLSession I/O path in the audited transport",
+            errors,
+        )
+        alternate_transport = dict(guest_sources)
+        alternate_transport[transport_path] = alternate_transport[
+            transport_path
+        ].replace(
+            "let (data, response) = try await session.data(for: foundationRequest)",
+            "let bypassSession = URLSession(configuration: .ephemeral)\n"
+            "        _ = bypassSession.dataTask(with: foundationRequest)\n"
+            "        let (data, response) = try await session.data(for: foundationRequest)",
+            1,
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(alternate_transport)),
+            "verifier self-test allowed an alternate URLSession/configuration bypass in "
+            "the audited transport",
+            errors,
+        )
+        alternate_loading_transport = dict(guest_sources)
+        alternate_loading_transport[transport_path] = alternate_loading_transport[
+            transport_path
+        ].replace(
+            "let (data, response) = try await session.data(for: foundationRequest)",
+            "_ = try Data(contentsOf: foundationRequest.url!)\n"
+            "        let (data, response) = try await session.data(for: foundationRequest)",
+            1,
+        )
+        expect(
+            bool(guest_hosted_boundary_errors(alternate_loading_transport)),
+            "verifier self-test allowed Data(contentsOf:) beside the observed audited "
+            "transport path",
+            errors,
+        )
+        task_bypassing_transport = dict(guest_sources)
+        task_bypassing_transport[transport_path] += (
+            "\nextension FoundationProfessionalHTTPTransport {\n"
+            "    func injectedTaskBypass(_ task: URLSessionDataTask) {\n"
+            "        task.resume()\n"
+            "    }\n"
+            "}\n"
+        )
+        expect(
+            any(
+                "forbidden alternate I/O (URLSession task API)" in error
+                for error in guest_hosted_boundary_errors(task_bypassing_transport)
+            ),
+            "verifier self-test allowed URLSessionDataTask.resume() beside the "
+            "observed audited transport path",
+            errors,
+        )
+        extended_local_proof = dict(guest_sources)
+        extended_local_proof[coordinator_path] = extended_local_proof[
+            coordinator_path
+        ].replace(
+            "min(max(maximumLocalProofAge, 0), 300)",
+            "max(maximumLocalProofAge, 0)",
+            1,
+        )
+        expect(
+            bool(slice4_professional_contract_errors(extended_local_proof, pbx)),
+            "verifier self-test did not detect an extended local-proof ceiling",
+            errors,
+        )
+
+        eager_professional_builder = dict(guest_sources)
+        eager_professional_builder[professional_path] = eager_professional_builder[
+            professional_path
+        ].replace(
+            "self.makeEnvironment = makeEnvironment",
+            "self.makeEnvironment = makeEnvironment\n        _ = makeEnvironment()",
+            1,
+        )
+        expect(
+            bool(slice4_professional_contract_errors(eager_professional_builder, pbx)),
+            "verifier self-test did not detect eager professional dependency construction",
+            errors,
+        )
+
+        stale_sign_in_epoch = dict(guest_sources)
+        stale_sign_in_epoch[professional_path] = stale_sign_in_epoch[
+            professional_path
+        ].replace("lifecycleEpoch &+= 1", "", 1)
+        expect(
+            bool(slice4_professional_contract_errors(stale_sign_in_epoch, pbx)),
+            "verifier self-test did not detect removed background sign-in invalidation",
             errors,
         )
 
@@ -3998,6 +5544,7 @@ def main() -> int:
     errors.extend(slice1_spatial_contract_errors(production_sources))
     errors.extend(slice2_quality_contract_errors(production_sources))
     errors.extend(slice3_ai_redesign_contract_errors(production_sources, pbx))
+    errors.extend(slice4_professional_contract_errors(production_sources, pbx))
     if all(path.is_file() for path in (
         ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift",
         ROOT / "RoomScanStudio" / "Features" / "RoomCapture" / "RoomCaptureCoordinator.swift",
@@ -4027,7 +5574,17 @@ def main() -> int:
             print(f"- {error}")
         return 1
     print("static structure passed")
-    print("evidence limitation: static host checks only; Phase-7 verifies prior-phase fixture/PBX/privacy boundaries plus release substitutions, an opaque-RGB AppIcon PNG structure, literal palette contrast, adaptive-action/Dynamic-Type source and UI-test contracts, and a pinned macOS CI/simulator-selector design, but no Xcode build, Swift tests, Simulator, RealityKit render, Accessibility Inspector, asset-catalog compilation, device, LiDAR registration, ARWorldMap relocalization, CloudKit development-container call, entitlement/profile, CKAsset upload/download, ZIP consumer inspection, PNG/PDF rendering, native USDZ export, or system share handoff was performed.")
+    print(
+        "evidence limitation: static host checks only; Phase-7 verifies prior-phase "
+        "fixture/PBX/privacy boundaries plus release substitutions, an opaque-RGB "
+        "AppIcon PNG structure, literal palette contrast, adaptive-action/Dynamic-Type "
+        "source and UI-test contracts, and a pinned macOS CI/simulator-selector design; "
+        "Slice 4 verifies the graph-aware guest/professional adapter boundary, lazy "
+        "default-off composition, LocalAuthentication/Keychain source policy, target "
+        "membership, and mutation controls, but no Xcode build, Swift tests, Simulator, "
+        "physical Face ID or passcode flow, Accessibility Inspector, provisioning, "
+        "entitlement/profile, live provider, or system share handoff was performed."
+    )
     return 0
 
 

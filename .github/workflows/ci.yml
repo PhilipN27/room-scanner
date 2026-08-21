@@ -47,8 +47,15 @@ jobs:
           -scheme RoomScanStudio
           -sdk iphoneos
           -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/RoomScanStudio-build-derived"
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           build
+
+      - name: Inspect compiled iOS professional-boundary artifact
+        run: >-
+          python3 -B Scripts/inspect_ios_artifact.py
+          --app "$RUNNER_TEMP/RoomScanStudio-build-derived/Build/Products/Debug-iphoneos/RoomScanStudio.app"
+          --output "$RUNNER_TEMP/RoomScanStudio-artifact-inspection.json"
 
       - name: Select available iPhone and iPad simulators
         id: simulators
@@ -80,5 +87,46 @@ jobs:
           path: |
             ${{ runner.temp }}/RoomScanStudio-iPhone.xcresult
             ${{ runner.temp }}/RoomScanStudio-iPad.xcresult
+            ${{ runner.temp }}/RoomScanStudio-artifact-inspection.json
           if-no-files-found: warn
+          retention-days: 7
+
+  hosted-verification:
+    name: Hosted service, PostgreSQL, infrastructure, and static proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - name: Check out source without retaining a GitHub credential
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Node.js 24 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.15.0'
+
+      - name: Install local PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-16
+          if [ -d /etc/postgresql/16/main ]; then
+            sudo pg_ctlcluster 16 main stop
+          fi
+          /usr/lib/postgresql/16/bin/postgres --version
+
+      - name: Run offline hosted, real-role PostgreSQL, and artifact matrices
+        run: >-
+          python3 -B Scripts/verify_slice4_hosted.py
+          --artifacts-dir "$RUNNER_TEMP/roomscan-slice4-hosted"
+
+      - name: Upload hosted verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: RoomScanStudio-slice4-hosted-verification
+          path: ${{ runner.temp }}/roomscan-slice4-hosted
+          if-no-files-found: error
           retention-days: 7

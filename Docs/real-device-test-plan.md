@@ -29,6 +29,86 @@ auditable rerun.
    deliberate Back up action. Confirm local use remains functional when iCloud
    is unavailable or disabled.
 
+## Slice 4 physical Face ID and passcode protocol
+
+Run on a supported physical iPhone with the exact app build, OS version,
+device model, passcode/Face ID state and test account recorded. Use synthetic
+professional data only. Simulator, unit, typecheck and built-symbol evidence do
+not close this protocol.
+
+1. With Face ID enrolled and passcode enabled, enter the default-off
+   professional boundary, authenticate successfully, background/foreground,
+   and confirm plaintext professional state/local proof is cleared and a fresh
+   unlock is required.
+2. Cancel the Face ID prompt, exercise a nonmatching face/failure, and verify
+   each result is bounded, does not create server recent-authentication state,
+   and does not expose a token or domain state in UI/logs.
+3. Cause biometric lockout under an approved safe device procedure. Verify the
+   system passcode fallback succeeds when available and that cancellation or
+   failed fallback leaves the professional surface locked.
+4. On a separately controlled no-passcode state, verify unlock and sensitive
+   action confirmation fail closed without crash, bypass or destructive local
+   effect. Restore the passcode immediately after the case.
+5. Verify the local non-destructive unlock ceiling at 300 seconds and that each
+   sensitive/destructive action always invokes a fresh LocalAuthentication
+   evaluation even within that ceiling. Confirm a local biometric assertion
+   never substitutes for the five-minute server recent-authentication gate.
+6. Change Face ID enrollment/domain state, relaunch/foreground, and verify
+   stored professional session material is invalidated or requires the defined
+   fresh recovery path. Domain-state bytes must not enter network, audit,
+   analytics, crash, or support output.
+7. Exercise Keychain success, user-cancel, authentication failure, interaction-
+   not-allowed/background, item-not-found and device-lock behavior. Confirm
+   app-owned access/refresh material is never printed or included in artifacts.
+8. Repeat an actor handoff: authenticate one person, lock/background, then let
+   a different authorized device user attempt entry. Record exactly which
+   local and server reauthentication gates prevent inherited authority.
+
+Retain the xcresult/device console after secret-canary scanning, screenshots
+that contain no secrets, and a case table with expected/actual result. Status:
+**pending physical-device evidence**.
+
+## Slice 4 authorized non-production provider protocol
+
+This protocol requires separate authorization naming environment/account,
+`us-east-1` resources, expected cost, credentials/synthetic data, rollback and
+verification. Do not run it against production or real customer/room data.
+
+1. API Gateway/Lambda: prove payload-v2 method/path/header/query/body limits,
+   fatal UTF-8 and duplicate-key denial, exact raw Stripe bytes/base64 behavior,
+   uniform magic-request response size, scanner static GET → trusted POST →
+   transfer code → app-held verifier redemption across devices, blind-click
+   denial, no token/verifier/code in logs/referrer/history, protected bearer
+   enforcement, error/no-store headers and response limits.
+2. Aurora/Data API: use lane-specific LOGIN roles to prove explicit transaction
+   ordering, UTC authorization time, forced RLS, non-owner/non-`BYPASSRLS`
+   catalog state, tenant A/B connection reuse, unscoped context clearing,
+   rollback/commit failure handling, secret bootstrap and rotation.
+3. Cognito/Apple: prove known/synthetic outward equality, exact Define/Create/
+   Verify shapes, replay/expiry/attempt/purpose binding, Apple issuer/audience/
+   RS256/JWKS rotation/time/nonce/state/S256, relay email, challenge-only atomic
+   app session issuance, API provider-token discard, and no sensitive Cognito
+   `ClientMetadata`.
+4. SES: prove the exact From identity ARN/configuration set, delivery/bounce/
+   complaint/reject handling, stable idempotency, retry/outbox behavior, and no
+   address, magic link or token in logs/audit.
+5. S3/KMS/IAM: prove the random `server/quarantine/v1/` tenant prefix, exact
+   single PUT length/checksum/type/metadata/`If-None-Match:*`, TLS/KMS denials,
+   collision/substitution denial, no list/read/delete/promote authority, and no
+   client credential.
+6. Stripe: prove exact raw-body signature, forged/duplicate/retry/stale/out-of-
+   order behavior, server-owned platform/connected account plus exact customer/
+   subscription binding, exact subscription retrieval and ID/customer match,
+   `Stripe-Account` only for connected accounts, current-state reconciliation,
+   and disable→re-enable original-grant binding. Stripe/client state must never
+   authorize directly.
+7. Operations: deliver/acknowledge each alarm, inspect CloudTrail/digest/S3 data
+   events, audit-export retry, secret canaries, 30-day log/400-day audit
+   configuration, two-person 60-minute break glass, and sign-in/hosted rollback
+   with guest/local workflows still usable.
+
+Status: **not run; non-production provider/infrastructure evidence incomplete**.
+
 Production V1 rescan remains unavailable: no continuous registration survives
 the privacy stop and no ARWorldMap is requested. Fixture-only rescan is not
 device evidence.
@@ -292,3 +372,114 @@ without encoding those expectations in app logic. Compare displayed estimates
 with independently recorded reference measurements and retain the two device
 evidence sets separately. This is a pending field-test plan, not a claim that
 the room or classifications have been validated.
+
+## 2026-08-21 Slice 4 physical owner worksheet
+
+Status: **blank/pending**. Fresh Core passed 266/266, and the full iPhone
+Simulator scheme passed 259/259 (225 app unit, including 32 professional-
+boundary and eight magic-completion tests, plus 34 UI). The full iPad scheme
+also passed 259/259, and the focused professional/magic selectors passed 32/32
+and 8/8. None of those local results fills this physical worksheet. A DEBUG-
+only harness can make physical evidence observable;
+its source presence is not physical proof.
+
+Fill this section only from a supported, owner-controlled physical iPhone. Use
+a dedicated test installation, synthetic identifiers and fixture/generated
+room data only. Do not enter a real email, provider account, credential,
+customer room, contact, photo, billing record or location. Do not disable the
+passcode on a personal/work device: use a separate empty test device for the
+no-passcode case, or record `NOT RUN`.
+
+### Session record
+
+| Field | Owner entry |
+| --- | --- |
+| Date/time zone | `PENDING` |
+| Operator and witness initials | `PENDING` |
+| Device model / LiDAR support | `PENDING` |
+| iOS version and build | `PENDING` |
+| Source revision / app version / build | `PENDING` |
+| Configuration and signing identity (no secret/profile dump) | `PENDING` |
+| DEBUG physical-harness build identifier | `PENDING` |
+| Face ID enrolled / passcode enabled starting state | `PENDING` |
+| Synthetic account/fixture identifiers | `PENDING` |
+| Evidence root and SHA-256 manifest | `PENDING` |
+| Final owner decision / signature | `PENDING` |
+
+### Guest/offline boundary
+
+1. Start from the dedicated synthetic test installation. Record Wi-Fi and
+   cellular disabled/Airplane Mode state and confirm no provider endpoint or
+   credential is configured.
+2. Launch directly into guest/local use without opening Professional. Exercise
+   fixture-backed capture/save, load/edit, legacy export, AI Room Package,
+   Concept Set and Share preparation; cancel the system handoff before sharing.
+3. Treat offline usability and zero-request observation as separate runs.
+   Re-enable only the dedicated controlled test network, attach an RVI to the
+   test iPhone and start a full-packet capture before the marked guest window:
+
+   ```sh
+   sudo /Library/Apple/usr/bin/rvictl -s <PHYSICAL_UDID>
+   sudo tcpdump -i <RVI_INTERFACE_REPORTED_BY_RVICTL> -n -s 0 \
+     -w /private/tmp/roomscan-guest-offline.pcap
+   ```
+
+   Record the guest-window start/end times. Repeat the same guest workflow
+   without entering Professional, then stop `tcpdump` and remove the RVI with
+   `sudo /Library/Apple/usr/bin/rvictl -x <PHYSICAL_UDID>` even on abort.
+4. Before the guest window, make one harmless, synthetic request from the test
+   device to an owner-controlled local/test-network canary and prove that its
+   DNS/TCP record appears in the capture. This is the detector positive control.
+   During the marked guest window require no RoomScanStudio hosted/auth DNS,
+   TCP or TLS destination. Secret-scan the capture metadata before retaining it.
+   The DEBUG harness has no request counter or fake transport event; do not cite
+   its boolean state as runtime-observed zero network traffic. The RVI capture
+   complements, rather than replaces, the static reachability and observed-
+   transport controls in the local verification ledger.
+
+   This RVI/`tcpdump` protocol closes the Important worksheet finding from the
+   bounded Terra iOS/documentation review; re-review reported no remaining
+   Critical or Important finding. That review is not certification or an
+   independent security audit, and the worksheet remains physically unrun.
+
+| Guest case | Expected | Actual | Evidence path / SHA-256 | Result |
+| --- | --- | --- | --- | --- |
+| G1 offline launch | Guest Home opens; no professional/auth initialization | `PENDING` | `PENDING` | `NOT RUN` |
+| G2 local workflow | Fixture capture/save/edit/export/package/concept/share preparation completes | `PENDING` | `PENDING` | `NOT RUN` |
+| G3 controlled-network capture | Marked guest window contains no RoomScanStudio hosted/auth DNS, TCP or TLS destination | `PENDING` | `PENDING` | `NOT RUN` |
+| G4 capture positive control | Synthetic owner-controlled local/test-network canary is visible before the guest window | `PENDING` | `PENDING` | `NOT RUN` |
+
+### Face ID, passcode and lifecycle boundary
+
+Keep networking unavailable and use only the DEBUG local professional harness;
+no local biometric result may be treated as server identity or server recent
+authentication. Retain screenshots only after checking that they contain no
+token, Keychain value, domain-state bytes, email or person name. Console output
+must pass the same secret/privacy canary scan.
+
+| Case | Physical setup and action | Required observation | Actual / evidence path / SHA-256 | Result |
+| --- | --- | --- | --- | --- |
+| F1 success + lifecycle | Face ID enrolled/passcode on; unlock, background, foreground | Initial unlock succeeds locally; background clears plaintext/local proof; foreground requires fresh unlock | `PENDING` | `NOT RUN` |
+| F2 cancellation | Cancel the system prompt | Bounded cancellation; surface remains locked; no token/domain state in UI or log | `PENDING` | `NOT RUN` |
+| F3 nonmatch/failure | Use the owner-approved nonmatching-face procedure | Failure is bounded and fail-closed; no server recent-auth state appears | `PENDING` | `NOT RUN` |
+| F4 lockout + passcode fallback | On the dedicated test device, use the approved lockout procedure, then system fallback; also cancel/fail fallback | Passcode fallback succeeds only through LocalAuthentication; cancel/failure remains locked and non-destructive | `PENDING` | `NOT RUN` |
+| F5 no-passcode | Use a separately controlled empty device with no passcode | Unlock and sensitive confirmation fail closed without crash/bypass/destructive effect | `PENDING` | `NOT RUN` |
+| F6 time/sensitive-action gates | After one successful local unlock, probe a non-sensitive unlock at 299 seconds and again at 301 seconds; request every sensitive/destructive action both before and after the ceiling | The 299-second non-sensitive control remains valid; the 301-second control is expired and relocked. Every sensitive/destructive action prompts a fresh LocalAuthentication evaluation regardless of elapsed time; local proof never satisfies server five-minute reauth | `PENDING` | `NOT RUN` |
+| F7 enrollment/domain change | Change enrollment on the dedicated device, then relaunch/foreground | Stored professional material invalidates or follows the documented recovery; domain-state bytes never leave device/log | `PENDING` | `NOT RUN` |
+| F8 Keychain + actor handoff | Exercise success, cancel, auth failure, background/interaction-not-allowed, item-not-found and locked-device states; then lock and hand to a different authorized tester | Every error is typed/fail-closed; no secret is printed; inherited local authority is rejected by the documented local/server gates | `PENDING` | `NOT RUN` |
+| F9 MainActor handoff | Complete success, cancellation and failure callbacks from LocalAuthentication while the DEBUG UI observes state publication; retain a secret-scanned device console and Main Thread Checker evidence | Every callback publishes its final UI/result state on MainActor; no off-main UI mutation, race, hang or Main Thread Checker violation occurs | `PENDING` | `NOT RUN` |
+
+### Closeout
+
+- Secret/privacy canary scan command and result: `PENDING`
+- Evidence-manifest command and SHA-256: `PENDING`
+- Synthetic app state removed: `PENDING`
+- Test endpoint/credential check remains empty: `PENDING`
+- DEBUG Keychain cleanup: explicitly delete service `com.roomscanstudio.professional.magic-link`, account `pending-v3`, then prove the same query returns item-not-found: `PENDING`
+- Passcode/enrollment restored on dedicated device: `PENDING`
+- Exceptions, failures and rerun owner: `PENDING`
+
+Until every required row has an actual result and retained digest, formal status
+is physical Face ID/passcode **pending owner worksheet**. This worksheet does
+not authorize a provider call, real data, production provisioning, a commit,
+push, PR or deployment, and it is not release approval.

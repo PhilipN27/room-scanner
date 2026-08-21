@@ -641,6 +641,25 @@ final class RoomAIRedesignProductionIntegrationTests: XCTestCase {
         try await waitUntil(condition: { !model.concepts.isEmpty })
         let conceptID = try XCTUnwrap(model.concepts.first?.id)
 
+        model.archiveConcept(conceptID)
+        try await waitUntil(condition: {
+            model.concepts.first(where: { $0.id == conceptID })?.archived == true
+        })
+        model.unarchiveConcept(conceptID)
+        try await waitUntil(condition: {
+            model.concepts.first(where: { $0.id == conceptID })?.archived == false
+        })
+        let deletableID = try XCTUnwrap(
+            model.concepts.first(where: { $0.id != conceptID })?.id,
+            "The earlier packaged Concept fixture must remain available for mandatory deletion."
+        )
+        let conceptCountBeforeDelete = model.concepts.count
+        model.deleteConcept(deletableID)
+        try await waitUntil(condition: {
+            model.concepts.count == conceptCountBeforeDelete - 1
+                && !model.concepts.contains(where: { $0.id == deletableID })
+        })
+
         var editor = try RoomRevisionEditor(payload: head.payload)
         let editedElementID = try XCTUnwrap(
             head.payload.semanticSnapshot.objectElements.first?.id

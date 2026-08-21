@@ -18,6 +18,7 @@ struct HomeView: View {
     @ObservedObject private var libraryController: RoomLibraryController
     @State private var path: [Route] = []
     @State private var showingCloudBackup = false
+    @State private var showingProfessionalAccess = false
     @State private var capabilityDetailExpanded = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -100,6 +101,20 @@ struct HomeView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingProfessionalAccess = true
+                        Task {
+                            await environment.professionalEnvironmentFactory
+                                .enterProfessionalWorkspace()
+                        }
+                    } label: {
+                        Image(systemName: "person.badge.key")
+                    }
+                    .accessibilityLabel("Professional workspace")
+                    .accessibilityHint("Explicitly checks professional availability. Guest and local work remain independent.")
+                    .accessibilityIdentifier("home.professionalWorkspace")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingCloudBackup = true
@@ -129,6 +144,11 @@ struct HomeView: View {
             RoomCloudBackupSettingsView(
                 coordinator: environment.cloudBackupCoordinator,
                 privacyPolicyURL: environment.privacyPolicyURL
+            )
+        }
+        .sheet(isPresented: $showingProfessionalAccess) {
+            ProfessionalAccessView(
+                factory: environment.professionalEnvironmentFactory
             )
         }
     }

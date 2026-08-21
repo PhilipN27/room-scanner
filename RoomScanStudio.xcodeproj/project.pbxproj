@@ -105,6 +105,17 @@
 		530000000000000000000033 /* RoomAIRedesignModelFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000034 /* RoomAIRedesignModelFactory.swift */; };
 		530000000000000000000035 /* RoomAIRedesignHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000036 /* RoomAIRedesignHostView.swift */; };
 		530000000000000000000037 /* RoomAIRedesignProductionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */; };
+		540000000000000000000001 /* ProfessionalBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000002 /* ProfessionalBoundaryTests.swift */; };
+		540000000000000000000003 /* ProfessionalEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000010 /* ProfessionalEnvironment.swift */; };
+		540000000000000000000004 /* DeviceAuthenticationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000011 /* DeviceAuthenticationCoordinator.swift */; };
+		540000000000000000000005 /* AppleDeviceAuthenticationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000012 /* AppleDeviceAuthenticationContext.swift */; };
+		540000000000000000000006 /* ProfessionalKeychainAccessPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000013 /* ProfessionalKeychainAccessPolicy.swift */; };
+		540000000000000000000007 /* ProfessionalAccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000014 /* ProfessionalAccessView.swift */; };
+		540000000000000000000008 /* ProfessionalTransportBoundary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000015 /* ProfessionalTransportBoundary.swift */; };
+		540000000000000000000009 /* ProfessionalMagicLinkCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000016 /* ProfessionalMagicLinkCompletion.swift */; };
+		54000000000000000000000A /* MagicLinkCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000017 /* MagicLinkCompletionTests.swift */; };
+		54000000000000000000000B /* ProfessionalMagicLinkKeychainAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000018 /* ProfessionalMagicLinkKeychainAdapter.swift */; };
+		54000000000000000000000C /* PhysicalProfessionalEvidenceHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000019 /* PhysicalProfessionalEvidenceHarness.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -214,6 +225,17 @@
 		530000000000000000000034 /* RoomAIRedesignModelFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignModelFactory.swift; sourceTree = "<group>"; };
 		530000000000000000000036 /* RoomAIRedesignHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignHostView.swift; sourceTree = "<group>"; };
 		530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIRedesignProductionIntegrationTests.swift; sourceTree = "<group>"; };
+		540000000000000000000002 /* ProfessionalBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalBoundaryTests.swift; sourceTree = "<group>"; };
+		540000000000000000000010 /* ProfessionalEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalEnvironment.swift; sourceTree = "<group>"; };
+		540000000000000000000011 /* DeviceAuthenticationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAuthenticationCoordinator.swift; sourceTree = "<group>"; };
+		540000000000000000000012 /* AppleDeviceAuthenticationContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleDeviceAuthenticationContext.swift; sourceTree = "<group>"; };
+		540000000000000000000013 /* ProfessionalKeychainAccessPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalKeychainAccessPolicy.swift; sourceTree = "<group>"; };
+		540000000000000000000014 /* ProfessionalAccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalAccessView.swift; sourceTree = "<group>"; };
+		540000000000000000000015 /* ProfessionalTransportBoundary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalTransportBoundary.swift; sourceTree = "<group>"; };
+		540000000000000000000016 /* ProfessionalMagicLinkCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalMagicLinkCompletion.swift; sourceTree = "<group>"; };
+		540000000000000000000017 /* MagicLinkCompletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicLinkCompletionTests.swift; sourceTree = "<group>"; };
+		540000000000000000000018 /* ProfessionalMagicLinkKeychainAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalMagicLinkKeychainAdapter.swift; sourceTree = "<group>"; };
+		540000000000000000000019 /* PhysicalProfessionalEvidenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhysicalProfessionalEvidenceHarness.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -250,6 +272,7 @@
 		A10000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
+				540000000000000000000101 /* RoomScanStudio/Professional */,
 				A30000000000000000000003 /* RoomScanStudio/App */,
 				A30000000000000000000004 /* RoomScanStudio/Features */,
 				B30000000000000000000001 /* RoomScanStudio/Infrastructure */,
@@ -292,6 +315,7 @@
 				ABCE00000000000000000001 /* RoomViewer */,
 				ABCE00000000000000000002 /* RoomEditor */,
 				530000000000000000000030 /* AIRedesign */,
+				540000000000000000000103 /* Professional */,
 			);
 			path = RoomScanStudio/Features;
 			sourceTree = "<group>";
@@ -377,6 +401,8 @@
 				530000000000000000000015 /* RoomAIRoomPackageServiceTests.swift */,
 				530000000000000000000021 /* RoomConceptImportCoordinatorTests.swift */,
 				530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */,
+				540000000000000000000002 /* ProfessionalBoundaryTests.swift */,
+				540000000000000000000017 /* MagicLinkCompletionTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -429,6 +455,7 @@
 				ED3000000000000000000001 /* Export */,
 				F62000000000000000000001 /* CloudBackup */,
 				530000000000000000000005 /* AIRedesign */,
+				540000000000000000000102 /* DeviceAuthentication */,
 			);
 			path = RoomScanStudio/Infrastructure;
 			sourceTree = "<group>";
@@ -465,6 +492,36 @@
 				530000000000000000000036 /* RoomAIRedesignHostView.swift */,
 			);
 			path = AIRedesign;
+			sourceTree = "<group>";
+		};
+		540000000000000000000101 /* RoomScanStudio/Professional */ = {
+			isa = PBXGroup;
+			children = (
+				540000000000000000000010 /* ProfessionalEnvironment.swift */,
+				540000000000000000000015 /* ProfessionalTransportBoundary.swift */,
+				540000000000000000000016 /* ProfessionalMagicLinkCompletion.swift */,
+				540000000000000000000018 /* ProfessionalMagicLinkKeychainAdapter.swift */,
+				540000000000000000000019 /* PhysicalProfessionalEvidenceHarness.swift */,
+			);
+			path = RoomScanStudio/Professional;
+			sourceTree = "<group>";
+		};
+		540000000000000000000102 /* DeviceAuthentication */ = {
+			isa = PBXGroup;
+			children = (
+				540000000000000000000011 /* DeviceAuthenticationCoordinator.swift */,
+				540000000000000000000012 /* AppleDeviceAuthenticationContext.swift */,
+				540000000000000000000013 /* ProfessionalKeychainAccessPolicy.swift */,
+			);
+			path = DeviceAuthentication;
+			sourceTree = "<group>";
+		};
+		540000000000000000000103 /* Professional */ = {
+			isa = PBXGroup;
+			children = (
+				540000000000000000000014 /* ProfessionalAccessView.swift */,
+			);
+			path = Professional;
 			sourceTree = "<group>";
 		};
 		B30000000000000000000002 /* Persistence */ = {
@@ -762,6 +819,15 @@
 				530000000000000000000031 /* RoomAIRedesignProductionModel.swift in Sources */,
 				530000000000000000000033 /* RoomAIRedesignModelFactory.swift in Sources */,
 				530000000000000000000035 /* RoomAIRedesignHostView.swift in Sources */,
+				540000000000000000000003 /* ProfessionalEnvironment.swift in Sources */,
+				540000000000000000000004 /* DeviceAuthenticationCoordinator.swift in Sources */,
+				540000000000000000000005 /* AppleDeviceAuthenticationContext.swift in Sources */,
+				540000000000000000000006 /* ProfessionalKeychainAccessPolicy.swift in Sources */,
+				540000000000000000000007 /* ProfessionalAccessView.swift in Sources */,
+				540000000000000000000008 /* ProfessionalTransportBoundary.swift in Sources */,
+				540000000000000000000009 /* ProfessionalMagicLinkCompletion.swift in Sources */,
+				54000000000000000000000B /* ProfessionalMagicLinkKeychainAdapter.swift in Sources */,
+				54000000000000000000000C /* PhysicalProfessionalEvidenceHarness.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -786,6 +852,8 @@
 				530000000000000000000014 /* RoomAIRoomPackageServiceTests.swift in Sources */,
 				530000000000000000000020 /* RoomConceptImportCoordinatorTests.swift in Sources */,
 				530000000000000000000037 /* RoomAIRedesignProductionIntegrationTests.swift in Sources */,
+				540000000000000000000001 /* ProfessionalBoundaryTests.swift in Sources */,
+				54000000000000000000000A /* MagicLinkCompletionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

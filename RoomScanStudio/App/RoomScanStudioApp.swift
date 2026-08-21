@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct RoomScanStudioApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var environment: AppEnvironment
     @StateObject private var slice3FixtureModel: RoomAIRedesignScreenFixtureModel
     private let showsSlice3Fixture: Bool
@@ -19,11 +20,25 @@ struct RoomScanStudioApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if showsSlice3Fixture {
-                RoomAIRedesignView(model: slice3FixtureModel)
-                    .preferredColorScheme(slice3FixtureColorScheme)
-            } else {
-                HomeView(environment: environment)
+            Group {
+                if showsSlice3Fixture {
+                    RoomAIRedesignView(model: slice3FixtureModel)
+                        .preferredColorScheme(slice3FixtureColorScheme)
+                } else {
+                    HomeView(environment: environment)
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    environment.handleProfessionalLifecycle(.foreground)
+                case .inactive:
+                    environment.handleProfessionalLifecycle(.inactive)
+                case .background:
+                    environment.handleProfessionalLifecycle(.background)
+                @unknown default:
+                    environment.handleProfessionalLifecycle(.inactive)
+                }
             }
         }
     }

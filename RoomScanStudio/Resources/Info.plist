@@ -28,6 +28,8 @@
     <true/>
     <key>NSCameraUsageDescription</key>
     <string>RoomScanStudio requests camera access only after you choose Prepare capture for a room scan.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>RoomScanStudio uses Face ID or your device passcode only when you unlock a professional workspace or confirm a sensitive professional action.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>RoomScanStudio can attach your current location to a room only when you choose Request GPS.</string>
     <key>RoomScanStudioCloudBackupContainerIdentifier</key>

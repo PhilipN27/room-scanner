@@ -1,0 +1,45 @@
+{
+  "name": "@roomscan/hosted-infrastructure",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.15.0"
+  },
+  "scripts": {
+    "generate:migration-manifest": "node scripts/generate-migration-manifest.mjs",
+    "build:service": "npm --prefix .. run build",
+    "build": "npm run generate:migration-manifest && tsc -p tsconfig.build.json",
+    "build:test": "npm run generate:migration-manifest && tsc -p tsconfig.test.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/run-offline-verify.mjs",
+    "test:local": "npm run build && npm run build:test && node --test .test-dist/test/*.test.js",
+    "test:mutations": "npm run build:test && node .test-dist/test/mutations.js",
+    "synth": "npm run build && cdk synth --quiet",
+    "synth:local": "npm run synth",
+    "inspect:synth": "node scripts/inspect-synth.mjs",
+    "verify": "node scripts/run-offline-verify.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "3.1113.0",
+    "@aws-sdk/client-cloudtrail": "3.1113.0",
+    "@aws-sdk/client-cloudwatch": "3.1113.0",
+    "@aws-sdk/client-rds-data": "3.1113.0",
+    "@aws-sdk/client-s3": "3.1113.0",
+    "@aws-sdk/client-secrets-manager": "3.1113.0",
+    "@aws-sdk/client-sesv2": "3.1113.0",
+    "@aws-sdk/client-sqs": "3.1113.0",
+    "@aws-sdk/s3-request-presigner": "3.1113.0",
+    "aws-cdk-lib": "2.265.0",
+    "constructs": "10.8.1",
+    "pg": "8.16.3",
+    "roomscan-studio-hosted-service": "file:.."
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/pg": "8.20.0",
+    "aws-cdk": "2.1137.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

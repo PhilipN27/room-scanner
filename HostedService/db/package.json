@@ -1,0 +1,53 @@
+{
+  "name": "@roomscan/hosted-db",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node test/runtime-rollback-quarantine.mjs && node test/dirty-roles-red.mjs && node test/migration-concurrency.mjs && node test/boolean-guards.mjs && node test/reducer-sql-contracts.mjs && node test/reducer-null-arguments.mjs && node test/auth-schema-red.mjs && node test/auth-resolver-red.mjs && node test/auth-claims-red.mjs && node test/auth-identity-outbox-red.mjs && node test/auth-session-transitions.mjs && node test/auth-magic-policy-lock.mjs && node test/auth-catalog-secrets.mjs && node test/auth-null-arguments.mjs && node test/integration-0007-role-security.mjs && node test/integration-0007-membership-flags.mjs && node test/integration-0007-session-scope.mjs && node test/integration-0007-quota-periods.mjs && node test/integration-0007-quota-overview.mjs && node test/integration-0007-email-delivery-lane.mjs && node test/integration-0007-provider-audit-lanes.mjs && node test/integration-0007-stripe-outbox.mjs && node test/integration-0007-stripe-binding-scope.mjs && node test/integration-0007-membership-composites.mjs && node test/integration-0007-invitation-identity-races.mjs && node test/integration-0007-auth-capabilities.mjs && node test/integration-0007-apple-identity-races.mjs && node test/integration-0007-identity-mutation-races.mjs && node test/integration-0007-auth-composites.mjs && node test/integration-0007-magic-completion-v3.mjs && node test/integration-0007-read-export-capabilities.mjs && node test/integration-0007-null-contracts.mjs && node test/integration-0007-catalog.mjs && node test/staged-upgrade.mjs && node test/workspace-bootstrap-red.mjs && node test/invitation-states.mjs && node test/integration.mjs && node test/reducer-context.mjs && node test/quota-red.mjs && node test/stripe-red.mjs && node test/invitation-principal-red.mjs && node test/mutations.mjs && node test/mutations-0007.mjs",
+    "test:runtime-rollback-quarantine": "node test/runtime-rollback-quarantine.mjs",
+    "test:red:dirty-roles": "node test/dirty-roles-red.mjs",
+    "test:red:workspace-bootstrap": "node test/workspace-bootstrap-red.mjs",
+    "test:migration-concurrency": "node test/migration-concurrency.mjs",
+    "test:boolean-guards": "node test/boolean-guards.mjs",
+    "test:reducer-sql-contracts": "node test/reducer-sql-contracts.mjs",
+    "test:reducer-null-arguments": "node test/reducer-null-arguments.mjs",
+    "test:auth-schema": "node test/auth-schema-red.mjs",
+    "test:auth-resolver": "node test/auth-resolver-red.mjs",
+    "test:auth-claims": "node test/auth-claims-red.mjs",
+    "test:auth-identity-outbox": "node test/auth-identity-outbox-red.mjs",
+    "test:auth-session-transitions": "node test/auth-session-transitions.mjs",
+    "test:auth-magic-policy-lock": "node test/auth-magic-policy-lock.mjs",
+    "test:auth-catalog-secrets": "node test/auth-catalog-secrets.mjs",
+    "test:auth-null-arguments": "node test/auth-null-arguments.mjs",
+    "test:integration-0007-role-security": "node test/integration-0007-role-security.mjs",
+    "test:integration-0007-membership-flags": "node test/integration-0007-membership-flags.mjs",
+    "test:integration-0007-quota-periods": "node test/integration-0007-quota-periods.mjs",
+    "test:integration-0007-quota-overview": "node test/integration-0007-quota-overview.mjs",
+    "test:integration-0007-email-delivery": "node test/integration-0007-email-delivery-lane.mjs",
+    "test:integration-0007-provider-audit-lanes": "node test/integration-0007-provider-audit-lanes.mjs",
+    "test:integration-0007-stripe-outbox": "node test/integration-0007-stripe-outbox.mjs",
+    "test:integration-0007-stripe-binding-scope": "node test/integration-0007-stripe-binding-scope.mjs",
+    "test:integration-0007-apple-identity-races": "node test/integration-0007-apple-identity-races.mjs",
+    "test:integration-0007-invitation-identity-races": "node test/integration-0007-invitation-identity-races.mjs",
+    "test:integration-0007-identity-mutation-races": "node test/integration-0007-identity-mutation-races.mjs",
+    "test:integration-0007-session-scope": "node test/integration-0007-session-scope.mjs",
+    "test:integration-0007-membership-composites": "node test/integration-0007-membership-composites.mjs",
+    "test:integration-0007-auth-capabilities": "node test/integration-0007-auth-capabilities.mjs",
+    "test:integration-0007-auth-composites": "node test/integration-0007-auth-composites.mjs",
+    "test:integration-0007-magic-completion-v3": "node test/integration-0007-magic-completion-v3.mjs",
+    "test:integration-0007-read-export-capabilities": "node test/integration-0007-read-export-capabilities.mjs",
+    "test:integration-0007-null-contracts": "node test/integration-0007-null-contracts.mjs",
+    "test:integration-0007-catalog": "node test/integration-0007-catalog.mjs",
+    "test:integration": "node test/integration.mjs",
+    "test:mutations": "node test/mutations.mjs",
+    "test:mutations-0007": "node test/mutations-0007.mjs",
+    "test:red:schema": "node test/schema-red.mjs"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  }
+}

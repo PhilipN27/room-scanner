@@ -1,9 +1,9 @@
 # AI redesign platform threat model
 
-- Version: 1.1
-- Date: 2026-08-17
-- Applies to: approved RoomScanStudio AI redesign platform design and local
-  Slice 0–3 contracts/implementation
+- Version: 1.2
+- Date: 2026-08-19
+- Applies to: approved RoomScanStudio AI redesign platform design, local Slice
+  0–3 boundaries, and the Slice 4 optional professional-service foundation
 - Does not assert: production deployment, penetration testing, legal
   compliance, physical-device behavior, or vendor configuration
 
@@ -84,6 +84,41 @@ lease cleanup. These local controls do not establish physical Share Sheet/import
 behavior, provider behavior/terms, or any future hosted
 authorization/deployment control.
 
+## Slice 4 implemented guards and evidence limits
+
+Slice 4 local auth/policy/adapter/iOS lanes now include app-owned opaque
+sessions and
+rotation/reuse detection; verified-email and Apple state/nonce/S256/replay
+boundaries; deliberate identity linking; the literal 54-action Owner/Admin/
+Editor/Viewer matrix; recent-server-authentication gates; versioned
+membership, five-metric quota and three operational-flag reducers; Stripe raw-
+body/idempotent reconciliation; a sealed 14-operation HTTP/OpenAPI manifest;
+privacy-allowlisted logging; and a default-off iOS professional/Face ID
+coordinator. Guest tests and static controls reject eager hosted/auth
+construction and hosted traffic from local capture/edit/export/AI/Concept/
+Share-Sheet preparation.
+
+The database lane uses real disposable PostgreSQL 16 roles and pooled
+connections. Accepted `0001`–`0006` evidence covers forced RLS, non-owner/non-
+`BYPASSRLS` roles, cross-tenant substitution with positive same-tenant
+controls, transaction-local context and reused-connection clearing. Forward
+`0007` introduces purpose-specific runtime roles and digest/proof-derived
+capabilities. The dated closure addendum below records the subsequently
+completed whole-local acceptance and concrete service/IaC composition.
+
+The provider-adapter lane is locally green under Node 24, including explicit
+UTC `timestamptz` conversion, scanner-safe GET → deliberate POST parity with
+server-derived clicking context, exact Stripe content type/raw bytes, and the
+Apple API → Cognito challenge → atomic app-session split. These are injected-
+fake and built-artifact controls, not evidence from API Gateway, Data API,
+Cognito, Apple, SES, S3, Stripe, KMS, CloudTrail, or deployed alarms.
+
+Remaining live gates are explicit. Local implementation and disposable
+PostgreSQL integration are complete; non-production provider/infrastructure
+evidence and physical Face ID evidence are incomplete; all
+production provisioning/release gates remain pending. Immediate portal-link
+revocation is Slice 6. Full deletion/restore/backup lifecycle is Slice 7.
+
 ## Threats, controls, and proof obligations
 
 | Threat | Abuse case and impact | Required controls | Proof before release |
@@ -95,7 +130,7 @@ authorization/deployment control.
 | PIN guessing or disclosure | A short PIN is brute-forced online, logged, reused, or mistaken for encryption. | PIN is optional second gate, never the bearer secret or encryption key; memory-hard salted verifier; attempt throttling by link/account/network risk; uniform errors; lock/cooldown without enabling denial-of-service; never log or return PIN. | Controlled-clock brute-force/rate-limit suite, correct-PIN control, log scan, reset/revoke test, and distributed-attempt review. |
 | Residual signed-asset access | Portal is revoked but an issued storage URL still works. | Do not equate URL expiry with immediate revocation. Use revocation-aware authorization for each protected asset request; short bearer lifetime is defense in depth. Never expose private bucket keys. | Already-established session and asset request fail immediately after revoke. If any issued URL remains usable, publication does not meet the approved guarantee. |
 | Session theft/replay | A stolen refresh/access token mutates projects or performs a destructive action after logout. | Secure OS/browser storage, TLS, short access tokens, refresh rotation/reuse detection, server-side session family revocation, recent reauthentication for sensitive actions, CSRF defenses for cookie clients, no tokens in URLs/logs. | Stolen-old-token, rotated-refresh replay, logout, removed-member, expiry, CSRF, and recent-reauth tests with valid-session controls. |
-| Magic-link interception, replay, scanner consumption, or landing-page leakage | Forwarded mail or an automated scanner signs in; errors enumerate accounts; the token enters access logs, referrers, history, analytics, subresource requests, or crash reports. | Random single-use token stored hashed; short TTL; atomic consumption; uniform request response; per-address/network rate limits; scanner-safe GET confirmation followed by deliberate POST; universal-link state binding; no third-party landing resources; `Referrer-Policy: no-referrer`; request/log/crash redaction; history replacement after a fragment/opaque transaction exchange where applicable; revoke prior outstanding tokens as policy requires. | Expiry, replay, concurrent consume, scanner GET, cross-device, enumeration, rate-limit, and Apple relay email tests. A token canary appears in no access/error/analytics log, referrer, crash payload, third-party request, or retained browser history, while deliberate POST consumption has a valid control. |
+| Magic-link interception, replay, scanner consumption, login CSRF, or landing-page leakage | Forwarded mail or an automated scanner signs in; an attacker requests a victim address and claims a blindly clicked link; errors enumerate accounts; or a token enters logs, referrers, history, analytics, subresources, or crash reports. | Random single-use token stored hashed; short TTL; atomic confirmation and redemption; uniform issue response shape; app-held S256 verifier plus completion ID; separate eight-character transfer code shown only after a trusted browser submit; bounded completion/network failures; no app token in the browser; no third-party landing resources; `Referrer-Policy: no-referrer`; request/log/crash redaction; and fragment history replacement before interaction. Exact lost-response replay returns only a still-live original session/receipt. | Expiry, replay, concurrent confirmation/redemption, JS-capable scanner GET, synthetic submit, blind-victim request, cross-device confirmation, swapped purpose/verifier/code, enumeration, rate-limit, and relay-email cases. Canary controls prove no token/verifier/code in logs, referrer, crash payload, third-party request, or retained history, while a real submit plus app redemption succeeds. |
 | Sign in with Apple token substitution or replay | A client supplies a token/code for another app, reuses a code or nonce, forges an email claim, or exploits stale signing keys/state to become the wrong canonical principal. | Server-side authorization-code exchange; validate Apple issuer, audience/client, signature and rotating key chain, timestamps, nonce, state, and PKCE; single-use code/nonce replay store; derive identity claims only from the validated response; bind the resulting provider subject to an app-owned canonical principal. | Wrong issuer/audience/client, bad signature, stale/future token, reused code/nonce, missing/mismatched state or PKCE, forged client email, and key-rotation cases fail; a valid control succeeds. |
 | Identity-link takeover | Attacker with an email matching an Apple relay/changed address captures another principal. | App-owned canonical principal; never link solely on email equality; recent independent auth of both identities; explicit confirmation; reject already-owned provider identity; audit and notify linking/unlinking. | Matching-email negative cases, relay address, provider reassignment, session theft, one-side-only auth, duplicate link, and valid dual-verification control. |
 | Malicious or cross-tenant upload | Attacker uploads executable/polyglot content, lies about digest/type/tenant, overwrites an object, or publishes before validation. | Server allocates immutable quarantine key and limits; checksum/length/content-type agreement; malware/content policy where applicable; parse with bounded real validator; tenant/revision binding; server-chosen active key; promote only after closure succeeds; no overwrite. | Wrong digest/length/type/tenant/revision, duplicate key, interrupted upload, polyglot, valid control, and inspection that quarantine never serves as active/public. |
@@ -159,3 +194,34 @@ flow, publication path, retention promise, or new outbound artifact class is
 proposed. A schema addition is not automatically safe because it is additive:
 new outbound fields require privacy classification, snapshot/AI-package policy,
 negative fixtures, and a positive detector control.
+
+## 2026-08-21 Slice 4 control-evidence addendum
+
+Current local proof closes the disposable PostgreSQL control lane, not the live
+threats above. Node 24.15.0 service typecheck/build and 277/277 tests passed;
+route v3 contains 19 routes and accepted composition proof records
+pre-resolution context clearing. The 43-command PostgreSQL 16 matrix passed
+53/53 integration cases, 14/14 legacy mutations and 46/46 `0007` mutations for
+seven least-privilege runtime roles. Offline infrastructure passed 104/104 and
+17/17 mutations; inspection found nine exact assets across 28 files, complete
+migration/VPC/IAM roots, no orphan/stub markers and no Slice 7 resources.
+
+The hosted umbrella, Core and full iPhone Simulator proof are recorded. Bounded
+Terra service/infrastructure and iOS/documentation reviews ended with no
+Critical or Important finding after the physical worksheet's RVI/tcpdump fix
+and re-review; they are neither certification nor an independent security
+audit. Complete iPhone/iPad schemes, focused 32/8 selectors, artifact
+inspection and scoped static controls now close local implementation; the
+controller retains only a final diff/docs/cleanup handoff audit. Live API
+Gateway/Data API/IAM/KMS/S3/Cognito/Apple/SES/Stripe/
+CloudTrail/alarm claims need an authorized non-production evidence packet.
+Face ID/passcode behavior needs a physical owner worksheet. Production
+provisioning, drills, disclosures and release approval remain pending by
+design. No external action, real data, Slice 5 implementation, credential,
+commit, push, PR or deployment occurred; this is not production readiness.
+
+The post-closure IAM hardening removed unconditional Lambda-role `kms:Decrypt`
+on the SecretsKey. An exact Secrets Manager `ViaService` + `SecretARN` synth
+oracle and mutation now enforce the intended decrypt path. The focused control
+was observed RED before the fix and GREEN after restoration; this remains
+offline evidence and does not close live IAM/KMS evaluation.

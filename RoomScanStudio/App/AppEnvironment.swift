@@ -14,6 +14,7 @@ final class AppEnvironment: ObservableObject {
     let cloudBackupCoordinator: RoomCloudBackupCoordinator
     let meshColoringCoordinator: RoomMeshColoringJobCoordinator
     let meshNotificationRouter: RoomMeshNotificationRouter
+    let professionalEnvironmentFactory: ProfessionalEnvironmentFactory
     let privacyPolicyURL: URL?
     @Published private(set) var bootstrapMessage: String?
 
@@ -25,7 +26,19 @@ final class AppEnvironment: ObservableObject {
     private let attemptGenerator: any RoomCaptureAttemptIDGenerating
     private let captureCoordinatorLease = RoomCaptureCoordinatorLease()
 
-    init(arguments: [String] = ProcessInfo.processInfo.arguments) {
+    init(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        professionalEnvironmentFactory: ProfessionalEnvironmentFactory? = nil
+    ) {
+#if DEBUG
+        self.professionalEnvironmentFactory = professionalEnvironmentFactory
+            ?? PhysicalProfessionalEvidenceHarness.factoryForCurrentBuild(
+                arguments: arguments
+            )
+#else
+        self.professionalEnvironmentFactory = professionalEnvironmentFactory
+            ?? .defaultOff()
+#endif
         let rootURL = RoomProjectRootResolver.resolve(
             arguments: arguments,
             fileManager: .default
@@ -290,6 +303,10 @@ final class AppEnvironment: ObservableObject {
         bootstrapMessage = bootstrapMessages.isEmpty
             ? nil
             : bootstrapMessages.joined(separator: " ")
+    }
+
+    func handleProfessionalLifecycle(_ event: ProfessionalLifecycleEvent) {
+        professionalEnvironmentFactory.handleLifecycle(event)
     }
 
     private static func simulatedQualityScenario(

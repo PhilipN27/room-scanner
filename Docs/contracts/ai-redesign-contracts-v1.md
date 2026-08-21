@@ -1,7 +1,8 @@
 # AI redesign contracts v1
 
-- Status: Slice 0–3 local contracts; hosted/provider boundaries remain future
-- Date: 2026-08-17
+- Status: Slice 0–3 local package/resource contracts remain authoritative;
+  Slice 4 professional-service contracts are documented separately
+- Date: 2026-08-19
 - Executable definitions:
   `RoomScanCore/Sources/RoomScanCore/RoomRedesignContracts.swift`,
   `RoomAIArtifactSelection.swift`, `RoomAIRoomPackageBuilder.swift`,
@@ -11,8 +12,12 @@
 - Canonical fixtures:
   `RoomScanCore/Tests/RoomScanCoreTests/Fixtures/RedesignContracts`
 
-These contracts describe implemented local Slice 3 boundaries and future
-hosted boundaries without adding a server path. The redesign interchange
+These contracts originally described the implemented local Slice 3 boundary
+and provider-neutral shapes before the optional professional service existed.
+Slice 4 does not revise their bytes or compatibility rules; its app-owned API,
+identity, authorization, quota, and provider-adapter contract is
+[`ai-redesign-service-contracts-v1.md`](ai-redesign-service-contracts-v1.md).
+The redesign interchange
 documents are vendor-neutral public `Encodable` models with one fail-closed data
 validator; their top-level models deliberately do not expose `Decodable`. The
 revision-embedded quality report is `Codable` for legacy package compatibility,
@@ -162,6 +167,13 @@ credential, object-store credential, bearer link secret, or authorization
 decision. The hosted API derives authorization from the authenticated
 canonical principal and server-owned membership, not from this document's
 workspace ID alone.
+
+Slice 4 implements only the professional identity/session/workspace/
+membership/subscription/quota foundation described in the separate service
+contract. It does not implement this document's working-project sync or portal
+snapshot product behavior. Vendor types, internal database UUIDs, provider
+tokens, ARNs, presigned URLs, and database rows remain outside both public
+contract families.
 
 ## Artifact disposition
 

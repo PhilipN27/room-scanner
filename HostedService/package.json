@@ -1,0 +1,25 @@
+{
+  "name": "roomscan-studio-hosted-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./adapters": "./dist/service/src/adapters/index.js",
+    "./composition": "./dist/service/src/composition/index.js",
+    "./contracts": "./dist/service/src/contracts/index.js",
+    "./handlers": "./dist/service/src/handlers/index.js",
+    "./persistence": "./dist/service/src/persistence/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/service/test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3"
+  }
+}

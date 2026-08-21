@@ -1,0 +1,44 @@
+{
+  "schema": "roomscan-forward-migration-manifest-v1",
+  "migrationRunner": {
+    "name": "migrate.mjs",
+    "checksumSha256": "4997808a9a8cd13937e6bb7f6f72a414250acde822c651c1f25ebc433da47acf"
+  },
+  "migrations": [
+    {
+      "version": "0001",
+      "name": "0001_roles_and_global.up.sql",
+      "checksumSha256": "9b4fbd3e2e07c327dcfe226a8de118b789d2ee173c85a2e537dd3c128967264b"
+    },
+    {
+      "version": "0002",
+      "name": "0002_tenant_core.up.sql",
+      "checksumSha256": "ad468112d8705b4f96cc9cb4c2f2d4bc01214b01b11bb30b057a9e4ab6dc3187"
+    },
+    {
+      "version": "0003",
+      "name": "0003_quota.up.sql",
+      "checksumSha256": "0875c1ac73b6e25207dcf885ef5f8df7ee912d815385519cf7a6b796a9ea0d6a"
+    },
+    {
+      "version": "0004",
+      "name": "0004_stripe.up.sql",
+      "checksumSha256": "82c11e83e588b964a1dd07c05d1d092f040fe940c92307a7b93cf69b5f583fb8"
+    },
+    {
+      "version": "0005",
+      "name": "0005_hardened_reducers.up.sql",
+      "checksumSha256": "3546e39eb8b8e9685a0c48f418dbcf3b6817666e232ecd2b9d0b412be75f7f29"
+    },
+    {
+      "version": "0006",
+      "name": "0006_auth_persistence.up.sql",
+      "checksumSha256": "1227036e53acf3709ccb4fa472e2b40a796eb7dcd8083a40304453be3b0e4250"
+    },
+    {
+      "version": "0007",
+      "name": "0007_policy_billing_integration.up.sql",
+      "checksumSha256": "c2a3af7db980d3d32933f008c17da6b68e8bdf94408e10c8bc694c5968841030"
+    }
+  ]
+}

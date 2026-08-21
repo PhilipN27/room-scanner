@@ -1449,3 +1449,443 @@ lease-cleanup behavior remain unverified. All physical-iPad checks remain
 waived and unverified. Current external-provider behavior, privacy/account
 terms, instruction following, and output quality are unverified. Slice 4 and
 later checklists remain unchecked.
+
+## 2026-08-19 — Slice 4 professional-service documentation checkpoint
+
+Slice 4 introduces the optional/default-off professional-service foundation;
+it does not add Slice 5 project synchronization, Slice 6 portal/publication
+product behavior, or Slice 7 production lifecycle/release behavior. The
+dedicated evidence ledger is
+`Docs/evidence/2026-08-19-ai-redesign-slice-4-verification.md`.
+
+This checkpoint records accepted lane evidence without inventing a whole-slice
+completion result:
+
+1. Task 1 authentication/identity/session domain: 97/97.
+2. Task 5 focused policy/billing: 73/73; the controller's clean pre-final shared
+   service checkpoint was 178/178, superseding the stale 179 count in its
+   original report.
+3. Task 6 provider/API adapters under Node 24.15.0: 35/35 focused and 205/205
+   clean full service, zero failures/suites; typecheck and clean declaration/
+   JavaScript build exited 0. Built evidence proved scanner GET 200 → deliberate
+   POST 200 with server-derived `apigw:artifact-click-1`, missing Stripe content
+   type 400, and 14/14 manifest/OpenAPI parity.
+4. The 32 emitted adapter/handler/contract `.js`/`.d.ts` artifacts have
+   aggregate SHA-256
+   `fca16e9d305ab5f6127516a8f40ef38ab94391f1f7d1e31f770bf073e53f5c30`;
+   serialized OpenAPI was 9,398 bytes. Credential/raw-SQL/later-route scans were
+   clean.
+5. The final compiled-only Cognito mutation bypassed the atomic challenge
+   session-issuance port; both focused controls failed (0/2), and a clean build
+   restored them. Earlier adapter mutations and red→green outputs remain in the
+   Task 6 report.
+6. Accepted PostgreSQL 16.13 `0001`–`0006` evidence records 53/53 integration
+   cases, 166 malformed auth cases, forced RLS/ACL/pool reuse and 14/14 restored
+   auth-persistence mutations. Staged `0007` checkpoints A–D are green, but the
+   frozen full catalog/mutation/integration acceptance is pending.
+7. Offline infrastructure lane: 56/56 tests, 16/16 mutation restorations, 154
+   synthesized resources, 31 outputs and eight inspected Node 24 Lambda assets;
+   no AWS call/deployment.
+8. iOS professional/default-off lane: 26/26 focused Simulator tests plus clean
+   build/artifact inspection. Physical Face ID/passcode remains unverified.
+9. CI/static tools: 12/12 unit tests and guest-network/structured-secret scans
+   passed; final top-level SBOM/artifact outputs remain pending a frozen run.
+
+No AWS, Apple, Cognito, SES, Stripe, DNS, hosting, email or CloudKit account/
+resource was created or changed; no credential was created/rotated; no endpoint
+was deployed; no production/shared database or customer/room/biometric/GPS/
+billing data was used; and no commit, push, PR or merge occurred. The only
+database mutation was the explicitly authorized disposable local PostgreSQL
+role/schema/function test work.
+
+Required status at this checkpoint:
+
+- local implementation: **incomplete pending frozen composition/acceptance**;
+- local PostgreSQL/integration: **incomplete for the whole slice**;
+- non-production provider/infrastructure: **incomplete**;
+- physical Face ID: **incomplete**;
+- production provisioning/release: **pending**.
+
+Rollback disables `professional_sign_in_enabled`,
+`hosted_operations_enabled`, and `publication_enabled`, revokes affected app
+sessions and restores approved immutable Lambda aliases while preserving local
+packages, AI Room Package export, Concept Sets, legacy export and Share Sheet
+behavior. Immediate portal-link revocation remains Slice 6; full deletion/
+restore/backup lifecycle remains Slice 7.
+
+## 2026-08-21 — Slice 4 local closure reconciliation
+
+This dated addendum supersedes the 2026-08-19 *current-state* summary without
+rewriting its historical commands, counts or hashes. It records only results
+supplied by the current controller/authority reviews. Documentation searches
+and diff checks are the only commands run for this addendum itself.
+
+### Current verified local lanes
+
+1. Hosted service used Node 24.15.0. From `HostedService`, the clean sequence
+   `npm run typecheck && npm test && npm run build` passed: typecheck, **277/277
+   tests**, and build. Emitted route inspection found OpenAPI/manifest version
+   `roomscan-slice4-routes-v3` with **19 paths / 19 routes**. Accepted proof
+   records pre-resolution context clearing. No current aggregate service hash
+   is claimed; the final umbrella artifact manifest will provide per-file
+   hashes.
+2. From `HostedService/db`, the exact accepted command was:
+
+   ```sh
+   env PATH=/Users/philipnora/.nvm/versions/node/v24.15.0/bin:/opt/homebrew/opt/postgresql@16/bin:/usr/local/bin:/usr/bin:/bin npm test
+   ```
+
+   It passed all **43 commands**, **53/53** integration cases, **14/14** legacy
+   mutations and **46/46** `0007` mutations. Catalog proof records seven
+   `LOGIN NOINHERIT NOBYPASSRLS` runtime roles and no role-membership/`SET ROLE`
+   authority edges. Every disposable cluster reported no surviving process,
+   removed its temporary root and rejected TCP. The accepted `0007` SHA-256 is
+   `c2a3af7db980d3d32933f008c17da6b68e8bdf94408e10c8bc694c5968841030`.
+3. From `HostedService/infra`, the synthetic-only `npm run verify` lane passed
+   **103/103** tests and **16/16** restored mutations. Artifact inspection found
+   exactly nine manifest assets across **28 files**, complete migration,
+   VPC and IAM roots, no orphan/stub markers, and no Slice 7 resources. No AWS
+   credential or provider call was used.
+
+### Current immutable hashes
+
+| Item | SHA-256 or exact asset ID |
+| --- | --- |
+| synthesized template | `488efce8596d921d95b7e1f2d7200b09c2538f66f63c1d82a1271f8e05464f11` |
+| assets manifest | `281237aa9507d7cde711628d041b471694c4234b36bb7f019ccc69a705c53848` |
+| artifact-inspection evidence | `17c6b87ebc690b26c22d91aaa9bce191d5cb3b12c411e4945d80bb0e0ed10915` |
+| migration asset directory | `asset.1b9fa2385d0bf4ba98694e268c7c852a82e6ec6c3047135191e244d6ffc4798a` |
+| migration operator index | `c32b3118a9a7bf12557bf22888ff5663aed28d6be097d49239044fa85bf7de2c` |
+| migration runner | `4997808a9a8cd13937e6bb7f6f72a414250acde822c651c1f25ebc433da47acf` |
+| migration manifest | `26e9cccd080979b3d57d2f88be6debff7184ab1a61f5d1fedf038fb3997c46c9` |
+| migration CA bundle | `e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3` |
+| migration `0001` | `9b4fbd3e2e07c327dcfe226a8de118b789d2ee173c85a2e537dd3c128967264b` |
+| migration `0002` | `ad468112d8705b4f96cc9cb4c2f2d4bc01214b01b11bb30b057a9e4ab6dc3187` |
+| migration `0003` | `0875c1ac73b6e25207dcf885ef5f8df7ee912d815385519cf7a6b796a9ea0d6a` |
+| migration `0004` | `82c11e83e588b964a1dd07c05d1d092f040fe940c92307a7b93cf69b5f583fb8` |
+| migration `0005` | `3546e39eb8b8e9685a0c48f418dbcf3b6817666e232ecd2b9d0b412be75f7f29` |
+| migration `0006` | `1227036e53acf3709ccb4fa472e2b40a796eb7dcd8083a40304453be3b0e4250` |
+| migration `0007` | `c2a3af7db980d3d32933f008c17da6b68e8bdf94408e10c8bc694c5968841030` |
+
+### Pending local proof slots
+
+Current source predicts **266 Core tests** and **259 tests per full iPhone/iPad
+Simulator scheme**: 225 app-unit tests, including 32
+`ProfessionalBoundaryTests` and eight `MagicLinkCompletionTests`, plus 34 UI
+tests. These are source expectations only. Fill these slots only from fresh
+commands/xcresults supplied by the controller:
+
+- Core command/result/duration: `PENDING`;
+- full iPhone destination, command, count and xcresult SHA-256: `PENDING`;
+- full iPad destination, command, count and xcresult SHA-256: `PENDING`;
+- 32-test professional-boundary selector/result/xcresult: `PENDING`;
+- eight-test magic-completion selector/result/xcresult: `PENDING`;
+- DEBUG-only physical harness build/artifact inspection: `PENDING`;
+- full umbrella result at `.artifacts/slice4-hosted/verification.json`: `PENDING`;
+- `.artifacts/slice4-hosted/sbom.cdx.json` and SHA-256: `PENDING`;
+- `.artifacts/slice4-hosted/artifact-manifest.json` and SHA-256: `PENDING`;
+- per-step log inventory/digests and current service per-file hashes: `PENDING`;
+- separately provisioned cross-model verdict: `PENDING`.
+
+### Formal status and action boundary
+
+1. Local implementation: **pending final proof** listed above.
+2. Local PostgreSQL: **complete** for the disposable PostgreSQL scope.
+3. Provider/infrastructure: **external evidence pending authorization**.
+4. Physical Face ID/passcode: **pending owner worksheet**.
+5. Production provisioning/release: **pending by design**.
+
+The repository is not production-ready or release-approved. This
+reconciliation performed no AWS, Apple, Cognito, SES, Stripe, DNS, email,
+hosting or CloudKit action, used no real customer/room/biometric/GPS/email/
+billing data or credential, added no Slice 5 implementation or Slice 7
+resource, and made no commit, push, PR or deployment.
+
+## 2026-08-21 — fresh Slice 4 closure evidence follow-up
+
+This follow-up advances only the current local-implementation proof. It
+preserves the preceding addendum as the state before these executions.
+
+### Hosted umbrella
+
+Exact repository-root command:
+
+```sh
+python3 -B Scripts/verify_slice4_hosted.py \
+  --artifacts-dir .artifacts/slice4-hosted-final
+```
+
+Result under Node v24.15.0: **exit 0 / PASS, 13 steps**. Generated evidence:
+
+| Artifact | Exact result | SHA-256 |
+| --- | --- | --- |
+| `.artifacts/slice4-hosted-final/verification.json` | terminal PASS / 13 steps | `52c7bc7dcbb6879b05b2115870cba641f10272e190930a428a315e7fb7a84074` |
+| `.artifacts/slice4-hosted-final/sbom.cdx.json` | CycloneDX 1.6; 148 components = 145 libraries + 3 lockfiles | `d0c07261c0149dfa63c1a8083a0247ab64de9f28873151bfec3a4ba7312e175e` |
+| `.artifacts/slice4-hosted-final/artifact-manifest.json` | 128 files; secret scan PASS | `99aebd447b5984adb8204ae055298dcae56c3b21b4467bad5d650cee09e380b3` |
+| final infrastructure artifact-inspection evidence | template/assets hashes unchanged | `eeb64e6fe51049b9330f04bd2e8215068c33327e77a8ca70770094af9144a762` |
+
+The current template remains
+`488efce8596d921d95b7e1f2d7200b09c2538f66f63c1d82a1271f8e05464f11`;
+the assets manifest remains
+`281237aa9507d7cde711628d041b471694c4234b36bb7f019ccc69a705c53848`.
+
+### Fresh Core
+
+From `RoomScanCore`, the first sandboxed attempt failed only because the sandbox
+denied `~/.cache/clang`. The exact same command was then authorized outside that
+sandbox and passed **266/266 with zero failures**:
+
+```sh
+swift test --package-path . \
+  --scratch-path /private/tmp/roomscan-slice4-closure-core \
+  --disable-sandbox --no-parallel
+```
+
+The initial permission failure is not a product-test failure and is not counted
+as a green run.
+
+### Fresh full iPhone Simulator
+
+Exact repository-root command:
+
+```sh
+xcodebuild -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio \
+  -destination 'platform=iOS Simulator,id=B8FBE9EA-81AD-4134-BC1D-A67A7747271E' \
+  -derivedDataPath /private/tmp/roomscan-slice4-closure-full-iphone-derived \
+  -resultBundlePath /private/tmp/roomscan-slice4-closure-full-iphone.xcresult \
+  -clonedSourcePackagesDirPath /Users/philipnora/Library/Developer/Xcode/DerivedData/RoomScanStudio-dkbducgrejgtngdaiombjiuygbrs/SourcePackages \
+  -disableAutomaticPackageResolution \
+  -onlyUsePackageVersionsFromResolvedFile \
+  -parallel-testing-enabled NO test
+```
+
+The iPhone 16 Pro Simulator on iOS 26.3.1 build 23D8133 passed **259/259** with
+zero failed, skipped or expected tests: 225 app-unit plus 34 UI tests. The
+xcresult is
+`/private/tmp/roomscan-slice4-closure-full-iphone.xcresult`; its deterministic
+manifest SHA-256 is
+`fd96cff96dec26c466695745f63cd202f4e69def1ff841af7a3b473bf96dec98`.
+The exported tests JSON SHA-256 is
+`c0e082197fd690f1fde419e66377146e2f0b7ba89401d834d4641725f6cc0398`.
+
+### Bounded cross-model review
+
+Terra reviewed the service/infrastructure boundary and the iOS/documentation
+boundary. Final re-review reported no Critical or Important finding. One
+Important worksheet finding was corrected by requiring the exact physical RVI/
+`tcpdump` packet capture, owner-controlled positive canary, marked guest window
+and cleanup now recorded in `Docs/real-device-test-plan.md`; Terra re-reviewed
+that correction. This is bounded cross-model review, not certification or an
+independent security audit.
+
+### Remaining local-implementation slots
+
+- full iPad command/result/xcresult and hashes: `PENDING`;
+- focused 32-test professional-boundary result/xcresult and hashes: `PENDING`;
+- focused eight-test magic-completion result/xcresult and hashes: `PENDING`;
+- final DEBUG built-app artifact inspection and hashes: `PENDING`;
+- final documentation search/diff closure: `PENDING`.
+
+Formal status 1 therefore remains **local implementation pending final proof**.
+Statuses 2–5 are unchanged: local PostgreSQL complete; external provider/
+infrastructure evidence pending authorization; physical Face ID/passcode
+pending owner worksheet; production provisioning/release pending by design.
+No external action, real data, Slice 5 implementation, Slice 7 resource,
+commit, push, PR or deployment is claimed, and the repository remains not
+production-ready or release-approved.
+
+## 2026-08-21 — final local iOS/artifact/static closure
+
+This final local follow-up closes the remaining status-1 implementation slots.
+The controller retains a final diff/docs/cleanup handoff audit; that audit is
+not an unrun implementation matrix.
+
+### Complete iPad scheme
+
+Exact repository-root command:
+
+```sh
+xcodebuild -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio \
+  -destination 'platform=iOS Simulator,id=FDDEC0DB-DB75-4FBA-8344-69E2A2819531' \
+  -derivedDataPath /private/tmp/roomscan-slice4-closure-full-ipad-derived \
+  -resultBundlePath /private/tmp/roomscan-slice4-closure-full-ipad.xcresult \
+  -clonedSourcePackagesDirPath /Users/philipnora/Library/Developer/Xcode/DerivedData/RoomScanStudio-dkbducgrejgtngdaiombjiuygbrs/SourcePackages \
+  -disableAutomaticPackageResolution \
+  -onlyUsePackageVersionsFromResolvedFile \
+  -parallel-testing-enabled NO test
+```
+
+The iPad (10th generation) Simulator on iOS 26.3.1 build 23D8133 passed
+**259/259**, zero failed/skipped/expected: 225 app-unit plus 34 UI tests.
+
+```text
+/private/tmp/roomscan-slice4-closure-full-ipad.xcresult
+b07196c43c9b37ba818ca0eb4a810d29b9ad98473e772932c9c16812c0a290f8  xcresult deterministic manifest
+/private/tmp/roomscan-slice4-closure-full-ipad-tests.json
+0d75a26f8f6474b8bf2cdcf2d1956ad544f0623e49ef93545feac01adf411d11  exported tests JSON
+```
+
+### Focused professional and magic-completion boundaries
+
+Exact professional command:
+
+```sh
+xcodebuild -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio \
+  -destination 'platform=iOS Simulator,id=B8FBE9EA-81AD-4134-BC1D-A67A7747271E' \
+  -derivedDataPath /private/tmp/roomscan-slice4-closure-professional-derived \
+  -resultBundlePath /private/tmp/roomscan-slice4-closure-professional.xcresult \
+  -clonedSourcePackagesDirPath /Users/philipnora/Library/Developer/Xcode/DerivedData/RoomScanStudio-dkbducgrejgtngdaiombjiuygbrs/SourcePackages \
+  -disableAutomaticPackageResolution \
+  -onlyUsePackageVersionsFromResolvedFile \
+  -parallel-testing-enabled NO \
+  -only-testing:RoomScanStudioTests/ProfessionalBoundaryTests \
+  -quiet test
+```
+
+Result on iPhone 16 Pro / iOS 26.3.1: **32/32 passed**.
+
+```text
+/private/tmp/roomscan-slice4-closure-professional.xcresult
+03c794f295598266f33eefe2f8378ea1e7ec0cd5a15416ae04172a5e98304720  xcresult deterministic manifest
+/private/tmp/roomscan-slice4-closure-professional-tests.json
+d3471339e4a162dbdf600002d1f2f6decefcd359d219e7b5edd0d13e0b51fb64  exported tests JSON
+```
+
+Exact magic-completion command:
+
+```sh
+xcodebuild -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio \
+  -destination 'platform=iOS Simulator,id=B8FBE9EA-81AD-4134-BC1D-A67A7747271E' \
+  -derivedDataPath /private/tmp/roomscan-slice4-closure-magic-derived \
+  -resultBundlePath /private/tmp/roomscan-slice4-closure-magic.xcresult \
+  -clonedSourcePackagesDirPath /Users/philipnora/Library/Developer/Xcode/DerivedData/RoomScanStudio-dkbducgrejgtngdaiombjiuygbrs/SourcePackages \
+  -disableAutomaticPackageResolution \
+  -onlyUsePackageVersionsFromResolvedFile \
+  -parallel-testing-enabled NO \
+  -only-testing:RoomScanStudioTests/MagicLinkCompletionTests \
+  -quiet test
+```
+
+Result on iPhone 16 Pro / iOS 26.3.1: **8/8 passed**.
+
+```text
+/private/tmp/roomscan-slice4-closure-magic.xcresult
+5abf20d4e407e304e30cb98d63c0678797d9f78f1828ec9a8b465d0953ec63b7  xcresult deterministic manifest
+/private/tmp/roomscan-slice4-closure-magic-tests.json
+50902cb532234454efa1cd95589c38686302d9e8cdd15c870442149eedae601d  exported tests JSON
+```
+
+### Artifact and configuration separation
+
+The fresh clean Simulator artifact build passed. Inspector evidence at
+`/private/tmp/roomscan-slice4-closure-artifact-inspection.json` has SHA-256
+`8306aae8bf23d571fc25bc323c41c931099ecd74edebfb9b86bf225d05f63277`.
+It records bundle `org.roomscanstudio.app`, Face ID PASS,
+`missingSymbols=[]`, 9/9 professional symbols, 2/2 magic symbols, the physical-
+harness symbol present, and:
+
+```text
+00cb6f2c850162f3a3a4c7449ca2764201c93698ca967e824f1ea89a5f5b34b8  Simulator launcher
+2bdd4dffe3b393c29c3c71d0780f2e50e0a089c6863dd0b2356a7139457ee662  Simulator DEBUG dylib
+4ae82118854e21adc8f99a293babc10427f77c27d44a36b60a84e196a7ce441f  Simulator app manifest
+```
+
+Built `NSFaceIDUsageDescription` is exactly: “RoomScanStudio uses Face ID or
+your device passcode only when you unlock a professional workspace or confirm a
+sensitive professional action.” Inspection found zero forbidden package
+entries, vendor-linked images, Associated Domains or credential canaries.
+
+Unsigned generic arm64 device Debug and Release builds both passed. The
+physical-harness marker, flag and type are present in Debug and all absent from
+Release:
+
+```text
+1b0ea78ce64ba120fcc74b5baa9da2fa73400d1cdf1e4e1fafe07faf41dcc7e5  generic Debug app manifest
+765c241f7cca62bc7f4f0ec8effaa9dc6454db2d8078ab34d3439daf2f6d9c7d  generic Release app manifest
+```
+
+Scoped Slice 4 static controls passed with both detector positive controls, and
+the Python suite passed **30/30**. Direct
+`python3 -B Scripts/verify_xcode_scaffold.py` ended with exactly the documented
+pre-existing `DEVELOPMENT_TEAM` exception; it is not reported as a green full
+scanner. Generated Python bytecode/cache was removed and confirmed absent.
+
+### Final formal status
+
+1. Local implementation: **complete**.
+2. Local PostgreSQL: **complete**.
+3. Provider/infrastructure: **external evidence pending authorization**.
+4. Physical Face ID/passcode: **pending owner worksheet**.
+5. Production provisioning/release: **pending by design**.
+
+Local completion is not production readiness or release approval. No external
+action, real data, credential, Slice 5 implementation, Slice 7 resource,
+commit, push, PR or deployment is claimed.
+
+## 2026-08-21 — post-closure IAM least-privilege repair
+
+The final infrastructure review found an unconditional Lambda-role
+`kms:Decrypt` grant on the SecretsKey. The repair removes that grant and adds an
+exact Secrets Manager `ViaService` + `SecretARN` synth oracle plus a mutation.
+The focused live test was observed failing RED against the pre-fix policy and
+passing GREEN after the repair; this was not an analysis-only hypothetical.
+
+Direct post-fix platform command from `HostedService/infra` under Node
+v24.15.0:
+
+```sh
+PATH=/Users/philipnora/.nvm/versions/node/v24.15.0/bin:$PATH \
+  node --test .test-dist/test/*.test.js
+```
+
+Result: **104 tests, 104 passed; fail/cancel/skip/todo all zero**. Full
+`npm run verify` under Node v24.15.0 passed, including **17/17** restored
+mutations.
+
+Before the fresh umbrella rerun, the controller identified and cleared exactly
+31 stale, unattached 56-byte PostgreSQL shared-memory segments left by prior
+disposable tests. The active Homebrew PostgreSQL segment was identified
+separately and left untouched. Exact umbrella command:
+
+```sh
+python3 -B Scripts/verify_slice4_hosted.py \
+  --artifacts-dir .artifacts/slice4-hosted-final
+```
+
+Result: **Node v24.15.0, 13 steps, exit 0 / PASS**.
+
+### Current post-fix hashes
+
+```text
+7bdc0b5cea360e6ed61622ac81ce42f8e637a86ec4a5426779af4f4bc7adbda4  .artifacts/slice4-hosted-final/verification.json
+d0c07261c0149dfa63c1a8083a0247ab64de9f28873151bfec3a4ba7312e175e  .artifacts/slice4-hosted-final/sbom.cdx.json
+42b2679d33b239185d73ed096302bd0e33f319f22361858acd26e6cf1789a878  .artifacts/slice4-hosted-final/artifact-manifest.json
+9309d2c294b9672ddc9e83462c658401acb5c5523cefac20b5cfdd7b5b3a7b12  synthesized template
+b45dbd74005db34ba2c1c4a4b7f086e04f4043e5a3033edb75b9757a8d013030  assets manifest
+58d299972076259525d17bc24ea010f5133ab048153fce2f7936cf142465c303  infrastructure artifact-inspection evidence
+```
+
+The SBOM digest is unchanged. It remains CycloneDX 1.6 with 148 components
+(145 libraries and three lockfiles). The new artifact manifest still closes
+128 files and its secret scan passed.
+
+Exact successful step-output digests:
+
+```text
+a7981ca0ab7e5877f9876cacf257f4f860046c48d6bb76ec11abc6b243b527df  service tests
+996ca17815680dca391c30ab50f17b2b7c46a27514d78447fe0702d508d944c2  PostgreSQL
+6c2a36563871c6cb6e4ec112537e4556f831088ce78d33d166ea623146589003  infrastructure assertions
+2ca27656605e1402327da3b7269cb56d5686f8ef562a40e1657bf2228c9f7833  infrastructure mutations
+295b0f111aa3449f6181d3b68367dc8cb9d0bda55cfd95603298360510f45d05  synth / artifact inspection
+```
+
+Formal statuses are unchanged: local implementation and local PostgreSQL are
+complete; external provider/infrastructure evidence and physical Face ID/
+passcode remain pending; production provisioning/release remains pending by
+design. Offline synth proof is not live IAM/KMS evidence. No external action,
+real data, credential, Slice 5 implementation, Slice 7 resource, commit, push,
+PR or deployment is claimed.
