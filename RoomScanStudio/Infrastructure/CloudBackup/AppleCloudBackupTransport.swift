@@ -24,6 +24,8 @@ final class AppleCloudBackupTransport: RoomCloudBackupTransport {
             case .noAccount: return .noAccount
             case .restricted: return .restricted
             case .couldNotDetermine: return .unavailable("The iCloud account status could not be determined.")
+            case .temporarilyUnavailable:
+                return .unavailable("The iCloud account is temporarily unavailable. Verify it in Settings and try again.")
             @unknown default: return .unavailable("The iCloud account returned an unsupported status.")
             }
         } catch { throw mapped(error) }

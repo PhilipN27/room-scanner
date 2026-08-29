@@ -66,14 +66,14 @@ final class RoomCaptureScratchWorkspaceFactory {
             at: directoryURL,
             withIntermediateDirectories: false
         )
-        try validateOwnedWorkspace(
+        let validatedDirectoryURL = try validateOwnedWorkspace(
             directoryURL,
             for: attempt,
             rootURL: rootURL
         )
         return RoomCaptureScratchWorkspace(
             attempt: attempt,
-            directoryURL: directoryURL
+            directoryURL: validatedDirectoryURL
         )
     }
 

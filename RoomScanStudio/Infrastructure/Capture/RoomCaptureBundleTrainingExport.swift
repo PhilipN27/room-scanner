@@ -227,7 +227,8 @@ enum RoomCaptureBundleTrainingExport {
             at: bundleDirectory,
             includingPropertiesForKeys: [.isRegularFileKey]
         ) {
-            for case let fileURL as URL in enumerator {
+            while let item = enumerator.nextObject() {
+                guard let fileURL = item as? URL else { continue }
                 guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
                     continue
                 }

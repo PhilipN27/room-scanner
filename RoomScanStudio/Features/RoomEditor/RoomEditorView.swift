@@ -116,7 +116,7 @@ struct RoomEditorView: View {
                 }
             }
             .onAppear(perform: selectInitialElement)
-            .onChange(of: selectedElementID) { _ in populateFields() }
+            .onChange(of: selectedElementID) { populateFields() }
         }
     }
 

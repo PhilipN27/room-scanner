@@ -564,8 +564,8 @@ private struct RoomCaptureBundleFrameCapture: @unchecked Sendable {
 final class RoomCaptureBundleRecorder {
     static let bundleSubdirectoryName = "capture-bundle"
     private static let frameIntervalSeconds: Double = 0.7
-    private nonisolated(unsafe) static let jpegQuality: CGFloat = 0.8
-    private nonisolated(unsafe) static let sharedCIContext = CIContext(options: nil)
+    private nonisolated static let jpegQuality: CGFloat = 0.8
+    private nonisolated static let sharedCIContext = CIContext(options: nil)
 
     private let arSession: ARSession
     private let directoryURL: URL

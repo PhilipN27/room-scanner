@@ -83,7 +83,7 @@ struct RoomCaptureFlowView: View {
                 }
             }
         }
-        .onChange(of: coordinator.state.phase) { phase in
+        .onChange(of: coordinator.state.phase) { _, phase in
             guard !routedTerminalPhase else { return }
             switch phase {
             case .saved:
