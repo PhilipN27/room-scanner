@@ -239,7 +239,7 @@ export class AwsSecretValuePort implements SecretValuePort {
   }
 }
 
-/** Owner-operator-only reader for the seven generated database login
+/** Owner-operator-only reader for the eight generated database login
  * credentials. The caller may request only an ARN/username pair present in
  * the frozen construction-time map, and the secret payload must contain only
  * the generated credential schema. */
@@ -255,14 +255,14 @@ export class AwsRuntimeCredentialSecretReader {
       throw new AwsRuntimeConfigurationError("secret_configuration_invalid");
     }
     const entries = Object.entries(input.allowed);
-    if (entries.length !== 7 || entries.some(([username, arn]) =>
-      !/^roomscan_(?:api|authorizer|auth_challenge|stripe_ingress|stripe_reconciliation|audit_export|email_delivery)_runtime$/u.test(username)
+    if (entries.length !== 8 || entries.some(([username, arn]) =>
+      !/^roomscan_(?:api|authorizer|auth_challenge|stripe_ingress|stripe_reconciliation|audit_export|email_delivery|project_sync)_runtime$/u.test(username)
       || !secretArn(arn))) {
       throw new AwsRuntimeConfigurationError("secret_configuration_invalid");
     }
     this.#sender = input.sender;
     this.#allowed = new Map(entries.map(([username, arn]) => [arn, username]));
-    if (this.#allowed.size !== 7) throw new AwsRuntimeConfigurationError("secret_configuration_invalid");
+    if (this.#allowed.size !== 8) throw new AwsRuntimeConfigurationError("secret_configuration_invalid");
   }
 
   async read(input: Readonly<{ readonly secretArn: string; readonly expectedUsername: string }>): Promise<string> {

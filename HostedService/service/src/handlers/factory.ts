@@ -1,7 +1,7 @@
 import { TextDecoder } from "node:util";
 import { isIP } from "node:net";
 import { rawHttpApiV2Body, type HttpApiV2Envelope, type HttpApiV2Response } from "../http/http-api-v2.js";
-import { assertSealedManifest, routeKey, SLICE4_ROUTE_MANIFEST, type RouteAuthorization, type RouteExecutionLane, type SealedRoute } from "../contracts/route-manifest.js";
+import { assertSealedManifest, assertSealedSlice5Manifest, routeKey, SLICE4_ROUTE_MANIFEST, SLICE5_ROUTE_MANIFEST, type RouteAuthorization, type RouteExecutionLane, type SealedRoute } from "../contracts/route-manifest.js";
 import type { QuotaMetric } from "../quota/quota-v2-service.js";
 import type { TransactionBoundRepositoryBundle } from "../contracts/transaction-bound-repositories.js";
 
@@ -17,33 +17,111 @@ export interface SameTransactionOperationPort {
 }
 export type RouteHandler = (request: NormalizedRouteRequest, context?: AuthorizedOperationContext) => Promise<HttpApiV2Response>;
 export interface Slice4HandlerDependencies { readonly handlers: Readonly<Record<string, RouteHandler>>; readonly operations: SameTransactionOperationPort; }
+declare const slice5PostCommitBrand: unique symbol;
+/** Only trusted composition creates this opaque result. The operation port
+ * commits before it runs the effect and returns the public result to HTTP. */
+export interface Slice5PostCommitResult<T> { readonly publicResult: () => T; readonly [slice5PostCommitBrand]: true; }
+export type Slice5RouteHandler = (request: NormalizedRouteRequest, context?: AuthorizedOperationContext) => Promise<Slice5PostCommitResult<HttpApiV2Response>>;
+export interface Slice5SameTransactionOperationPort {
+  run<T>(input: { readonly accessToken: string; readonly authorization: Exclude<RouteAuthorization, { readonly kind: "public" }> }, operation: (context: AuthorizedOperationContext) => Promise<Slice5PostCommitResult<T>>): Promise<T>;
+}
+export interface Slice5HandlerDependencies {
+  /** The frozen Slice 4 entrypoint remains the sole implementation of the
+   * legacy 19 route semantics, including public auth and its same-UoW port. */
+  readonly legacy: Slice4HandlerDependencies;
+  /** Exactly the ten project-sync handlers, never a replacement map for the
+   * inherited Slice 4 routes. */
+  readonly handlers: Readonly<Record<string, Slice5RouteHandler>>;
+  readonly operations: Slice5SameTransactionOperationPort;
+}
+
+const slice5Results = new WeakSet<object>();
+const slice5Effects = new WeakMap<object, () => Promise<void>>();
+/** Trusted composition can attach one provider effect. It is held outside the
+ * returned object so a handler/client cannot enumerate or serialize it. */
+export function createSlice5PostCommitResult<T>(publicResult: () => T, postCommitEffect: () => Promise<void> = async () => undefined): Slice5PostCommitResult<T> {
+  if (typeof publicResult !== "function" || typeof postCommitEffect !== "function") throw new Error("invalid_post_commit_result");
+  const result = Object.freeze({ publicResult }) as Slice5PostCommitResult<T>;
+  slice5Results.add(result as object); slice5Effects.set(result as object, postCommitEffect);
+  return result;
+}
+/** The capability port uses this after the transaction commits. It is not an
+ * HTTP surface; lookalikes fail closed even if they reproduce the type shape. */
+export function requireSlice5PostCommitEffect<T>(value: Slice5PostCommitResult<T>): () => Promise<void> {
+  if (!slice5Results.has(value as object)) throw new Error("invalid_post_commit_result");
+  const effect = slice5Effects.get(value as object); if (effect === undefined) throw new Error("invalid_post_commit_result");
+  return effect;
+}
 
 const MAX_HEADER_COUNT = 32; const MAX_HEADER_BYTES = 16_384; const MAX_RESPONSE_BYTES = 1_048_576;
 const JSON_HEADERS = Object.freeze({ "content-type": "application/json", "cache-control": "no-store" });
 
 export function createSlice4HandlerEntrypoint(dependencies: Slice4HandlerDependencies): (request: ApiGatewayV2Request) => Promise<HttpApiV2Response> {
-  assertSealedManifest(); assertExactHandlers(dependencies.handlers);
+  assertSealedManifest(); assertExactHandlers(dependencies.handlers, SLICE4_ROUTE_MANIFEST);
+  return createSlice4SealedEntrypoint(SLICE4_ROUTE_MANIFEST, dependencies.handlers, dependencies.operations);
+}
+
+/** Slice 5 is intentionally a separate entrypoint. Calling it cannot add a
+ * route to the Slice 4 v3 matcher, and its post-commit operation port is the
+ * only path for provider effects such as presigning or a generic queue wake. */
+export function createSlice5HandlerEntrypoint(dependencies: Slice5HandlerDependencies): (request: ApiGatewayV2Request) => Promise<HttpApiV2Response> {
+  assertSealedSlice5Manifest(); assertExactHandlers(dependencies.handlers, SLICE5_ROUTE_MANIFEST.slice(SLICE4_ROUTE_MANIFEST.length));
+  const legacy = createSlice4HandlerEntrypoint(dependencies.legacy);
+  const projectSync = createSlice5ProjectSyncEntrypoint(SLICE5_ROUTE_MANIFEST.slice(SLICE4_ROUTE_MANIFEST.length), dependencies.handlers, dependencies.operations);
+  return async (request) => isSlice4RouteRequest(request) ? legacy(request) : projectSync(request);
+}
+
+function createSlice4SealedEntrypoint(
+  manifest: readonly SealedRoute[],
+  handlers: Readonly<Record<string, RouteHandler>>,
+  operations: SameTransactionOperationPort,
+): (request: ApiGatewayV2Request) => Promise<HttpApiV2Response> {
   return async (request) => {
     try {
       if (request.version !== "2.0" || request.cookies !== undefined || request.rawQueryString !== "" || (request.queryStringParameters !== undefined && request.queryStringParameters !== null) || !validHeaders(request.headers)) return error(400);
       const method = request.requestContext?.http?.method; const path = request.rawPath; if ((method !== "GET" && method !== "POST") || typeof path !== "string" || path.length > 512) return error(400);
-      const match = matchRoute(method, path); if (match === undefined) return error(404);
+      const match = matchRoute(manifest, method, path); if (match === undefined) return error(404);
       const normalized = normalizeRequest(request, match.route, match.pathParameters); if (normalized === undefined) return error(400);
-      const handler = dependencies.handlers[match.route.id]!;
+      const handler = handlers[match.route.id]!;
       let response: HttpApiV2Response;
       if (match.route.authorization.kind === "public") response = await handler(normalized);
       else {
         const token = bearer(request.headers); if (token === undefined) return error(401);
-        try { response = await dependencies.operations.run({ accessToken: token, authorization: match.route.authorization }, (context) => handler(normalized, context)); } catch (caught) { return caught instanceof OperationDeniedError ? error(403) : error(500); }
+        try { response = await operations.run({ accessToken: token, authorization: match.route.authorization }, (context) => handler(normalized, context)); } catch (caught) { return caught instanceof OperationDeniedError ? error(403) : error(500); }
       }
       return validateResponse(response, match.route, match.pathParameters.selector);
     } catch { return error(500); }
   };
 }
 
-function assertExactHandlers(handlers: Readonly<Record<string, RouteHandler>>): void { const expected = new Set(SLICE4_ROUTE_MANIFEST.map((route) => route.id)); const actual = Object.keys(handlers); if (actual.length !== expected.size || actual.some((id) => !expected.has(id))) throw new Error("handler_manifest_mismatch"); }
-function matchRoute(method: "GET" | "POST", path: string): { readonly route: SealedRoute; readonly pathParameters: Readonly<Record<string, string>> } | undefined {
-  for (const route of SLICE4_ROUTE_MANIFEST) { if (route.method !== method) continue; if (!route.pathTemplate.includes(":")) { if (route.pathTemplate === path) return { route, pathParameters: Object.freeze({}) }; continue; } const escaped = route.pathTemplate.split("/").map((part) => part === ":selector" ? "([A-Za-z0-9_-]{16,128})" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/"); const match = new RegExp(`^${escaped}$`, "u").exec(path); if (match?.[1] !== undefined) return { route, pathParameters: Object.freeze({ selector: match[1] }) }; } return undefined;
+function createSlice5ProjectSyncEntrypoint(
+  manifest: readonly SealedRoute[],
+  handlers: Readonly<Record<string, Slice5RouteHandler>>,
+  operations: Slice5SameTransactionOperationPort,
+): (request: ApiGatewayV2Request) => Promise<HttpApiV2Response> {
+  return async (request) => {
+    try {
+      if (request.version !== "2.0" || request.cookies !== undefined || request.rawQueryString !== "" || (request.queryStringParameters !== undefined && request.queryStringParameters !== null) || !validHeaders(request.headers)) return error(400);
+      const method = request.requestContext?.http?.method; const path = request.rawPath; if ((method !== "GET" && method !== "POST") || typeof path !== "string" || path.length > 512) return error(400);
+      const match = matchRoute(manifest, method, path); if (match === undefined) return error(404);
+      const normalized = normalizeRequest(request, match.route, match.pathParameters); if (normalized === undefined) return error(400);
+      if (match.route.authorization.kind === "public") return error(500);
+      const token = bearer(request.headers); if (token === undefined) return error(401);
+      const handler = handlers[match.route.id]!;
+      let response: HttpApiV2Response;
+      try { response = await operations.run({ accessToken: token, authorization: match.route.authorization }, (context) => handler(normalized, context)); } catch (caught) { return caught instanceof OperationDeniedError ? error(403) : error(500); }
+      return validateResponse(response, match.route, match.pathParameters.selector);
+    } catch { return error(500); }
+  };
+}
+
+function isSlice4RouteRequest(request: ApiGatewayV2Request): boolean {
+  const method = request.requestContext?.http?.method; const path = request.rawPath;
+  return (method === "GET" || method === "POST") && typeof path === "string" && matchRoute(SLICE4_ROUTE_MANIFEST, method, path) !== undefined;
+}
+function assertExactHandlers(handlers: Readonly<Record<string, unknown>>, manifest: readonly SealedRoute[]): void { const expected = new Set(manifest.map((route) => route.id)); const actual = Object.keys(handlers); if (actual.length !== expected.size || actual.some((id) => !expected.has(id))) throw new Error("handler_manifest_mismatch"); }
+function matchRoute(manifest: readonly SealedRoute[], method: "GET" | "POST", path: string): { readonly route: SealedRoute; readonly pathParameters: Readonly<Record<string, string>> } | undefined {
+  for (const route of manifest) { if (route.method !== method) continue; if (!route.pathTemplate.includes(":")) { if (route.pathTemplate === path) return { route, pathParameters: Object.freeze({}) }; continue; } const escaped = route.pathTemplate.split("/").map((part) => part === ":selector" ? "([A-Za-z0-9_-]{16,128})" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/"); const match = new RegExp(`^${escaped}$`, "u").exec(path); if (match?.[1] !== undefined) return { route, pathParameters: Object.freeze({ selector: match[1] }) }; } return undefined;
 }
 function normalizeRequest(envelope: ApiGatewayV2Request, route: SealedRoute, pathParameters: Readonly<Record<string, string>>): NormalizedRouteRequest | undefined {
   const serverDerived = deriveServerInputs(envelope, route); if (serverDerived === undefined) return undefined;
@@ -72,6 +150,10 @@ function validateJsonBody(value: unknown, route: SealedRoute): boolean {
       if (typeof field !== "string" || field.length < rule.minLength || field.length > rule.maxLength
         || (rule.enum !== undefined && !rule.enum.includes(field))
         || (rule.pattern !== undefined && !new RegExp(rule.pattern, "u").test(field))) return false;
+      continue;
+    }
+    if (rule.type === "integer") {
+      if (typeof field !== "number" || !Number.isSafeInteger(field) || field < rule.minimum || field > rule.maximum) return false;
       continue;
     }
     if (typeof field !== "boolean" || (rule.literal !== undefined && field !== rule.literal)) return false;

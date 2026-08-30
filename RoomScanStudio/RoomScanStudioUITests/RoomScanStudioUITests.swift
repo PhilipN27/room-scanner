@@ -900,6 +900,107 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
     }
 
+    func testSlice5MigrationPreviewMakesApprovalRetryAndLocalRetentionExplicit() {
+        let app = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-retry"]
+        )
+        let scroll = app.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Professional project sync"].waitForExistence(timeout: 5))
+
+        let approve = app.buttons["professional.sync.approve"]
+        let retry = app.buttons["professional.sync.retry"]
+        scrollIntoView(approve, in: scroll)
+        XCTAssertTrue(approve.isHittable)
+        XCTAssertTrue(retry.exists)
+        XCTAssertTrue(retry.isEnabled)
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "never deletes")
+        ).firstMatch.exists)
+        attachSlice5Screenshot(named: "slice5-migration-preview-retry", app: app)
+    }
+
+    func testSlice5StaleHeadPreservesBothBranchesAndRequiresExplicitResolution() {
+        let app = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-conflict"]
+        )
+        let scroll = app.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        let compare = app.buttons["professional.sync.conflict.compare"]
+        let rebase = app.buttons["professional.sync.conflict.rebase"]
+        let duplicate = app.buttons["professional.sync.conflict.duplicate"]
+        scrollIntoView(compare, in: scroll)
+        XCTAssertTrue(compare.isHittable)
+        XCTAssertTrue(rebase.exists)
+        XCTAssertTrue(duplicate.exists)
+        compare.tap()
+        XCTAssertTrue(
+            identifiedElement("professional.sync.conflict.comparison", in: app)
+                .waitForExistence(timeout: 5)
+        )
+        attachSlice5Screenshot(named: "slice5-stale-head-comparison", app: app)
+    }
+
+    func testSlice5RawArchiveIsSeparateReviewedOptIn() {
+        let app = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-raw"]
+        )
+        let scroll = app.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        let rawApproval = app.buttons["professional.sync.rawApprove"]
+        scrollIntoView(rawApproval, in: scroll)
+        XCTAssertTrue(rawApproval.isHittable)
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "never advances")
+        ).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Size and privacy review")
+        ).firstMatch.exists)
+        attachSlice5Screenshot(named: "slice5-raw-archive-review", app: app)
+    }
+
+    func testSlice5DesktopWidthLandscapeScenarios() {
+        let migration = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-retry"],
+            landscape: true
+        )
+        let migrationScroll = migration.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(migrationScroll.waitForExistence(timeout: 5))
+        let approve = migration.buttons["professional.sync.approve"]
+        scrollIntoView(approve, in: migrationScroll)
+        XCTAssertTrue(approve.isHittable)
+        attachSlice5Screenshot(named: "slice5-migration-preview-retry", app: migration)
+        migration.terminate()
+
+        let raw = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-raw"],
+            landscape: true
+        )
+        let rawScroll = raw.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(rawScroll.waitForExistence(timeout: 5))
+        let rawApproval = raw.buttons["professional.sync.rawApprove"]
+        scrollIntoView(rawApproval, in: rawScroll)
+        XCTAssertTrue(rawApproval.isHittable)
+        attachSlice5Screenshot(named: "slice5-raw-archive-review", app: raw)
+        raw.terminate()
+
+        let conflict = launchSlice5ProfessionalFixture(
+            extraArguments: ["--slice5-professional-ui-conflict"],
+            landscape: true
+        )
+        let conflictScroll = conflict.scrollViews["professional.sync.scroll"]
+        XCTAssertTrue(conflictScroll.waitForExistence(timeout: 5))
+        let compare = conflict.buttons["professional.sync.conflict.compare"]
+        scrollIntoView(compare, in: conflictScroll)
+        XCTAssertTrue(compare.isHittable)
+        compare.tap()
+        XCTAssertTrue(
+            identifiedElement("professional.sync.conflict.comparison", in: conflict)
+                .waitForExistence(timeout: 5)
+        )
+        attachSlice5Screenshot(named: "slice5-stale-head-comparison", app: conflict)
+    }
+
     private func launchIsolatedApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -960,6 +1061,92 @@ final class RoomScanStudioUITests: XCTestCase {
         ] + extraArguments
         app.launch()
         return app
+    }
+
+    private func launchSlice5ProfessionalFixture(
+        extraArguments: [String] = [],
+        landscape: Bool = false
+    ) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-testing",
+            "--reset-local-store",
+            "--slice5-professional-ui-fixture",
+        ] + extraArguments
+        app.launch()
+        if landscape {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            let becameLandscape = XCTNSPredicateExpectation(
+                predicate: NSPredicate { value, _ in
+                    guard let element = value as? XCUIElement else { return false }
+                    return element.frame.width > element.frame.height
+                },
+                object: window
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [becameLandscape], timeout: 5),
+                .completed,
+                "The desktop-width evidence fixture must actually render in landscape."
+            )
+            addTeardownBlock {
+                XCUIDevice.shared.orientation = .portrait
+            }
+        }
+        return app
+    }
+
+    private func attachSlice5Screenshot(
+        named name: String,
+        app: XCUIApplication
+    ) {
+        // XCUIApplication.screenshot() embeds a rotated portrait surface in a
+        // landscape canvas on the Xcode 26 iPad runtime, while XCUIScreen keeps
+        // the physical portrait pixel order. Normalize that runtime quirk only
+        // after the independent window-frame oracle proves a landscape layout.
+        let screenshot = XCUIScreen.main.screenshot()
+        let window = app.windows.firstMatch
+        let attachment: XCTAttachment
+        if window.frame.width > window.frame.height,
+           let source = UIImage(data: screenshot.pngRepresentation) {
+            let size = CGSize(
+                width: max(source.size.width, source.size.height),
+                height: min(source.size.width, source.size.height)
+            )
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = source.scale
+            format.opaque = true
+            let renderer = UIGraphicsImageRenderer(size: size, format: format)
+            let normalized = renderer.image { context in
+                if source.size.width > source.size.height {
+                    // UIKit honors the screenshot's encoded image orientation
+                    // while drawing and writes ordinary landscape pixel order.
+                    source.draw(in: CGRect(origin: .zero, size: size))
+                } else {
+                    context.cgContext.translateBy(x: size.width / 2, y: size.height / 2)
+                    context.cgContext.rotate(by: -.pi / 2)
+                    source.draw(
+                        in: CGRect(
+                            x: -source.size.width / 2,
+                            y: -source.size.height / 2,
+                            width: source.size.width,
+                            height: source.size.height
+                        )
+                    )
+                }
+            }
+            guard let data = normalized.pngData() else {
+                XCTFail("The landscape evidence screenshot must encode as PNG.")
+                return
+            }
+            attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
+        } else {
+            attachment = XCTAttachment(screenshot: screenshot)
+        }
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func openSimulatedCapture(in app: XCUIApplication) {

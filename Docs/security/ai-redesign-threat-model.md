@@ -92,7 +92,7 @@ rotation/reuse detection; verified-email and Apple state/nonce/S256/replay
 boundaries; deliberate identity linking; the literal 54-action Owner/Admin/
 Editor/Viewer matrix; recent-server-authentication gates; versioned
 membership, five-metric quota and three operational-flag reducers; Stripe raw-
-body/idempotent reconciliation; a sealed 14-operation HTTP/OpenAPI manifest;
+body/idempotent reconciliation; a sealed 19-operation HTTP/OpenAPI manifest;
 privacy-allowlisted logging; and a default-off iOS professional/Face ID
 coordinator. Guest tests and static controls reject eager hosted/auth
 construction and hosted traffic from local capture/edit/export/AI/Concept/
@@ -225,3 +225,44 @@ on the SecretsKey. An exact Secrets Manager `ViaService` + `SecretARN` synth
 oracle and mutation now enforce the intended decrypt path. The focused control
 was observed RED before the fix and GREEN after restoration; this remains
 offline evidence and does not close live IAM/KMS evaluation.
+
+## 2026-08-29 Slice 5 control-evidence addendum
+
+Slice 5 implements the expected-head, raw-tier, untrusted-upload, cross-tenant,
+quota, lease, and staged-recovery controls described in the threat table. The
+sealed v1 Slice 5 manifest has 29 routes while the Slice 4 v3 export remains 19.
+Five new tenant tables force RLS. API and worker runtime roles are non-owner,
+non-superuser `LOGIN NOINHERIT` roles without `BYPASSRLS` or membership edges;
+the worker receives only targetless reducer capabilities.
+
+An upload allocation does not create or advance a project head. Validation
+binds the exact immutable provider version, length, checksum, content type,
+bounded ZIP structure, canonical manifest closure, source revision, and storage
+tier before promotion. Finalization inserts the candidate and performs one
+expected-head CAS in the same transaction. A valid losing candidate is marked
+stale and retained; application conflict state exposes only compare, explicit
+rebase, and explicit duplicate. No silent merge or last-writer-wins value is
+present.
+
+The default working-set validator rejects RGB, depth, confidence, diagnostics,
+capture-bundle, world-map, Complete-package raw-ledger, extra-entry, traversal,
+case-collision, digest, and closure violations. A positive detector control
+injects a forbidden artifact. The same bound raw categories pass only through a
+separate accepted-review archive and never move a head. Signed URLs, object
+keys/versions, request bodies, and room bytes remain outside durable app state,
+database public results, logs, and audit subjects.
+
+Recovery verifies an outer digest/size, derives the strict local descriptor
+from the archive manifest, validates all package and companion bytes in scratch,
+and promotes through prepare/commit. Post-package interruption is resumable;
+corruption cannot directly mutate a live project. Recover-as-copy trusts only
+the store-derived destination binding and cannot invent a copied disclosure
+review/provenance; affected automatic Concept mappings visibly downgrade.
+
+Local red/green proof includes expected-head, targetless-claim, forced-RLS,
+raw-detector, staging/promotion, and infrastructure-policy mutation controls
+with restored passing controls. This is source/Simulator/disposable PostgreSQL
+16/synthetic-provider evidence, not a live security assessment. Physical-device
+background transfer and provider IAM/KMS/S3/SQS/Lambda/Data API/CloudTrail/
+alarm behavior remain explicit external gates. Publication and lifecycle
+threats remain Slice 6 and Slice 7 work respectively.

@@ -44,7 +44,7 @@ import type { Construct } from "constructs";
 
 import { assertPlatformConfigResourceArns, type PlatformConfig } from "../config.js";
 import {
-  SLICE4_ROUTE_MANIFEST,
+  SLICE5_ROUTE_MANIFEST,
   type SealedRoute,
 } from "roomscan-studio-hosted-service/contracts";
 
@@ -58,12 +58,17 @@ interface EncryptionKeys {
   readonly assets: kms.Key;
   readonly audit: kms.Key;
   readonly queues: kms.Key;
+  /** Dedicated retained CMK for project-sync validation wake/delivery only. */
+  readonly projectSyncQueues: kms.Key;
   readonly secrets: kms.Key;
 }
 
 interface StorageBuckets {
   readonly quarantine: s3.Bucket;
   readonly active: s3.Bucket;
+  /** Dedicated Slice 5 working-set/raw object boundary. It is intentionally
+   * not the legacy quarantine/active/published/backup topology. */
+  readonly projectSync: s3.Bucket;
   readonly published: s3.Bucket;
   readonly backup: s3.Bucket;
   readonly audit: s3.Bucket;
@@ -76,6 +81,8 @@ interface QueueBoundary {
   readonly auditOutboxDlq: sqs.Queue;
   readonly emailDelivery: sqs.Queue;
   readonly emailDeliveryDlq: sqs.Queue;
+  readonly projectSyncValidation: sqs.Queue;
+  readonly projectSyncValidationDlq: sqs.Queue;
 }
 
 interface DatabaseBoundary {
@@ -91,6 +98,7 @@ interface DatabaseBoundary {
     stripeReconciliation: secretsmanager.ISecret;
     auditExport: secretsmanager.ISecret;
     emailDelivery: secretsmanager.ISecret;
+    projectSync: secretsmanager.ISecret;
   }>;
   readonly applicationSecrets: Readonly<{
     accessTokenDigest: secretsmanager.Secret;
@@ -148,7 +156,7 @@ export class RoomScanPlatformStack extends Stack {
     const buckets = this.createStorageBuckets(config, keys);
     const trail = this.createCloudTrail(config, keys, buckets);
     const database = this.createDatabaseBoundary(config, keys);
-    const queues = this.createQueueBoundary(config, keys.queues);
+    const queues = this.createQueueBoundary(config, keys.queues, keys.projectSyncQueues);
     const sesConfigurationSet = this.createSesBoundary(config, alarmTopic);
 
     const authorizerUnit = this.createFunction(
@@ -206,6 +214,8 @@ export class RoomScanPlatformStack extends Stack {
         APPLE_CLIENT_SECRET_SIGNING_MODE: "runtime-es256-secretsmanager-v1",
         STRIPE_DEFAULT_ACCOUNT_ID: config.stripe.defaultAccountId,
         QUARANTINE_BUCKET_NAME: buckets.quarantine.bucketName,
+        PROJECT_SYNC_BUCKET_NAME: buckets.projectSync.bucketName,
+        PROJECT_SYNC_VALIDATION_QUEUE_URL: queues.projectSyncValidation.queueUrl,
         AUDIT_OUTBOX_QUEUE_URL: queues.auditOutbox.queueUrl,
         AUTH_POLICY_VERSION: "slice4-local-test-v1",
         MAGIC_POLICY_VERSION: "slice4-local-test-v1",
@@ -243,11 +253,31 @@ export class RoomScanPlatformStack extends Stack {
           resources: [buckets.quarantine.arnForObjects("server/quarantine/*")]
         }),
         new iam.PolicyStatement({
+          // API-only staged upload authority. It cannot list, read, delete,
+          // copy, or write an active/raw/published/private-backup object.
+          actions: ["s3:PutObject"],
+          resources: [buckets.projectSync.arnForObjects("server/quarantine/v1/*")],
+        }),
+        new iam.PolicyStatement({
+          // Exact-version recovery signer only. It cannot read quarantine,
+          // list a prefix, select a current project object, or retrieve the
+          // separately opted-in raw tier.
+          actions: ["s3:GetObjectVersion"],
+          resources: [
+            buckets.projectSync.arnForObjects("server/active/v1/*/professional-sync/active/working/*"),
+          ],
+        }),
+        new iam.PolicyStatement({
           actions: ["sqs:SendMessage"],
-          resources: [queues.auditOutbox.queueArn, queues.emailDelivery.queueArn]
+          resources: [
+            queues.auditOutbox.queueArn,
+            queues.emailDelivery.queueArn,
+            queues.projectSyncValidation.queueArn,
+          ]
         }),
         this.kmsUseStatement(keys.assets.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
-        this.kmsUseStatement(keys.queues.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"])
+        this.kmsUseStatement(keys.queues.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
+        this.kmsUseStatement(keys.projectSyncQueues.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"])
       ],
     );
 
@@ -427,6 +457,54 @@ export class RoomScanPlatformStack extends Stack {
     );
     emailDeliveryUnit.fn.node.addDependency(sesConfigurationSet);
 
+    const projectSyncValidationUnit = this.createFunction(
+      config,
+      keys.logs,
+      keys.secrets,
+      alarmTopic,
+      "ProjectSyncValidation",
+      "project-sync-validation",
+      "project-sync-validation.ts",
+      {
+        DB_CLUSTER_ARN: database.cluster.clusterArn,
+        ROOMSCAN_DB_ROLE_SECRET_ARN: database.runtimeSecrets.projectSync.secretArn,
+        ROOMSCAN_DB_RUNTIME_ROLE: "roomscan_project_sync_runtime",
+        PROJECT_SYNC_BUCKET_NAME: buckets.projectSync.bucketName,
+      },
+      [
+        ...this.dataApiStatements(
+          config,
+          database.cluster,
+          database.runtimeSecrets.projectSync,
+          keys.secrets,
+        ),
+        new iam.PolicyStatement({
+          // Exact object-version reads are confined to active/quarantine
+          // project-sync prefixes. No List, Delete, published, or backup
+          // authority reaches this worker role.
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [
+            buckets.projectSync.arnForObjects("server/quarantine/v1/*"),
+            buckets.projectSync.arnForObjects("server/active/v1/*"),
+          ],
+        }),
+        new iam.PolicyStatement({
+          // CopyObject uses the destination's If-None-Match: * in the AWS
+          // adapter. IAM permits only active immutable destinations.
+          actions: ["s3:PutObject"],
+          resources: [buckets.projectSync.arnForObjects("server/active/v1/*")],
+        }),
+        this.kmsUseStatement(keys.assets.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
+        this.kmsUseStatement(keys.projectSyncQueues.keyArn, ["kms:Decrypt"]),
+      ],
+      "Targetless immutable professional-project validation and promotion worker",
+      {
+        timeout: Duration.seconds(30),
+        memorySize: 1_024,
+        reservedConcurrentExecutions: 1,
+      },
+    );
+
     const migrationSecurityGroup = new ec2.SecurityGroup(this, "MigrationOperatorSecurityGroup", {
       vpc: database.vpc,
       description: "One-shot migration operator egress only to Aurora and the Secrets Manager endpoint",
@@ -493,7 +571,8 @@ export class RoomScanPlatformStack extends Stack {
           roomscan_stripe_ingress_runtime: database.runtimeSecrets.stripeIngress.secretArn,
           roomscan_stripe_reconciliation_runtime: database.runtimeSecrets.stripeReconciliation.secretArn,
           roomscan_audit_export_runtime: database.runtimeSecrets.auditExport.secretArn,
-          roomscan_email_delivery_runtime: database.runtimeSecrets.emailDelivery.secretArn
+          roomscan_email_delivery_runtime: database.runtimeSecrets.emailDelivery.secretArn,
+          roomscan_project_sync_runtime: database.runtimeSecrets.projectSync.secretArn,
         })
       },
       [
@@ -563,7 +642,9 @@ export class RoomScanPlatformStack extends Stack {
     this.attachQueueConsumer(reconciliationUnit, queues.reconciliation);
     this.attachQueueConsumer(auditExporterUnit, queues.auditOutbox);
     this.attachQueueConsumer(emailDeliveryUnit, queues.emailDelivery);
+    this.attachQueueConsumer(projectSyncValidationUnit, queues.projectSyncValidation, { batchSize: 1 });
     this.createQueueRecoverySchedules(config, queues);
+    this.createProjectSyncValidationSchedule(config, queues.projectSyncValidation);
     const identity = this.createIdentityBoundary(config, authChallengeUnit.alias);
     apiUnit.fn.addEnvironment("COGNITO_USER_POOL_ID", identity.userPool.userPoolId);
     apiUnit.fn.addEnvironment("COGNITO_SERVER_CLIENT_ID", identity.customAuthClient.userPoolClientId);
@@ -589,6 +670,7 @@ export class RoomScanPlatformStack extends Stack {
     this.createQueueAlarm("StripeReconciliationDlq", queues.reconciliationDlq, alarmTopic);
     this.createQueueAlarm("AuditOutboxDlq", queues.auditOutboxDlq, alarmTopic);
     this.createQueueAlarm("EmailDeliveryDlq", queues.emailDeliveryDlq, alarmTopic);
+    this.createQueueAlarm("ProjectSyncValidationDlq", queues.projectSyncValidationDlq, alarmTopic);
     this.createDatabaseAlarm(database.cluster, alarmTopic);
     this.createOutputs(config, buckets, database, queues);
   }
@@ -628,6 +710,7 @@ export class RoomScanPlatformStack extends Stack {
       assets: create("AssetsKey", "assets"),
       audit: create("AuditKey", "audit"),
       queues: create("QueuesKey", "queues"),
+      projectSyncQueues: create("ProjectSyncQueuesKey", "project-sync-validation-queue"),
       secrets: create("SecretsKey", "secrets")
     };
     const trailArn = this.formatArn({
@@ -702,6 +785,18 @@ export class RoomScanPlatformStack extends Stack {
           })
         }
       }
+    }));
+    // This key is intentionally not shared with the legacy queue topology.
+    // EventBridge only needs envelope-key operations for the one fixed wake;
+    // source-account binding prevents another account from using this CMK.
+    keys.projectSyncQueues.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "AllowProjectSyncValidationEventBridgeEncryption",
+      principals: [new iam.ServicePrincipal("events.amazonaws.com")],
+      actions: ["kms:Decrypt", "kms:GenerateDataKey"],
+      resources: ["*"],
+      conditions: {
+        StringEquals: { "aws:SourceAccount": config.accountId },
+      },
     }));
     return keys;
   }
@@ -802,6 +897,41 @@ export class RoomScanPlatformStack extends Stack {
 
     const quarantine = create("QuarantineBucket", "quarantine", "server/quarantine/", keys.assets);
     const active = create("ActiveBucket", "private-active", "server/active/", keys.assets);
+    const projectSync = create(
+      "ProjectSyncBucket",
+      "professional-project-sync",
+      "server/",
+      keys.assets,
+    );
+    // Slice 5 has one private bucket so a promotion can be an exact S3
+    // CopyObject, while two non-overlapping server-owned namespaces preserve
+    // quarantine versus active state. Raw archives remain a separate raw tier
+    // beneath those namespaces; they are never mixed with working revisions.
+    projectSync.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyProjectSyncWritesOutsideImmutableNamespaces",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:PutObject"],
+      notResources: [
+        projectSync.arnForObjects("server/quarantine/v1/*"),
+        projectSync.arnForObjects("server/active/v1/*"),
+      ],
+    }));
+    projectSync.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyProjectSyncObjectDeletion",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+      resources: [projectSync.arnForObjects("*")],
+    }));
+    projectSync.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyProjectSyncBucketDeletion",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:DeleteBucket"],
+      resources: [projectSync.bucketArn],
+    }));
+    Tags.of(projectSync).add("roomscan:sync-tier", "working-set-and-reviewed-raw-only");
     const published = create(
       "PublishedDerivativeBucket",
       "private-published-derivative",
@@ -829,7 +959,7 @@ export class RoomScanPlatformStack extends Stack {
       actions: ["s3:DeleteBucket", "s3:DeleteObject", "s3:DeleteObjectVersion"],
       resources: [audit.bucketArn, audit.arnForObjects("*")]
     }));
-    return { quarantine, active, published, backup, audit };
+    return { quarantine, active, projectSync, published, backup, audit };
   }
 
   private createCloudTrail(
@@ -856,8 +986,12 @@ export class RoomScanPlatformStack extends Stack {
       cloudWatchLogGroup: logGroup
     });
     trail.addS3EventSelector(
-      [buckets.quarantine, buckets.active, buckets.published, buckets.backup]
-        .map((bucket) => ({ bucket, objectPrefix: "server/" })),
+      [
+        ...[buckets.quarantine, buckets.active, buckets.published, buckets.backup]
+          .map((bucket) => ({ bucket, objectPrefix: "server/" })),
+        { bucket: buckets.projectSync, objectPrefix: "server/quarantine/v1/" },
+        { bucket: buckets.projectSync, objectPrefix: "server/active/v1/" },
+      ],
       { readWriteType: cloudtrail.ReadWriteType.ALL },
     );
     return trail;
@@ -972,7 +1106,10 @@ export class RoomScanPlatformStack extends Stack {
       ),
       emailDelivery: this.generatedDatabaseSecret(
         "EmailDeliveryDatabaseSecret", "roomscan_email_delivery_runtime", config, keys.secrets,
-      )
+      ),
+      projectSync: this.generatedDatabaseSecret(
+        "ProjectSyncDatabaseSecret", "roomscan_project_sync_runtime", config, keys.secrets,
+      ),
     } as const;
     const applicationSecrets = {
       accessTokenDigest: this.generatedApplicationSecret(
@@ -1046,7 +1183,8 @@ export class RoomScanPlatformStack extends Stack {
       stripeIngress: runtimeSecrets.stripeIngress.attach(cluster),
       stripeReconciliation: runtimeSecrets.stripeReconciliation.attach(cluster),
       auditExport: runtimeSecrets.auditExport.attach(cluster),
-      emailDelivery: runtimeSecrets.emailDelivery.attach(cluster)
+      emailDelivery: runtimeSecrets.emailDelivery.attach(cluster),
+      projectSync: runtimeSecrets.projectSync.attach(cluster),
     } as const;
     return {
       vpc,
@@ -1103,7 +1241,11 @@ export class RoomScanPlatformStack extends Stack {
     return secret;
   }
 
-  private createQueueBoundary(config: PlatformConfig, encryptionKey: kms.IKey): QueueBoundary {
+  private createQueueBoundary(
+    config: PlatformConfig,
+    encryptionKey: kms.IKey,
+    projectSyncEncryptionKey: kms.IKey,
+  ): QueueBoundary {
     const reconciliationDlq = new sqs.Queue(this, "StripeReconciliationDlq", {
       queueName: `roomscan-${config.stage}-stripe-reconciliation-dlq`,
       encryption: sqs.QueueEncryption.KMS,
@@ -1158,13 +1300,36 @@ export class RoomScanPlatformStack extends Stack {
       deadLetterQueue: { queue: emailDeliveryDlq, maxReceiveCount: 5 },
       removalPolicy: RemovalPolicy.RETAIN
     });
+    const projectSyncValidationDlq = new sqs.Queue(this, "ProjectSyncValidationDlq", {
+      queueName: `roomscan-${config.stage}-project-sync-validation-dlq`,
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: projectSyncEncryptionKey,
+      enforceSSL: true,
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const projectSyncValidation = new sqs.Queue(this, "ProjectSyncValidationQueue", {
+      queueName: `roomscan-${config.stage}-project-sync-validation`,
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: projectSyncEncryptionKey,
+      enforceSSL: true,
+      retentionPeriod: Duration.days(4),
+      // The worker has a 30-second Lambda timeout. A 60-second lease gives a
+      // completed invocation enough time to report the durable result before
+      // SQS permits delivery to another invocation.
+      visibilityTimeout: Duration.seconds(60),
+      deadLetterQueue: { queue: projectSyncValidationDlq, maxReceiveCount: 5 },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
     return {
       reconciliation,
       reconciliationDlq,
       auditOutbox,
       auditOutboxDlq,
       emailDelivery,
-      emailDeliveryDlq
+      emailDeliveryDlq,
+      projectSyncValidation,
+      projectSyncValidationDlq,
     };
   }
 
@@ -1202,6 +1367,39 @@ export class RoomScanPlatformStack extends Stack {
         message: events.RuleTargetInput.fromObject({ kind })
       }));
     }
+  }
+
+  private createProjectSyncValidationSchedule(config: PlatformConfig, queue: sqs.Queue): void {
+    const rule = new events.Rule(this, "ProjectSyncValidationRecoverySchedule", {
+      ruleName: `roomscan-${config.stage}-project-sync-validation-recovery`,
+      description: "Targetless immutable project-validation wake; PostgreSQL claims remain authoritative",
+      enabled: true,
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+    });
+    // The SQS body is intentionally a fixed scalar rather than a JSON record
+    // with project/upload/version coordinates. A lost wake is recovered by
+    // the next schedule; a received wake cannot choose work.
+    // Do not use events-targets' SQS helper here: it adds a broad producer
+    // policy (including GetQueue*) and shares legacy queue-key behavior. The
+    // direct target plus resource policy is the exact service principal/rule
+    // binding for this one targetless wake.
+    rule.addTarget({
+      bind: () => ({
+        arn: queue.queueArn,
+        input: events.RuleTargetInput.fromText("roomscan-project-validation-wake-v1"),
+        targetResource: queue,
+      }),
+    });
+    queue.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "AllowExactProjectSyncValidationRecoveryWake",
+      principals: [new iam.ServicePrincipal("events.amazonaws.com")],
+      actions: ["sqs:SendMessage"],
+      resources: [queue.queueArn],
+      conditions: {
+        ArnEquals: { "aws:SourceArn": rule.ruleArn },
+        StringEquals: { "aws:SourceAccount": config.accountId },
+      },
+    }));
   }
 
   private createSesBoundary(config: PlatformConfig, notificationTopic: sns.Topic): ses.CfnConfigurationSet {
@@ -1423,9 +1621,13 @@ export class RoomScanPlatformStack extends Stack {
     return new iam.PolicyStatement({ actions: [...actions], resources: [keyArn] });
   }
 
-  private attachQueueConsumer(unit: FunctionUnit, queue: sqs.Queue): void {
+  private attachQueueConsumer(
+    unit: FunctionUnit,
+    queue: sqs.Queue,
+    options: Readonly<{ readonly batchSize?: number }> = {},
+  ): void {
     unit.alias.addEventSource(new lambdaEventSources.SqsEventSource(queue, {
-      batchSize: 10,
+      batchSize: options.batchSize ?? 10,
       maxBatchingWindow: Duration.seconds(5),
       reportBatchItemFailures: true,
       enabled: true
@@ -1614,7 +1816,7 @@ export class RoomScanPlatformStack extends Stack {
         timeout: Duration.seconds(15)
       },
     );
-    for (const route of SLICE4_ROUTE_MANIFEST) {
+    for (const route of SLICE5_ROUTE_MANIFEST) {
       const isStripe = route.id === "stripe.webhook";
       httpApi.addRoutes({
         path: this.httpApiPath(route),
@@ -1718,6 +1920,7 @@ export class RoomScanPlatformStack extends Stack {
     for (const [name, value] of [
       ["QuarantineBucketArn", buckets.quarantine.bucketArn],
       ["ActiveBucketArn", buckets.active.bucketArn],
+      ["ProjectSyncBucketArn", buckets.projectSync.bucketArn],
       ["PublishedDerivativeBucketArn", buckets.published.bucketArn],
       ["BackupBucketArn", buckets.backup.bucketArn],
       ["AuditBucketArn", buckets.audit.bucketArn],
@@ -1733,9 +1936,11 @@ export class RoomScanPlatformStack extends Stack {
       ],
       ["AuditExportDatabaseSecretArn", database.runtimeSecrets.auditExport.secretArn],
       ["EmailDeliveryDatabaseSecretArn", database.runtimeSecrets.emailDelivery.secretArn],
+      ["ProjectSyncDatabaseSecretArn", database.runtimeSecrets.projectSync.secretArn],
       ["StripeReconciliationQueueArn", queues.reconciliation.queueArn],
       ["AuditOutboxQueueArn", queues.auditOutbox.queueArn],
-      ["EmailDeliveryQueueArn", queues.emailDelivery.queueArn]
+      ["EmailDeliveryQueueArn", queues.emailDelivery.queueArn],
+      ["ProjectSyncValidationQueueArn", queues.projectSyncValidation.queueArn],
     ] as const) {
       new CfnOutput(this, name, { value });
     }
@@ -1755,8 +1960,8 @@ function expectedMigrationLedger(): readonly Readonly<{
   const names = readdirSync(directory)
     .filter((name) => /^\d{4}_[a-z0-9_]+\.up\.sql$/u.test(name))
     .sort();
-  if (names.length !== 7 || names.some((name, index) => name.slice(0, 4) !== String(index + 1).padStart(4, "0"))) {
-    throw new Error("expected the exact forward-only 0001-0007 migration set");
+  if (names.length !== 8 || names.some((name, index) => name.slice(0, 4) !== String(index + 1).padStart(4, "0"))) {
+    throw new Error("expected the exact forward-only 0001-0008 migration set");
   }
   return Object.freeze(names.map((name) => Object.freeze({
     version: name.slice(0, 4),

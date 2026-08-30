@@ -14,6 +14,7 @@ export const RUNTIME_DATABASE_ROLES = Object.freeze([
   "roomscan_stripe_reconciliation_runtime",
   "roomscan_audit_export_runtime",
   "roomscan_email_delivery_runtime",
+  "roomscan_project_sync_runtime",
 ] as const);
 
 export type RuntimeDatabaseRole = typeof RUNTIME_DATABASE_ROLES[number];
@@ -119,7 +120,7 @@ function assertConfiguration(input: Parameters<typeof initializeRuntimeRoleCrede
     || input.secretReader === null || typeof input.secretReader !== "object" || typeof input.secretReader.read !== "function"
     || typeof input.randomBytes !== "function"
     || input.secretArns === null || typeof input.secretArns !== "object"
-    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 7) {
+    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 8) {
     throw new RuntimeCredentialBootstrapError("invalid_configuration");
   }
   const secretKeys = Object.keys(input.secretArns).sort();

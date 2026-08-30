@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { SLICE5_ROUTE_MANIFEST, type FieldRule } from "roomscan-studio-hosted-service/contracts";
+
 import {
   LambdaRuntimeConfigurationError,
 } from "../src/functions/runtime-support.js";
@@ -51,6 +53,8 @@ function environment(role: string, extra: Readonly<NodeJS.ProcessEnv> = {}): Nod
     STRIPE_RECONCILIATION_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-stripe-reconciliation`,
     AUDIT_OUTBOX_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-audit-outbox`,
     MAGIC_DELIVERY_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-email-delivery`,
+    PROJECT_SYNC_VALIDATION_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-project-sync-validation`,
+    PROJECT_SYNC_BUCKET_NAME: "roomscan-dev-project-sync-111111111111",
     AUDIT_BUCKET_NAME: "roomscan-dev-audit-111111111111",
     MAGIC_DELIVERY_KEY_ID: "magic-envelope-local-test-v1",
     PUBLIC_BASE_URL: "https://api.example.invalid",
@@ -167,7 +171,7 @@ test("reconciliation accepts synthetic price plans only for dev and validates th
   assert.deepEqual(adapterObserved.roles, ["roomscan_stripe_reconciliation_runtime"]);
 });
 
-test("API root builds the sealed nineteen-route service with the API lane and no Stripe secret", async () => {
+test("API root composes the frozen Slice 4 handler with every protected Slice 5 project-sync route on the API lane", async () => {
   const observed = { roles: [] as string[], secrets: [] as Array<readonly [string, string]> };
   const handler = await createApiRoot(environment("roomscan_api_runtime"), fakeRuntime(observed));
   const response = await handler({
@@ -178,6 +182,19 @@ test("API root builds the sealed nineteen-route service with the API lane and no
     requestContext: { http: { method: "GET" } },
   });
   assert.equal(response.statusCode, 200);
+  for (const route of SLICE5_ROUTE_MANIFEST.slice(19)) {
+    const response = await handler({
+      version: "2.0",
+      rawPath: route.pathTemplate,
+      rawQueryString: "",
+      body: JSON.stringify(validRouteBody(route.request.fields ?? {})),
+      headers: { "content-type": "application/json" },
+      requestContext: { http: { method: route.method } },
+    });
+    // A valid request reaches the Slice 5 protected-route authorization
+    // boundary. A legacy-only root would return 404 before it reaches 401.
+    assert.equal(response.statusCode, 401, route.id);
+  }
   assert.deepEqual(observed.roles, ["roomscan_api_runtime"]);
   assert.deepEqual(observed.secrets, [
     [secret("roomscan-access-token"), "key"],
@@ -187,6 +204,22 @@ test("API root builds the sealed nineteen-route service with the API lane and no
   ]);
   assert.equal(observed.secrets.some(([arn]) => arn.includes("stripe")), false);
 });
+
+function validRouteBody(fields: Readonly<Record<string, FieldRule>>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields)
+    .filter(([, rule]) => rule.required)
+    .map(([name, rule]) => [name, validFieldValue(rule)]));
+}
+
+function validFieldValue(rule: FieldRule): string | number | boolean {
+  if (rule.type === "integer") return rule.minimum;
+  if (rule.type === "boolean") return rule.literal ?? false;
+  if (rule.enum !== undefined) return rule.enum[0]!;
+  if (rule.pattern?.startsWith("^prj_") === true) return `prj_${"a".repeat(Math.max(16, rule.minLength - 4))}`;
+  if (rule.pattern?.startsWith("^rev_") === true) return `rev_${"a".repeat(Math.max(16, rule.minLength - 4))}`;
+  if (rule.pattern?.startsWith("^upl_") === true) return `upl_${"a".repeat(Math.max(16, rule.minLength - 4))}`;
+  return "a".repeat(Math.max(rule.minLength, 1));
+}
 
 test("role-bound authorizer and Cognito roots route safe decisions instead of default placeholders", async () => {
   const authorizerObserved = { roles: [] as string[], secrets: [] as Array<readonly [string, string]> };

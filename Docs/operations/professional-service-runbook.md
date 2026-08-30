@@ -251,3 +251,98 @@ the SecretsKey and guards the remaining path with an exact Secrets Manager
 before the fix and GREEN after restoration. Operators must still include live
 same-resource allow and wrong-service/wrong-secret denial probes in the
 authorized external packet; offline synthesis is not deployed IAM evidence.
+
+## Slice 5 project-sync operations addendum — 2026-08-29
+
+This addendum covers immutable professional migration/sync only. Publication,
+portal delivery, deletion/restore lifecycle, prices, and retention promises
+remain outside Slice 5.
+
+### Normal state and signals
+
+The project-validation queue carries only the fixed targetless wake. A worker
+tick first reaps expired `allocated` rows and releases reservations, then claims
+the oldest eligible `validation_pending` row from PostgreSQL. Operators should
+watch queue age/depth, DLQ depth, worker errors/duration/memory, allocation
+expiry/reap counts, validation rejections by bounded code, stale-branch rate,
+quota reservation age, active-copy verification failures, and recovery signing
+errors. Do not log or alarm on room names, filenames, request bodies, object
+keys/versions, signed URLs, digests tied to customer content, or raw bytes.
+
+A stale result is expected concurrency control, not data loss. Confirm that the
+candidate and current canonical revision remain separate immutable active
+versions and that authorized recovery can obtain each. Never resolve a stale
+branch by updating the head manually or copying geometry between revisions.
+
+### Containment and rollback
+
+For suspected corruption, authorization failure, quota drift, validator escape,
+or provider inconsistency:
+
+1. Set `hosted_operations_enabled=false` globally and, where useful, for the
+   affected workspace. This denies new migration/append/completion/raw/lease
+   mutations without affecting guest/local work.
+2. Disable the project-validation queue event source and targetless recovery
+   schedule. Preserve queue/DLQ messages, upload rows, reservations, object
+   versions, and audit records for investigation; do not delete or replay a
+   client-selected target.
+3. Leave authorized immutable recovery/download available unless the read path
+   itself is implicated. A signed URL is transient capability, not proof of
+   authorization after issuance.
+4. Inspect the server-selected upload state and exact provider version through
+   approved privacy-safe tooling. Quarantine must never be served as active.
+5. Restore only after the same-tenant positive control, paired denial, bounded
+   validator control, active-copy verification, targetless claim, and
+   expected-head concurrency oracle pass.
+
+Do not roll back migration `0008`, rewrite a canonical head, delete a stale
+branch, reuse a quarantine object as active, release/finalize quota by hand, or
+remove the local app journal during containment. Forward correction plus flags,
+worker disablement, and app transport unavailability are the rollback points.
+
+### Interrupted work and recovery
+
+- `allocated` without completion: allow authoritative 300-second expiry and
+  targetless reap. Exact retry before expiry must return the same public
+  allocation/declaration and a fresh short-lived URL.
+- `validation_pending` after wake failure: a scheduled targetless tick must
+  claim it; never synthesize a queue payload containing upload coordinates.
+- expired `validating` lease: the worker may reclaim from PostgreSQL server
+  order. Provider copy/finalization remain idempotent.
+- active copy before CAS or response loss after CAS: query public status and
+  resume the server-owned transition. Do not allocate a replacement candidate
+  under a changed declaration.
+- app recovery interruption: retain the marker-owned journal and scratch state.
+  Resume package/companion promotion through the prepare/commit boundary; do
+  not copy staged files into the live package manually.
+
+### Raw archive incidents
+
+Raw archive is default off. Before enabling for a project, verify owner/recent
+authentication, the exact revision/selection/review digest, categories, byte
+count, quota policy version, and privacy acknowledgement. Raw uses its own
+quarantine/active prefix and ledger and must not advance the working head. On a
+suspected raw leak, disable hosted writes, preserve immutable evidence, revoke
+transient access where the provider permits, and follow the approved privacy/
+security incident process. Slice 5 defines no destructive lifecycle promise.
+
+### Migration and compatibility
+
+Apply `0008_professional_project_sync.up.sql` only through the existing
+digest-bound forward migration operator. Fresh and staged-upgrade evidence must
+show exactly one application and the credential-backed
+`roomscan_project_sync_runtime` role with the intended Secrets Manager/Data API
+wiring. If incompatible, keep hosted operations and the worker disabled and
+ship a reviewed forward migration. Slice 4 routes and guest/local packages must
+remain usable.
+
+### External evidence still required
+
+Before provider enablement, extend the authorized non-production packet with
+synthetic-only controls for conditional S3 PUT/version/checksum/copy/read,
+wrong-prefix/version/KMS denials, targetless SQS redrive and scheduled recovery,
+Lambda ceiling behavior, Data API contention and CAS concurrency, CloudTrail
+data events, alarm delivery, quota reconciliation, and alias/flag rollback.
+Physical-device Face ID/passcode and background-transfer behavior are separate.
+No local test or synthesized template is live provider, deployment, credential,
+retention, billing, or release evidence.

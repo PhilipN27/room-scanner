@@ -14,6 +14,7 @@ const runtimeRoles = [
   'roomscan_auth_challenge_runtime',
   'roomscan_authorizer_runtime',
   'roomscan_email_delivery_runtime',
+  'roomscan_project_sync_runtime',
   'roomscan_stripe_ingress_runtime',
   'roomscan_stripe_reconciliation_runtime',
 ];
@@ -100,10 +101,10 @@ try {
   })}`);
 
   assert.deepEqual(digests, {
-    execute: '7dceb4e0fe441696faade84e15529416a90caded152afa9248513315e3b00c0a',
-    definers: '2469f83f3a96664b2ebaf81230a1cb7951a58031d40b4067c36e9dd4459dd847',
-    policyAcl: '327c8b918b823eb8372f18db139ea6d042db08a97b1cb2497054efb3a6a150c9',
-    results: 'e921620f4988688e682870cf7110d96bc7adb5720a91e28143f380edb017971b',
+    execute: '25905f7e9fd9fa1d463e954fdd0c3d4a68fe722fc94d0bd20c4e299760f1c188',
+    definers: '3be9b2af296380f89781e197aa3703bc9055c72cc5bfb24f28bb504abc84ecf5',
+    policyAcl: 'd25d7b52940a1cec1dca07d955b6e6839f48236bcb755e67a2cb2436bf68868a',
+    results: 'b92365af1175f86d7215bbf89e2f1dec6a7e0253976a3fd90a6ce786eefeb02c',
   });
 
   assert.equal(definerRows.every(({ owner }) => owner === 'roomscan_policy'), true);
@@ -170,7 +171,7 @@ try {
     `INTEGRATION_0007_CATALOG_SUMMARY runtime_roles=${runtimeRoles.length} `
       + `routine_acl_roles=${privilegeRoles.length} definers=${definerRows.length} `
       + `policy_acl_entries=${policyAcl.length} membership_edges=0 `
-      + 'stripe_account_registry_constraints=3 status=pass',
+      + 'stripe_account_registry_constraints=3 project_sync_worker_catalog=1 status=pass',
   );
 } finally {
   await pool.end();

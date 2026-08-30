@@ -67,9 +67,47 @@ public actor DeterministicRoomProjectIDGenerator: RoomProjectIDGenerating {
     }
 }
 
+/// Internal package ownership records must remain unique in production, while
+/// reproducible Core archive fixtures need a deterministic source package.
+/// This narrow generator affects only opaque local staging ownership IDs; it
+/// never changes project or immutable revision identity.
+/// `@testable` fixture seam for opaque local ownership IDs. Production callers
+/// cannot inject this generator; the public store initializer always uses the
+/// UUID implementation below.
+protocol RoomProjectTransactionIDGenerating: Sendable {
+    func nextTransactionID() -> String
+}
+
+struct UUIDRoomProjectTransactionIDGenerator: RoomProjectTransactionIDGenerating {
+    init() {}
+
+    public func nextTransactionID() -> String {
+        UUID().uuidString.lowercased()
+    }
+}
+
+final class DeterministicRoomProjectTransactionIDGenerator: RoomProjectTransactionIDGenerating, @unchecked Sendable {
+    private let lock = NSLock()
+    private var transactionIDs: [String]
+
+    init(transactionIDs: [String]) {
+        self.transactionIDs = transactionIDs
+    }
+
+    public func nextTransactionID() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !transactionIDs.isEmpty else {
+            return UUID().uuidString.lowercased()
+        }
+        return transactionIDs.removeFirst()
+    }
+}
+
 public enum RoomProjectStoreFaultPoint: String, Sendable, Equatable {
     case beforeInitialPackagePromotion
     case afterRevisionPromotionBeforeManifest
+    case afterProfessionalWorkingCopyStageDirectoryCreationBeforeMarker
 }
 
 /// Test-only seam for deterministic failure at the narrow commit boundary.
@@ -141,6 +179,24 @@ private struct RoomBackupWorkspaceOwnershipRecord: Codable, Sendable, Equatable 
     }
 }
 
+/// Ownership proof for the private sibling that contains an unredacted backup
+/// only while the professional redaction pipeline is still in flight. It is
+/// deliberately distinct from the backup-workspace marker: once the validated
+/// redacted workspace is promoted, this root must be empty and can be removed.
+private struct RoomProfessionalWorkingCopyStageOwnershipRecord: Codable, Sendable, Equatable {
+    static let currentFormatVersion = "roomscan-professional-working-copy-stage-v1"
+
+    let formatVersion: String
+    let directoryName: String
+    let token: String
+
+    init(directoryName: String, token: String) {
+        formatVersion = Self.currentFormatVersion
+        self.directoryName = directoryName
+        self.token = token
+    }
+}
+
 private struct PreparedRoomBackupRecovery: Sendable {
     let token: String
     let workspaceRootURL: URL
@@ -197,6 +253,7 @@ public actor LocalRoomProjectStore {
     private let configuredRootURL: URL
     private let clock: any RoomProjectClock
     private let idGenerator: any RoomProjectIDGenerating
+    private let transactionIDGenerator: any RoomProjectTransactionIDGenerating
     private let faultInjector: any RoomProjectStoreFaultInjecting
     private let exportMaterializationLimits: RoomExportMaterializationLimits
     private let backupLimits: RoomBackupLimits
@@ -214,6 +271,27 @@ public actor LocalRoomProjectStore {
         configuredRootURL = rootURL.standardizedFileURL
         self.clock = clock
         self.idGenerator = idGenerator
+        transactionIDGenerator = UUIDRoomProjectTransactionIDGenerator()
+        self.faultInjector = faultInjector
+        self.exportMaterializationLimits = exportMaterializationLimits
+        self.backupLimits = backupLimits
+    }
+
+    /// Internal fixture-only initializer. The generated value is validated
+    /// before any ownership or pending marker can be written.
+    init(
+        rootURL: URL,
+        clock: any RoomProjectClock = SystemRoomProjectClock(),
+        idGenerator: any RoomProjectIDGenerating = UUIDRoomProjectIDGenerator(),
+        transactionIDGenerator: any RoomProjectTransactionIDGenerating,
+        faultInjector: any RoomProjectStoreFaultInjecting = NoRoomProjectStoreFaultInjector(),
+        exportMaterializationLimits: RoomExportMaterializationLimits = RoomExportMaterializationLimits(),
+        backupLimits: RoomBackupLimits = RoomBackupLimits()
+    ) {
+        configuredRootURL = rootURL.standardizedFileURL
+        self.clock = clock
+        self.idGenerator = idGenerator
+        self.transactionIDGenerator = transactionIDGenerator
         self.faultInjector = faultInjector
         self.exportMaterializationLimits = exportMaterializationLimits
         self.backupLimits = backupLimits
@@ -714,6 +792,151 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    /// Creates the professional-only raw-redacted external copy. It first
+    /// uses the frozen full-package materializer, then rewrites only that
+    /// copy's manifest and omits the declared world-map file. The live source
+    /// package is never opened for writing by this API.
+    public func materializeProfessionalWorkingCopy(
+        projectID: String,
+        expectedHeadRevisionID: String,
+        into requestedDestinationURL: URL
+    ) throws -> RoomProfessionalWorkingCopy {
+        let root = try canonicalRootURL()
+        let destinationURL = try withRootLock(root) {
+            try validatedBackupWorkspaceDestination(requestedDestinationURL, root: root)
+        }
+        let stage = try makeProfessionalWorkingCopyStage(
+            parent: destinationURL.deletingLastPathComponent()
+        )
+        let stagedWorkspaceURL = stage.url.appendingPathComponent("workspace", isDirectory: true)
+        var stageExists = true
+
+        do {
+            // The frozen materializer may transiently contain every raw byte,
+            // so it writes only inside our marker-owned private sibling. The
+            // caller's destination stays absent until redaction and full
+            // revalidation have already succeeded.
+            var materialization = try materializeBackupSnapshot(
+                projectID: projectID,
+                expectedHeadRevisionID: expectedHeadRevisionID,
+                into: stagedWorkspaceURL
+            )
+            guard let manifestEntry = materialization.entries.first(where: {
+                $0.packageRelativePath.value == "manifest.json"
+            }) else {
+                throw RoomBackupError.invalidBackupManifest("Professional working copy is missing manifest.json.")
+            }
+            let manifestURL = materialization.workspaceURL
+                .appendingPathComponent(manifestEntry.workspaceRelativePath.value)
+            guard !isSymbolicLink(manifestURL), try isRegularFile(manifestURL) else {
+                throw RoomBackupError.unsafeDestination(manifestURL.path)
+            }
+
+            var manifest: RoomProjectManifest
+            do {
+                manifest = try RoomJSONCoding.makeDecoder().decode(
+                    RoomProjectManifest.self,
+                    from: Data(contentsOf: manifestURL)
+                )
+            } catch {
+                throw RoomBackupError.invalidBackupManifest("Professional working-copy manifest is unreadable.")
+            }
+            guard
+                manifest.projectID == materialization.projectID,
+                manifest.headRevisionID == materialization.headRevisionID,
+                manifest.schemaVersion == materialization.projectSchemaVersion
+            else {
+                throw RoomBackupError.invalidBackupManifest("Professional working-copy manifest disagrees with the validated source snapshot.")
+            }
+
+            let redactedWorldMapPath = manifest.assetPolicy?.worldMap?.value
+            if let worldMapPath = redactedWorldMapPath {
+                guard
+                    worldMapPath != manifest.assetPolicy?.nativeUSDZ?.value,
+                    worldMapPath != manifest.assetPolicy?.rawMesh?.value,
+                    let worldMapEntry = materialization.entries.first(where: {
+                        $0.packageRelativePath.value == worldMapPath
+                    })
+                else {
+                    throw RoomBackupError.invalidBackupManifest("World-map policy cannot share a retained native asset or be absent from the validated package snapshot.")
+                }
+                let worldMapURL = materialization.workspaceURL
+                    .appendingPathComponent(worldMapEntry.workspaceRelativePath.value)
+                guard !isSymbolicLink(worldMapURL), try isRegularFile(worldMapURL) else {
+                    throw RoomBackupError.unsafeDestination(worldMapURL.path)
+                }
+
+                // This intentionally changes only the marker-owned private
+                // external copy. The live authoritative package is never
+                // opened for writing by this API.
+                manifest.assetPolicy?.worldMap = nil
+                do {
+                    let redactedManifestData = try RoomJSONCoding.makeEncoder().encode(manifest)
+                    try redactedManifestData.write(to: manifestURL, options: [.atomic])
+                    try fileManager.removeItem(at: worldMapURL)
+                } catch {
+                    throw RoomBackupError.storageFailure("Unable to redact the external professional working copy.")
+                }
+                let retainedEntries = materialization.entries.filter {
+                    $0.packageRelativePath.value != worldMapPath
+                }
+                materialization.entries = try retainedEntries
+                    .sorted { $0.packageRelativePath < $1.packageRelativePath }
+                    .enumerated()
+                    .map { offset, entry in
+                        RoomBackupMaterializationEntry(
+                            entryPath: try RoomBackupArchivePath(
+                                String(
+                                    format: "package/files/file-%04d.%@",
+                                    offset + 1,
+                                    backupArchiveExtension(for: entry.packageRelativePath.value)
+                                )
+                            ),
+                            workspaceRelativePath: entry.workspaceRelativePath,
+                            packageRelativePath: entry.packageRelativePath,
+                            mediaType: entry.mediaType
+                        )
+                    }
+            }
+
+            let sourceRevision = try redesignSourceRevisionBinding(
+                projectID: materialization.projectID,
+                revisionID: materialization.headRevisionID
+            )
+            let stagedWorkingCopy = try RoomProfessionalWorkingCopy(
+                backupMaterialization: materialization,
+                sourceRevision: sourceRevision,
+                redactedWorldMapPackagePath: redactedWorldMapPath
+            )
+            try RoomProfessionalArchiveSupport.validateRawRedactedMaterialization(stagedWorkingCopy)
+
+            // Construct the returned proof before promotion, leaving no
+            // fallible validation step after the atomic workspace move.
+            var promotedMaterialization = materialization
+            promotedMaterialization.workspaceURL = destinationURL
+            let promotedWorkingCopy = try RoomProfessionalWorkingCopy(
+                backupMaterialization: promotedMaterialization,
+                sourceRevision: sourceRevision,
+                redactedWorldMapPackagePath: redactedWorldMapPath
+            )
+            try withRootLock(root) {
+                _ = try validatedBackupWorkspaceDestination(destinationURL, root: root)
+                try fileManager.moveItem(at: stagedWorkspaceURL, to: destinationURL)
+            }
+            // The private root now contains only the independently verified
+            // ownership marker. Cleanup failure cannot turn a successful
+            // promotion into a caller-visible failure.
+            try? removeOwnedProfessionalWorkingCopyStage(stage.url, token: stage.token)
+            stageExists = false
+            return promotedWorkingCopy
+        } catch {
+            if stageExists {
+                try? removeOwnedProfessionalWorkingCopyStage(stage.url, token: stage.token)
+            }
+            throw error
+        }
+    }
+
     /// Freezes the entire authoritative package—manifest, metadata, every
     /// immutable revision, declared assets, and revision ownership records—
     /// into a fresh external workspace. This is deliberately distinct from a
@@ -930,6 +1153,45 @@ public actor LocalRoomProjectStore {
         _ preparation: RoomBackupRecoveryPreparation,
         conflictPolicy: RoomBackupRecoveryConflictPolicy
     ) async throws -> RoomBackupRecoveryResult {
+        let generatedCopyProjectID: String?
+        switch conflictPolicy {
+        case .failIfDivergent:
+            generatedCopyProjectID = nil
+        case .recoverAsCopy:
+            generatedCopyProjectID = await idGenerator.nextProjectID()
+        }
+        return try commitPreparedRecovery(
+            preparation,
+            conflictPolicy: conflictPolicy,
+            recoveredCopyProjectID: generatedCopyProjectID,
+            forceExactRecoveredCopy: false
+        )
+    }
+
+    /// Commits an already validated package stage using an optional caller-held
+    /// recovered-copy identity. The original overload retains its generated
+    /// copy behavior; durable recovery journals use this additive seam so a
+    /// crash after copy promotion cannot create a second recovered project.
+    public func commitPreparedRecovery(
+        _ preparation: RoomBackupRecoveryPreparation,
+        conflictPolicy: RoomBackupRecoveryConflictPolicy,
+        recoveredCopyProjectID: String?
+    ) async throws -> RoomBackupRecoveryResult {
+        try commitPreparedRecovery(
+            preparation,
+            conflictPolicy: conflictPolicy,
+            recoveredCopyProjectID: recoveredCopyProjectID,
+            forceExactRecoveredCopy: conflictPolicy == .recoverAsCopy
+                && recoveredCopyProjectID != nil
+        )
+    }
+
+    private func commitPreparedRecovery(
+        _ preparation: RoomBackupRecoveryPreparation,
+        conflictPolicy: RoomBackupRecoveryConflictPolicy,
+        recoveredCopyProjectID: String?,
+        forceExactRecoveredCopy: Bool
+    ) throws -> RoomBackupRecoveryResult {
         guard let prepared = preparedBackupRecoveries[preparation.token],
               prepared.descriptor == preparation.descriptor
         else {
@@ -938,12 +1200,16 @@ public actor LocalRoomProjectStore {
         let copyProjectID: String?
         switch conflictPolicy {
         case .failIfDivergent:
+            guard recoveredCopyProjectID == nil else {
+                throw RoomBackupError.recoveryConflict(preparation.descriptor.projectID)
+            }
             copyProjectID = nil
         case .recoverAsCopy:
-            copyProjectID = await idGenerator.nextProjectID()
-            if let copyProjectID {
-                try validateIdentifier(copyProjectID)
+            guard let recoveredCopyProjectID else {
+                throw RoomBackupError.recoveryConflict(preparation.descriptor.projectID)
             }
+            try validateIdentifier(recoveredCopyProjectID)
+            copyProjectID = recoveredCopyProjectID
         }
         let root = try canonicalRootURL()
         return try withRootLock(root) {
@@ -951,7 +1217,8 @@ public actor LocalRoomProjectStore {
                 prepared,
                 root: root,
                 conflictPolicy: conflictPolicy,
-                copyProjectID: copyProjectID
+                copyProjectID: copyProjectID,
+                forceExactRecoveredCopy: forceExactRecoveredCopy
             )
             preparedBackupRecoveries.removeValue(forKey: preparation.token)
             // The outer app backup lease owns the enclosing workspace and must
@@ -2089,6 +2356,7 @@ public actor LocalRoomProjectStore {
             captureEvidence: captureEvidence,
             evidenceCompatibility: evidenceCompatibility
         )
+        let transactionID = try nextValidatedTransactionID()
         try ensureRootExists(root)
 
         let finalProjectURL = try projectDirectory(root: root, projectID: projectID)
@@ -2148,7 +2416,7 @@ public actor LocalRoomProjectStore {
         let ownership = RoomRevisionOwnershipRecord(
             projectID: projectID,
             revisionID: revisionID,
-            transactionID: UUID().uuidString.lowercased()
+            transactionID: transactionID
         )
 
         do {
@@ -2229,6 +2497,7 @@ public actor LocalRoomProjectStore {
             captureEvidence: captureEvidence,
             evidenceCompatibility: evidenceCompatibility
         )
+        let transactionID = try nextValidatedTransactionID()
         let package = try loadLocked(root: root, projectID: projectID)
         let projectSchemaVersion = try validatedProjectSchemaVersion(
             package.manifest
@@ -2300,7 +2569,6 @@ public actor LocalRoomProjectStore {
         updatedManifest.updatedAt = createdAt
         try validate(manifest: updatedManifest, expectedProjectID: projectID)
 
-        let transactionID = UUID().uuidString.lowercased()
         let stagingURL = try makeUniqueStagingURL(
             parent: projectURL,
             prefix: ".staging-\(revisionID)-",
@@ -4043,6 +4311,12 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    private func nextValidatedTransactionID() throws -> String {
+        let transactionID = transactionIDGenerator.nextTransactionID()
+        try validateIdentifier(transactionID)
+        return transactionID
+    }
+
     private func makeSummary(_ package: RoomProjectPackage) -> RoomProjectSummary {
         return RoomProjectSummary(
             projectID: package.manifest.projectID,
@@ -4203,6 +4477,104 @@ public actor LocalRoomProjectStore {
             throw RoomBackupError.invalidOwnershipMarker("Backup workspace marker does not own this stage.")
         }
         try fileManager.removeItem(at: workspaceURL)
+    }
+
+    private func makeProfessionalWorkingCopyStage(
+        parent: URL
+    ) throws -> (url: URL, token: String) {
+        guard directoryExists(parent), !isSymbolicLink(parent) else {
+            throw RoomBackupError.unsafeDestination(parent.path)
+        }
+        for _ in 0..<16 {
+            let token = UUID().uuidString.lowercased()
+            let candidate = parent.appendingPathComponent(
+                ".roomscan-professional-working-copy-stage-\(token)",
+                isDirectory: true
+            )
+            guard !pathExists(candidate), !isSymbolicLink(candidate) else {
+                continue
+            }
+            do {
+                try fileManager.createDirectory(at: candidate, withIntermediateDirectories: false)
+                try faultInjector.throwIfNeeded(
+                    at: .afterProfessionalWorkingCopyStageDirectoryCreationBeforeMarker
+                )
+                try writeProfessionalWorkingCopyStageOwnership(
+                    RoomProfessionalWorkingCopyStageOwnershipRecord(
+                        directoryName: candidate.lastPathComponent,
+                        token: token
+                    ),
+                    to: candidate
+                )
+                return (candidate, token)
+            } catch {
+                // A failed directory or marker write establishes no durable
+                // ownership. Re-read the exact marker before cleanup, so a
+                // concurrent replacement can never be removed. A markerless
+                // hidden candidate contains no copied package bytes and is
+                // intentionally left for explicit safe recovery.
+                try? removeOwnedProfessionalWorkingCopyStage(candidate, token: token)
+                if let backupError = error as? RoomBackupError {
+                    throw backupError
+                }
+                throw RoomBackupError.storageFailure("Unable to create a private professional working-copy stage.")
+            }
+        }
+        throw RoomBackupError.unsafeDestination(parent.path)
+    }
+
+    private func writeProfessionalWorkingCopyStageOwnership(
+        _ marker: RoomProfessionalWorkingCopyStageOwnershipRecord,
+        to stageURL: URL
+    ) throws {
+        let markerURL = stageURL.appendingPathComponent(".roomscan-professional-working-copy-stage.json")
+        guard !pathExists(markerURL), !isSymbolicLink(markerURL) else {
+            throw RoomBackupError.destinationAlreadyExists(markerURL.path)
+        }
+        do {
+            let data = try RoomJSONCoding.makeEncoder().encode(marker)
+            try RoomAtomicFileWriter.writeNewFile(
+                data,
+                to: markerURL,
+                fileManager: fileManager
+            )
+        } catch {
+            throw RoomBackupError.storageFailure("Unable to write professional working-copy stage ownership marker.")
+        }
+    }
+
+    private func removeOwnedProfessionalWorkingCopyStage(
+        _ stageURL: URL,
+        token: String
+    ) throws {
+        guard
+            stageURL.lastPathComponent.hasPrefix(".roomscan-professional-working-copy-stage-"),
+            directoryExists(stageURL),
+            !isSymbolicLink(stageURL)
+        else {
+            return
+        }
+        let markerURL = stageURL.appendingPathComponent(".roomscan-professional-working-copy-stage.json")
+        guard pathExists(markerURL), !isSymbolicLink(markerURL), try isRegularFile(markerURL) else {
+            throw RoomBackupError.invalidOwnershipMarker("Professional working-copy stage marker is missing or unsafe.")
+        }
+        let marker: RoomProfessionalWorkingCopyStageOwnershipRecord
+        do {
+            marker = try RoomJSONCoding.makeDecoder().decode(
+                RoomProfessionalWorkingCopyStageOwnershipRecord.self,
+                from: Data(contentsOf: markerURL)
+            )
+        } catch {
+            throw RoomBackupError.invalidOwnershipMarker("Professional working-copy stage marker is malformed.")
+        }
+        guard
+            marker.formatVersion == RoomProfessionalWorkingCopyStageOwnershipRecord.currentFormatVersion,
+            marker.directoryName == stageURL.lastPathComponent,
+            marker.token == token
+        else {
+            throw RoomBackupError.invalidOwnershipMarker("Professional working-copy stage marker does not own this stage.")
+        }
+        try fileManager.removeItem(at: stageURL)
     }
 
     private func backupSourceFiles(
@@ -4482,10 +4854,24 @@ public actor LocalRoomProjectStore {
         _ prepared: PreparedRoomBackupRecovery,
         root: URL,
         conflictPolicy: RoomBackupRecoveryConflictPolicy,
-        copyProjectID: String?
+        copyProjectID: String?,
+        forceExactRecoveredCopy: Bool
     ) throws -> RoomBackupRecoveryResult {
         try ensureRootExists(root)
         let originalProjectID = prepared.manifest.projectID
+        if forceExactRecoveredCopy {
+            guard conflictPolicy == .recoverAsCopy,
+                  let copyProjectID,
+                  copyProjectID != originalProjectID
+            else {
+                throw RoomBackupError.recoveryConflict(copyProjectID ?? originalProjectID)
+            }
+            return try promotePreparedBackupCopy(
+                prepared,
+                root: root,
+                newProjectID: copyProjectID
+            )
+        }
         let originalDestination = try projectDirectory(root: root, projectID: originalProjectID)
         let originalExists = pathExists(originalDestination)
         if originalExists {
@@ -4519,8 +4905,20 @@ public actor LocalRoomProjectStore {
         newProjectID: String
     ) throws -> RoomBackupRecoveryResult {
         let destination = try projectDirectory(root: root, projectID: newProjectID)
-        guard !pathExists(destination), !isSymbolicLink(destination) else {
-            throw RoomBackupError.recoveryConflict(newProjectID)
+        if pathExists(destination) || isSymbolicLink(destination) {
+            guard !isSymbolicLink(destination),
+                  let existing = try? loadLocked(root: root, projectID: newProjectID),
+                  try recoveredCopyPackageMatches(
+                      prepared,
+                      existing: existing,
+                      root: root,
+                      projectURL: destination,
+                      copyProjectID: newProjectID
+                  )
+            else {
+                throw RoomBackupError.recoveryConflict(newProjectID)
+            }
+            return .recoveredCopy(makeSummary(existing))
         }
         let package = try promotePreparedBackupPackage(
             prepared,
@@ -4529,6 +4927,93 @@ public actor LocalRoomProjectStore {
             rewriteAsCopy: true
         )
         return .recoveredCopy(makeSummary(package))
+    }
+
+    /// An explicit recovered-copy ID may be retried after the package move
+    /// succeeds but before the outer professional journal records its phase.
+    /// Compare a freshly reconstructed, rewritten package under the existing
+    /// validated backup closure; an unrelated pre-existing directory remains
+    /// a conflict and is never adopted merely because its ID matches.
+    private func recoveredCopyPackageMatches(
+        _ prepared: PreparedRoomBackupRecovery,
+        existing: RoomProjectPackage,
+        root: URL,
+        projectURL: URL,
+        copyProjectID: String
+    ) throws -> Bool {
+        let expectedStage = try makeUniqueStagingURL(
+            parent: root,
+            prefix: ".recovery-expected-copy-\(copyProjectID)-",
+            root: root
+        )
+        var stageCreated = false
+        defer {
+            if stageCreated {
+                try? removeRecoveryPromotionStaging(expectedStage, root: root)
+            }
+        }
+        try fileManager.createDirectory(at: expectedStage, withIntermediateDirectories: false)
+        stageCreated = true
+        try copyPreparedBackupPackage(prepared, to: expectedStage, root: root)
+        try rewriteRecoveredCopyProjectIdentifiers(
+            at: expectedStage,
+            originalProjectID: prepared.manifest.projectID,
+            newProjectID: copyProjectID,
+            root: root
+        )
+        let expected = try loadProjectPackageLocked(
+            root: root,
+            projectID: copyProjectID,
+            projectURL: expectedStage
+        )
+        try validateBackupRevisionOwnership(package: expected, projectURL: expectedStage, root: root)
+        return try packageByteClosureMatches(
+            expected,
+            expectedURL: expectedStage,
+            actual: existing,
+            actualURL: projectURL,
+            root: root
+        )
+    }
+
+    private func packageByteClosureMatches(
+        _ expected: RoomProjectPackage,
+        expectedURL: URL,
+        actual: RoomProjectPackage,
+        actualURL: URL,
+        root: URL
+    ) throws -> Bool {
+        let expectedSources = try backupSourceFiles(
+            root: root,
+            projectID: expected.manifest.projectID,
+            projectURL: expectedURL,
+            package: expected
+        )
+        let actualSources = try backupSourceFiles(
+            root: root,
+            projectID: actual.manifest.projectID,
+            projectURL: actualURL,
+            package: actual
+        )
+        guard expectedSources.count == actualSources.count else {
+            return false
+        }
+        let actualByPath = Dictionary(
+            uniqueKeysWithValues: actualSources.map { ($0.packagePath.value, $0.sourceURL) }
+        )
+        guard actualByPath.count == actualSources.count else {
+            return false
+        }
+        for source in expectedSources {
+            guard let actualURL = actualByPath[source.packagePath.value],
+                  try fileByteCount(of: source.sourceURL) == fileByteCount(of: actualURL),
+                  try RoomSHA256.hexDigest(ofFile: source.sourceURL)
+                    == RoomSHA256.hexDigest(ofFile: actualURL)
+            else {
+                return false
+            }
+        }
+        return true
     }
 
     private func promotePreparedBackupPackage(

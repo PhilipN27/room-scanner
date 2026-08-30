@@ -343,6 +343,59 @@ final class RoomLibraryController: ObservableObject {
         )
     }
 
+    /// Professional synchronization receives only a fresh, Core-owned,
+    /// raw-redacted working copy. The app never observes a live package URL
+    /// and this operation does not mutate or remove the local project.
+    func materializeProfessionalWorkingCopy(
+        projectID: String,
+        expectedHeadRevisionID: String,
+        into workspaceURL: URL
+    ) async throws -> RoomProfessionalWorkingCopy {
+        try await store.materializeProfessionalWorkingCopy(
+            projectID: projectID,
+            expectedHeadRevisionID: expectedHeadRevisionID,
+            into: workspaceURL
+        )
+    }
+
+    /// Captures the redesign companion through its canonical Core snapshot
+    /// type for a staged professional envelope. A missing companion is not an
+    /// error: rooms without redesign state still have a valid working set.
+    func professionalRedesignSnapshot(
+        sourceRevision: RoomRedesignSourceRevision
+    ) async throws -> RoomProfessionalRedesignSnapshot? {
+        guard let redesignStore,
+              let document = try await redesignStore.load(sourceRevision: sourceRevision)
+        else { return nil }
+        try document.validate()
+        return try RoomProfessionalRedesignSnapshot(
+            sourceRevision: sourceRevision,
+            canonicalDocumentData: try RoomRedesignCanonicalJSON.encode(document),
+            documentSHA256: RoomRedesignCanonicalJSON.sha256(document)
+        )
+    }
+
+    /// The app-side recovery coordinator intentionally delegates every live
+    /// package promotion to Core's package-first boundary.
+    func makeProfessionalRecoveryCoordinator(
+        conceptStore: LocalRoomConceptStore,
+        scratchRootURL: URL,
+        faultInjector: any RoomProfessionalRecoveryFaultInjecting = NoRoomProfessionalRecoveryFaultInjector()
+    ) throws -> RoomProfessionalRecoveryCoordinator {
+        guard let redesignStore else {
+            throw RoomProjectStoreError.storageFailure(
+                "Local redesign companion storage is unavailable."
+            )
+        }
+        return RoomProfessionalRecoveryCoordinator(
+            projectStore: store,
+            redesignStore: redesignStore,
+            conceptStore: conceptStore,
+            scratchRootURL: scratchRootURL,
+            faultInjector: faultInjector
+        )
+    }
+
     func prepareBackupRecovery(
         archiveURL: URL,
         expectedCloudDescriptor: RoomCloudBackupDescriptor,

@@ -16,8 +16,8 @@ const assetsManifest = JSON.parse(assetsManifestBytes.toString("utf8"));
 const lambdaAssets = Object.values(assetsManifest.files)
   .filter((file) => file.source.packaging === "zip")
   .sort((left, right) => left.displayName.localeCompare(right.displayName));
-if (lambdaAssets.length !== 9) {
-  throw new Error(`expected exactly nine Lambda assets, found ${lambdaAssets.length}`);
+if (lambdaAssets.length !== 10) {
+  throw new Error(`expected exactly ten Lambda assets, found ${lambdaAssets.length}`);
 }
 const manifestAssetDirectories = lambdaAssets.map((asset) => asset.source.path).sort();
 const outputAssetEntries = readdirSync(outputDirectory, { withFileTypes: true })
@@ -48,7 +48,8 @@ const migrationNames = [
   "0004_stripe.up.sql",
   "0005_hardened_reducers.up.sql",
   "0006_auth_persistence.up.sql",
-  "0007_policy_billing_integration.up.sql"
+  "0007_policy_billing_integration.up.sql",
+  "0008_professional_project_sync.up.sql"
 ];
 const migrationAssetFiles = [
   "index.mjs",
@@ -81,6 +82,8 @@ const artifacts = [
 ];
 let inspectedCloudTrailStatusMonitor = false;
 let inspectedMigrationOperator = false;
+let inspectedProjectSyncValidation = false;
+let inspectedSlice5Api = false;
 for (const asset of lambdaAssets) {
   const directory = join(outputDirectory, asset.source.path);
   const files = recursiveFiles(directory);
@@ -155,11 +158,51 @@ for (const asset of lambdaAssets) {
       "MIGRATIONS_PATH",
       "SecretsManagerClient",
       "maxUses: 1",
-      "rejectUnauthorized: true"
+      "rejectUnauthorized: true",
+      "roomscan_project_sync_runtime"
     ]) {
       if (!bundle.includes(symbol)) {
         throw new Error(`migration operator bundle lost required behavior: ${symbol}`);
       }
+    }
+  }
+  if (asset.displayName === "PrivateApiFunction/Code") {
+    inspectedSlice5Api = true;
+    for (const symbol of [
+      "createSlice5DataApiProjectSyncHandler",
+      "slice5.project-sync-lease-hmac.v1",
+      "PROJECT_SYNC_VALIDATION_QUEUE_URL",
+      "roomscan-project-validation-wake-v1",
+      "presignExactDownload"
+    ]) {
+      if (!bundle.includes(symbol)) {
+        throw new Error(`Slice 5 API bundle lost required project-sync behavior: ${symbol}`);
+      }
+    }
+  }
+  if (asset.displayName === "ProjectSyncValidationFunction/Code") {
+    inspectedProjectSyncValidation = true;
+    for (const symbol of [
+      "CopyObjectCommand",
+      "ChecksumMode",
+      "encodeURIComponent",
+      "roomscan_project_sync_runtime",
+      "roomscan-project-validation-wake-v1",
+      "ProjectSyncValidationWorker"
+    ]) {
+      if (!bundle.includes(symbol)) {
+        throw new Error(`project-sync validation bundle lost required behavior: ${symbol}`);
+      }
+    }
+    const copyCommand = bundle.indexOf("CopyObjectCommand({");
+    if (copyCommand < 0 || bundle.indexOf('IfNoneMatch: "*"', copyCommand) < copyCommand) {
+      throw new Error("project-sync validation bundle lost destination conditional CopyObject");
+    }
+    if (bundle.includes("CopySourceIfNoneMatch")) {
+      throw new Error("project-sync validation bundle incorrectly uses CopySourceIfNoneMatch");
+    }
+    if (/console\.(?:debug|error|info|log|warn)\(/u.test(bundle)) {
+      throw new Error("project-sync validation bundle must not log object, version, or queue payload data");
     }
   }
 }
@@ -168,6 +211,12 @@ if (!inspectedCloudTrailStatusMonitor) {
 }
 if (!inspectedMigrationOperator) {
   throw new Error("migration operator bundle was not present in the synthesized assets");
+}
+if (!inspectedProjectSyncValidation) {
+  throw new Error("project-sync validation bundle was not present in the synthesized assets");
+}
+if (!inspectedSlice5Api) {
+  throw new Error("Slice 5 API bundle was not present in the synthesized assets");
 }
 
 const templateText = templateBytes.toString("utf8");
@@ -189,6 +238,16 @@ for (const pattern of [
 }
 if (!templateText.includes("{{resolve:secretsmanager:")) {
   throw new Error("Apple provider must retain a Secrets Manager dynamic reference");
+}
+const outputText = JSON.stringify(template.Outputs ?? {});
+for (const pattern of [
+  /password|secretString|credentialValue/iu,
+  /(?:physicalKey|VersionId)/u,
+  /server\/(?:quarantine|active)\/v1\//u
+]) {
+  if (pattern.test(outputText)) {
+    throw new Error(`synthesized outputs contain forbidden sensitive project-sync material: ${pattern}`);
+  }
 }
 for (const file of recursiveFiles(outputDirectory)) {
   const contents = readFileSync(join(outputDirectory, file)).toString("utf8");
@@ -212,6 +271,10 @@ const inspection = {
   stripeRawEnvelopeBundle: "PASS",
   cloudTrailStatusMonitorBundle: "PASS",
   migrationOperatorBundle: "PASS",
+  migration0008AssetAndRuntimeRole: "PASS",
+  slice5ApiBundle: "PASS",
+  projectSyncValidationBundle: "PASS",
+  projectSyncOutputsNonSensitive: "PASS",
   artifacts
 };
 mkdirSync(resolve("evidence"), { recursive: true });
@@ -258,7 +321,7 @@ function verifyMigrationAssetBytes(directory, synthesizedTemplate) {
     || parsedManifest.migrationRunner?.checksumSha256 !== createHash("sha256").update(sourceRunner).digest("hex")
     || !Array.isArray(parsedManifest.migrations)
     || parsedManifest.migrations.length !== migrationNames.length) {
-    throw new Error("migration manifest does not pin the exact runner and seven-file schema");
+    throw new Error("migration manifest does not pin the exact runner and eight-file schema");
   }
   for (const [index, name] of migrationNames.entries()) {
     const source = readFileSync(resolve("../db/migrations", name));

@@ -582,3 +582,48 @@ The final agent report must state:
 - How to configure iCloud
 - How to reproduce exports
 - Any remaining external blockers
+
+---
+
+## 15. Approved AI redesign Slice 5 implementation state — 2026-08-29
+
+The approved 2026-08-12 platform revision has now advanced through the local
+Slice 5 implementation boundary. This does not revise the exclusions above
+beyond the following bounded professional capability:
+
+- a guest project can be explicitly previewed, validated, approved, uploaded,
+  retried, and mapped to a professional hosted project without deleting or
+  altering its local source;
+- professional revisions upload as immutable candidates with a required
+  expected hosted head; one compare-and-set may advance the canonical head and
+  a valid losing candidate remains an immutable stale branch;
+- local edits save normally and remain offline drafts until an explicit sync;
+- conflicts require read-only compare, explicit rebase from the hosted head, or
+  explicit branch duplication; geometry is never inferred or silently merged;
+- advisory edit leases are server-time bounded to 900 seconds and never block
+  local persistence or replace the expected-head guard;
+- the default recoverable working set synchronizes the raw-redacted room
+  package plus supported redesign/orientation and Concept companions;
+- RGB, depth, confidence, diagnostics, capture bundles, and world maps stay
+  local unless an owner separately approves an exact size/privacy-bound raw
+  archive; and
+- recovery downloads stage, validate, and promote through the existing package
+  boundary rather than writing into a live project.
+
+This implementation keeps guest capture/edit/export/import account-free,
+private CloudKit backup independent, and local immutable packages authoritative.
+It adds no real-time collaboration, automatic migration/background upload,
+publication/portal behavior, public link, browser client, Slice 7 lifecycle
+resource, production quota/price/retention promise, deployment, or provider
+credential.
+
+The compatibility anchor is the unchanged Slice 4 19-route v3 export plus a
+separate 29-route Slice 5 v1 export, additive Core contract families, and the
+forward-only PostgreSQL `0008_professional_project_sync` migration. Rollback
+disables hosted writes and the validation worker/schedule while retaining local
+truth, immutable remote branches, audit/quota state, and authorized recovery.
+Exact acceptance criteria and external gates live in
+`Docs/superpowers/plans/2026-08-28-ai-redesign-platform-slice-5.md` and
+`Docs/contracts/ai-redesign-service-contracts-v2.md`; the completed local
+matrix is recorded in
+`Docs/evidence/2026-08-29-ai-redesign-slice-5-verification.md`.

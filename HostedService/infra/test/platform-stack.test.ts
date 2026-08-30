@@ -97,11 +97,11 @@ function isEncryptionOverrideDenied(
 test("security and observability synthesize rotating KMS keys, encrypted retained logs, CloudTrail data events, digest validation, and notifications", () => {
   const { template, resources } = synthesize();
   const keys = resourcesOfType(resources, "AWS::KMS::Key");
-  assert.equal(keys.length, 6);
+  assert.equal(keys.length, 7);
   assert.equal(keys.every((key) => key.Properties?.EnableKeyRotation === true), true);
   assert.equal(keys.every((key) => key.DeletionPolicy === "Retain"), true);
   const logGroups = resourcesOfType(resources, "AWS::Logs::LogGroup");
-  assert.equal(logGroups.length, 12);
+  assert.equal(logGroups.length, 13);
   assert.equal(
     logGroups.every((group) =>
       typeof group.Properties?.RetentionInDays === "number" &&
@@ -125,7 +125,7 @@ test("every Lambda log group uses LogsKey and the regional Logs service has the 
     typeof group.Properties?.LogGroupName === "string" &&
     group.Properties.LogGroupName.startsWith("/aws/lambda/")
   );
-  assert.equal(lambdaLogGroups.length, 9);
+  assert.equal(lambdaLogGroups.length, 10);
   for (const group of lambdaLogGroups) {
     const keyReference = JSON.stringify(group.Properties?.KmsKeyId);
     assert.match(keyReference, /LogsKey/u);
@@ -158,10 +158,10 @@ test("every Lambda log group uses LogsKey and the regional Logs service has the 
   assert.match(condition, /:logs:us-east-1:444444444444:log-group:\/aws\/\*/u);
 });
 
-test("five S3 boundaries are private, versioned, bucket-owner enforced, KMS encrypted, TLS-only, server-prefixed, and retained", () => {
+test("six S3 boundaries are private, versioned, bucket-owner enforced, KMS encrypted, TLS-only, server-prefixed, and retained", () => {
   const { template, resources } = synthesize(productionTestConfig());
   const buckets = resourcesOfType(resources, "AWS::S3::Bucket");
-  assert.equal(buckets.length, 5);
+  assert.equal(buckets.length, 6);
   for (const bucket of buckets) {
     assert.equal(bucket.DeletionPolicy, "Retain");
     assert.equal(bucket.UpdateReplacePolicy, "Retain");
@@ -257,7 +257,7 @@ test("every bucket allows default or its exact CMK headers and denies AES256, aw
   }
 });
 
-test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking, KMS, TLS enforcement, and seven separated runtime secrets", () => {
+test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking, KMS, TLS enforcement, and eight separated runtime secrets", () => {
   const { template, resources } = synthesize();
   const clusters = resourcesOfType(resources, "AWS::RDS::DBCluster");
   assert.equal(clusters.length, 1);
@@ -274,7 +274,7 @@ test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking,
   assert.equal(resourcesOfType(resources, "AWS::RDS::DBInstance")[0]?.Properties?.PubliclyAccessible, false);
   assert.equal(resourcesOfType(resources, "AWS::EC2::NatGateway").length, 0);
   assert.equal(resourcesOfType(resources, "AWS::EC2::InternetGateway").length, 0);
-  assert.equal(resourcesOfType(resources, "AWS::SecretsManager::Secret").length, 12);
+  assert.equal(resourcesOfType(resources, "AWS::SecretsManager::Secret").length, 13);
   assert.match(JSON.stringify(template), /rds\.force_ssl/u);
   assert.match(JSON.stringify(template), /roomscan_cluster_admin/u);
   for (const username of [
@@ -284,7 +284,8 @@ test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking,
     "roomscan_stripe_ingress_runtime",
     "roomscan_stripe_reconciliation_runtime",
     "roomscan_audit_export_runtime",
-    "roomscan_email_delivery_runtime"
+    "roomscan_email_delivery_runtime",
+    "roomscan_project_sync_runtime"
   ]) assert.match(JSON.stringify(template), new RegExp(username, "u"));
   assert.doesNotMatch(JSON.stringify(template), /"username":"roomscan_app"/u);
   assert.doesNotMatch(JSON.stringify(template), /"username":"roomscan_owner"/u);
@@ -401,7 +402,7 @@ test("full synthesis rejects invalid external resource ARN grammar even when cal
   }
 });
 
-test("HTTP API v2 exposes the exact 19-route manifest, authorizes ten protected routes, and keeps Stripe dedicated and unmapped", () => {
+test("HTTP API v2 exposes the exact 29-route Slice 5 manifest, authorizes twenty protected routes, and keeps Stripe dedicated and unmapped", () => {
   const { resources } = synthesize();
   const integrations = resourcesOfType(resources, "AWS::ApiGatewayV2::Integration");
   assert.equal(integrations.length, 2);
@@ -410,8 +411,8 @@ test("HTTP API v2 exposes the exact 19-route manifest, authorizes ten protected 
     assert.equal("RequestParameters" in (integration.Properties ?? {}), false);
   }
   const routes = resourcesOfType(resources, "AWS::ApiGatewayV2::Route");
-  assert.equal(routes.length, 19);
-  assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "CUSTOM").length, 10);
+  assert.equal(routes.length, 29);
+  assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "CUSTOM").length, 20);
   assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "NONE").length, 9);
   assert.equal(routes.some((route) => /ANY|proxy/u.test(String(route.Properties?.RouteKey))), false);
   const stripeRoute = routes.find(
@@ -421,17 +422,17 @@ test("HTTP API v2 exposes the exact 19-route manifest, authorizes ten protected 
   assert.equal("AuthorizerId" in (stripeRoute?.Properties ?? {}), false);
 });
 
-test("Stripe reconciliation, audit outbox, and email queues have KMS, bounded retention, retry/DLQ controls, consumers, and alarms", () => {
+test("Stripe reconciliation, audit outbox, email, and project-sync validation queues have KMS, bounded retention, retry/DLQ controls, consumers, and alarms", () => {
   const { resources } = synthesize();
   const queues = resourcesOfType(resources, "AWS::SQS::Queue");
-  assert.equal(queues.length, 6);
-  assert.equal(queues.filter((queue) => queue.Properties?.RedrivePolicy !== undefined).length, 3);
+  assert.equal(queues.length, 8);
+  assert.equal(queues.filter((queue) => queue.Properties?.RedrivePolicy !== undefined).length, 4);
   for (const queue of queues) {
     assert.ok(queue.Properties?.KmsMasterKeyId !== undefined);
     assert.ok(Number(queue.Properties?.MessageRetentionPeriod) <= 1_209_600);
     assert.equal(queue.DeletionPolicy, "Retain");
   }
-  assert.equal(resourcesOfType(resources, "AWS::Lambda::EventSourceMapping").length, 3);
+  assert.equal(resourcesOfType(resources, "AWS::Lambda::EventSourceMapping").length, 4);
   assert.ok(resourcesOfType(resources, "AWS::CloudWatch::Alarm").length >= 17);
 });
 
@@ -499,7 +500,7 @@ test("operator topic admits only account-bounded CloudWatch alarms and the confi
 test("function roles are separated and wildcard resources are limited to metrics and exact Lambda VPC interface actions", () => {
   const { resources } = synthesize();
   const functions = resourcesOfType(resources, "AWS::Lambda::Function");
-  assert.equal(functions.length, 9);
+  assert.equal(functions.length, 10);
   const roleReferences = functions.map((fn) => JSON.stringify(fn.Properties?.Role));
   assert.equal(new Set(roleReferences).size, functions.length);
   const policies = resourcesOfType(resources, "AWS::IAM::Policy");
@@ -606,7 +607,7 @@ test("CloudTrail KMS policy separates context-bound data-key generation from con
   );
 });
 
-test("CloudTrail records four workload S3 boundaries without recursively selecting its own delivery bucket", () => {
+test("CloudTrail records legacy workload and project-sync quarantine/active S3 boundaries without recursively selecting its own delivery bucket", () => {
   const { resources } = synthesize();
   const trail = resourcesOfType(resources, "AWS::CloudTrail::Trail")[0];
   assert.ok(trail !== undefined);
@@ -614,11 +615,14 @@ test("CloudTrail records four workload S3 boundaries without recursively selecti
   for (const logicalPrefix of [
     "QuarantineBucket",
     "ActiveBucket",
+    "ProjectSyncBucket",
     "PublishedDerivativeBucket",
     "BackupBucket"
   ]) {
     assert.match(selectors, new RegExp(logicalPrefix, "u"));
   }
+  assert.match(selectors, /server\/quarantine\/v1\//u);
+  assert.match(selectors, /server\/active\/v1\//u);
   assert.doesNotMatch(selectors, /AuditBucket/u);
 });
 
@@ -673,7 +677,7 @@ test("a scheduled Node.js 24 monitor converts GetTrailStatus into bounded health
 test("every application Lambda is Node.js 24 with an immutable version, live alias, retained encrypted log group, error/throttle alarms, and rollback outputs", () => {
   const { template, resources } = synthesize();
   const functions = resourcesOfType(resources, "AWS::Lambda::Function");
-  assert.equal(functions.length, 9);
+  assert.equal(functions.length, 10);
   assert.equal(functions.every((fn) => fn.Properties?.Runtime === "nodejs24.x"), true);
   assert.equal(resourcesOfType(resources, "AWS::Lambda::Version").length, functions.length);
   assert.equal(resourcesOfType(resources, "AWS::Lambda::Alias").length, functions.length);
@@ -718,4 +722,58 @@ test("the template records account topology ownership and contains no portal, CD
   assert.equal(resourcesOfType(resources, "AWS::Cognito::IdentityPool").length, 0);
   assert.match(serialized, /local-test-values-v1/u);
   assert.doesNotMatch(serialized, /price_live|monthlyQuota|productionQuota/iu);
+});
+
+test("professional project sync has an isolated immutable object and validation-worker boundary", () => {
+  const { resources } = synthesize();
+  const projectSyncBucket = Object.entries(resources).find(
+    ([logicalId, resource]) => resource.Type === "AWS::S3::Bucket" && logicalId.startsWith("ProjectSyncBucket"),
+  );
+  assert.ok(projectSyncBucket !== undefined);
+  assert.deepEqual(projectSyncBucket[1].Properties?.VersioningConfiguration, { Status: "Enabled" });
+  assert.deepEqual(projectSyncBucket[1].Properties?.PublicAccessBlockConfiguration, {
+    BlockPublicAcls: true,
+    BlockPublicPolicy: true,
+    IgnorePublicAcls: true,
+    RestrictPublicBuckets: true,
+  });
+  assert.equal(projectSyncBucket[1].DeletionPolicy, "Retain");
+
+  const worker = resourcesOfType(resources, "AWS::Lambda::Function").find(
+    (fn) => fn.Properties?.FunctionName === "roomscan-dev-project-sync-validation",
+  );
+  assert.ok(worker !== undefined);
+  const queue = resourcesOfType(resources, "AWS::SQS::Queue").find(
+    (candidate) => candidate.Properties?.QueueName === "roomscan-dev-project-sync-validation",
+  );
+  assert.ok(queue !== undefined);
+  assert.match(JSON.stringify(queue.Properties?.KmsMasterKeyId), /ProjectSyncQueuesKey/u,
+    "project-sync validation has an isolated queue CMK rather than the legacy shared queue key");
+  assert.equal(queue.Properties?.VisibilityTimeout, 60);
+  assert.match(JSON.stringify(queue.Properties?.RedrivePolicy), /ProjectSyncValidationDlq/u);
+  assert.equal(resourcesOfType(resources, "AWS::Lambda::EventSourceMapping").some((mapping) =>
+    JSON.stringify(mapping.Properties).includes("ProjectSyncValidationQueue"),
+  ), true);
+
+  const projectSyncQueueKey = Object.entries(resources).find(
+    ([logicalId, resource]) => logicalId.startsWith("ProjectSyncQueuesKey") && resource.Type === "AWS::KMS::Key",
+  );
+  assert.ok(projectSyncQueueKey !== undefined, "project-sync validation has a dedicated retained CMK");
+  const projectSyncQueueKeyPolicy = JSON.stringify(projectSyncQueueKey[1].Properties?.KeyPolicy);
+  assert.match(projectSyncQueueKeyPolicy, /events\.amazonaws\.com/u);
+  assert.match(projectSyncQueueKeyPolicy, /kms:Decrypt/u);
+  assert.match(projectSyncQueueKeyPolicy, /kms:GenerateDataKey/u);
+  assert.match(projectSyncQueueKeyPolicy, /aws:SourceAccount/u);
+
+  const scheduleQueuePolicy = resourcesOfType(resources, "AWS::SQS::QueuePolicy").find((policy) =>
+    JSON.stringify(policy.Properties).includes("ProjectSyncValidationQueue"),
+  );
+  assert.ok(scheduleQueuePolicy !== undefined, "the recovery rule has a resource policy on only its queue");
+  const scheduleQueuePolicyText = JSON.stringify(scheduleQueuePolicy.Properties?.PolicyDocument);
+  assert.match(scheduleQueuePolicyText, /events\.amazonaws\.com/u);
+  assert.match(scheduleQueuePolicyText, /sqs:SendMessage/u);
+  assert.match(scheduleQueuePolicyText, /aws:SourceArn/u);
+  assert.match(scheduleQueuePolicyText, /ProjectSyncValidationRecoverySchedule/u);
+  assert.match(scheduleQueuePolicyText, /aws:SourceAccount/u);
+  assert.doesNotMatch(scheduleQueuePolicyText, /sqs:GetQueue/u);
 });

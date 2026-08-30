@@ -1,5 +1,6 @@
 import type { AuthorizationAction } from "../authorization/policy.js";
 import { QUOTA_METRICS, type QuotaMetric } from "../quota/quota-v2-service.js";
+import { PROJECT_SYNC_MAX_ARCHIVE_BYTES } from "./project-sync.js";
 
 export type StringFieldRule = Readonly<{
   readonly type: "string";
@@ -16,12 +17,18 @@ export type BooleanFieldRule = Readonly<{
   readonly required: boolean;
   readonly literal?: boolean;
 }>;
-export type FieldRule = StringFieldRule | BooleanFieldRule;
+export type IntegerFieldRule = Readonly<{
+  readonly type: "integer";
+  readonly required: boolean;
+  readonly minimum: number;
+  readonly maximum: number;
+}>;
+export type FieldRule = StringFieldRule | BooleanFieldRule | IntegerFieldRule;
 export type RequestSchema = Readonly<{ readonly body: "none" | "json" | "raw"; readonly maximumBytes: number; readonly contentType?: "application/json"; readonly fields?: Readonly<Record<string, FieldRule>> }>;
 export type RouteAuthorization =
   | Readonly<{ readonly kind: "public" }>
   | Readonly<{ readonly kind: "session"; readonly requiresRecentAuthentication: boolean }>
-  | Readonly<{ readonly kind: "workspace"; readonly action: AuthorizationAction; readonly resourceResolver: "none" | "current-membership" }>;
+  | Readonly<{ readonly kind: "workspace"; readonly action: AuthorizationAction; readonly resourceResolver: "none" | "current-membership" | "project" | "revision" | "upload" }>;
 export type RouteExecutionLane = "apple-api-exchange-cognito-challenge-session" | "session-refresh-hash-rotation";
 export interface TrustedRouteInputs { readonly sourceIp?: "api-gateway-v2"; readonly clickingDeviceId?: "api-gateway-v2-request-id"; readonly quotaMetrics?: readonly QuotaMetric[]; }
 export interface SealedRoute { readonly id: string; readonly method: "GET" | "POST"; readonly pathTemplate: string; readonly authorization: RouteAuthorization; readonly request: RequestSchema; readonly trustedInputs?: TrustedRouteInputs; readonly executionLane?: RouteExecutionLane; readonly responseKind: "json" | "scanner-html"; }
@@ -31,6 +38,7 @@ const allMagicPurpose = ["sign-in", "reauthenticate", "link-identity", "unlink-i
 const identityMutationPurpose = ["link-identity", "unlink-identity"] as const;
 const string = (required: boolean, minLength: number, maxLength: number, extra: Omit<Partial<StringFieldRule>, "type" | "required" | "minLength" | "maxLength"> = {}): StringFieldRule => deepFreeze({ type: "string", required, minLength, maxLength, ...extra });
 const literalBoolean = (required: boolean, literal: boolean): BooleanFieldRule => deepFreeze({ type: "boolean", required, literal });
+const integer = (required: boolean, minimum: number, maximum: number): IntegerFieldRule => deepFreeze({ type: "integer", required, minimum, maximum });
 const none = deepFreeze({ body: "none", maximumBytes: 0 } as const);
 const json = (fields: Readonly<Record<string, FieldRule>>, maximumBytes = 16_384): RequestSchema => deepFreeze({ body: "json", maximumBytes, fields });
 const raw = deepFreeze({ body: "raw", maximumBytes: 1_048_576, contentType: "application/json" } as const);
@@ -59,6 +67,23 @@ const routes: SealedRoute[] = [
 
 export const SLICE4_ROUTE_SET_VERSION = "roomscan-slice4-routes-v3" as const;
 export const SLICE4_ROUTE_MANIFEST: readonly SealedRoute[] = deepFreeze(routes);
+/** A separate, append-only service surface. Slice 4's sealed 19-route export
+ * remains frozen for old clients and its entrypoint never consults this list. */
+const slice5Routes: readonly SealedRoute[] = deepFreeze([
+  ...SLICE4_ROUTE_MANIFEST,
+  { id: "project.migration.allocate", method: "POST", pathTemplate: "/projects/migration/allocate", authorization: { kind: "workspace", action: "project.create", resourceResolver: "none" }, request: json({ sourceProjectID: string(true, 1, 128, { pattern: "^[A-Za-z0-9_-]+$" }), proposedRevisionID: string(true, 1, 128, { pattern: "^[A-Za-z0-9_-]+$" }), workingSetManifestSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveByteCount: integer(true, 1, PROJECT_SYNC_MAX_ARCHIVE_BYTES), idempotencyKey: string(true, 16, 128, { pattern: "^[A-Za-z0-9_-]+$" }), quotaPolicyVersion: integer(true, 1, 9_007_199_254_740_991), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }, 24_576), responseKind: "json" },
+  { id: "project.revision.allocate", method: "POST", pathTemplate: "/projects/revisions/allocate", authorization: { kind: "workspace", action: "project.revise", resourceResolver: "project" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), expectedHostedHeadRevisionID: string(true, 20, 132, { pattern: "^rev_[A-Za-z0-9_-]+$" }), expectedHeadRevisionID: string(true, 1, 128, { pattern: "^[A-Za-z0-9_-]+$" }), proposedRevisionID: string(true, 1, 128, { pattern: "^[A-Za-z0-9_-]+$" }), workingSetManifestSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveByteCount: integer(true, 1, PROJECT_SYNC_MAX_ARCHIVE_BYTES), idempotencyKey: string(true, 16, 128, { pattern: "^[A-Za-z0-9_-]+$" }), quotaPolicyVersion: integer(true, 1, 9_007_199_254_740_991), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }, 24_576), responseKind: "json" },
+  { id: "project.upload.complete", method: "POST", pathTemplate: "/projects/uploads/complete", authorization: { kind: "workspace", action: "project.revise", resourceResolver: "upload" }, request: json({ uploadID: string(true, 20, 132, { pattern: "^upl_[A-Za-z0-9_-]+$" }) }), responseKind: "json" },
+  { id: "project.upload.status", method: "POST", pathTemplate: "/projects/uploads/status", authorization: { kind: "workspace", action: "project.read", resourceResolver: "upload" }, request: json({ uploadID: string(true, 20, 132, { pattern: "^upl_[A-Za-z0-9_-]+$" }) }), responseKind: "json" },
+  { id: "project.recovery.allocate", method: "POST", pathTemplate: "/projects/recovery/allocate", authorization: { kind: "workspace", action: "private.download", resourceResolver: "revision" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), revisionID: string(false, 20, 132, { pattern: "^rev_[A-Za-z0-9_-]+$" }) }), responseKind: "json" },
+  { id: "project.edit-lease.acquire", method: "POST", pathTemplate: "/projects/edit-lease/acquire", authorization: { kind: "workspace", action: "project.revise", resourceResolver: "project" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), deviceID: string(true, 16, 256, { pattern: "^[A-Za-z0-9._~-]+$" }), requestID: string(true, 16, 256, { pattern: "^[A-Za-z0-9._~-]+$" }), leaseToken: string(true, 32, 256, { pattern: "^[A-Za-z0-9._~-]+$" }), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }), responseKind: "json" },
+  { id: "project.edit-lease.renew", method: "POST", pathTemplate: "/projects/edit-lease/renew", authorization: { kind: "workspace", action: "project.revise", resourceResolver: "project" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), leaseToken: string(true, 32, 256, { pattern: "^[A-Za-z0-9._~-]+$" }), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }), responseKind: "json" },
+  { id: "project.edit-lease.release", method: "POST", pathTemplate: "/projects/edit-lease/release", authorization: { kind: "workspace", action: "project.revise", resourceResolver: "project" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), leaseToken: string(true, 32, 256, { pattern: "^[A-Za-z0-9._~-]+$" }), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }), responseKind: "json" },
+  { id: "project.raw-archive.configure", method: "POST", pathTemplate: "/projects/raw-archive/configure", authorization: { kind: "workspace", action: "raw_archive.configure", resourceResolver: "project" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), reviewSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }), responseKind: "json" },
+  { id: "project.raw-archive.allocate", method: "POST", pathTemplate: "/projects/raw-archive/allocate", authorization: { kind: "workspace", action: "raw_archive.allocate", resourceResolver: "revision" }, request: json({ projectID: string(true, 20, 132, { pattern: "^prj_[A-Za-z0-9_-]+$" }), revisionID: string(true, 20, 132, { pattern: "^rev_[A-Za-z0-9_-]+$" }), rawManifestSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), archiveByteCount: integer(true, 1, PROJECT_SYNC_MAX_ARCHIVE_BYTES), reviewSHA256: string(true, 64, 64, { pattern: "^[a-f0-9]+$" }), idempotencyKey: string(true, 16, 128, { pattern: "^[A-Za-z0-9_-]+$" }), quotaPolicyVersion: integer(true, 1, 9_007_199_254_740_991), hostedGlobalVersion: integer(true, 1, 9_007_199_254_740_991), hostedWorkspaceVersion: integer(true, 1, 9_007_199_254_740_991) }, 24_576), responseKind: "json" },
+]);
+export const SLICE5_ROUTE_SET_VERSION = "roomscan-slice5-routes-v1" as const;
+export const SLICE5_ROUTE_MANIFEST: readonly SealedRoute[] = slice5Routes;
 export function routeKey(route: Pick<SealedRoute, "method" | "pathTemplate">): string { return `${route.method} ${route.pathTemplate}`; }
 export function assertSealedManifest(): void {
   const ids = new Set<string>(); const keys = new Set<string>();
@@ -85,6 +110,17 @@ export function assertSealedManifest(): void {
     || identity.authorization.kind !== "session" || identity.authorization.requiresRecentAuthentication !== true || identity.request.fields?.confirmed?.type !== "boolean" || identity.request.fields.confirmed.literal !== true) {
     throw new Error("unsealed_route");
   }
+}
+export function assertSealedSlice5Manifest(): void {
+  assertSealedManifest();
+  const keys = new Set<string>(); const ids = new Set<string>();
+  for (const route of SLICE5_ROUTE_MANIFEST) {
+    if (keys.has(routeKey(route)) || ids.has(route.id)) throw new Error("unsealed_route");
+    keys.add(routeKey(route)); ids.add(route.id);
+  }
+  if (SLICE5_ROUTE_MANIFEST.length !== 29 || SLICE5_ROUTE_MANIFEST.slice(0, 19).some((route, index) => route !== SLICE4_ROUTE_MANIFEST[index])) throw new Error("unsealed_route");
+  const exact = ["project.migration.allocate", "project.revision.allocate", "project.upload.complete", "project.upload.status", "project.recovery.allocate", "project.edit-lease.acquire", "project.edit-lease.renew", "project.edit-lease.release", "project.raw-archive.configure", "project.raw-archive.allocate"];
+  if (exact.some((id) => !ids.has(id))) throw new Error("unsealed_route");
 }
 function isExactS256(rule: FieldRule | undefined): rule is StringFieldRule { return rule?.type === "string" && rule.required === true && rule.minLength === 43 && rule.maxLength === 43 && rule.pattern === "^[A-Za-z0-9_-]+$"; }
 function deepFreeze<T>(value: T): T { if (typeof value === "object" && value !== null && !Object.isFrozen(value)) { for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child); Object.freeze(value); } return value; }

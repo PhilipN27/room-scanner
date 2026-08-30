@@ -36,6 +36,16 @@ const EXPECTED_ROUTES = new Map<string, "NONE" | "CUSTOM">([
   ["GET /subscription", "CUSTOM"],
   ["GET /quota", "CUSTOM"],
   ["POST /identity/mutate", "CUSTOM"],
+  ["POST /projects/migration/allocate", "CUSTOM"],
+  ["POST /projects/revisions/allocate", "CUSTOM"],
+  ["POST /projects/uploads/complete", "CUSTOM"],
+  ["POST /projects/uploads/status", "CUSTOM"],
+  ["POST /projects/recovery/allocate", "CUSTOM"],
+  ["POST /projects/edit-lease/acquire", "CUSTOM"],
+  ["POST /projects/edit-lease/renew", "CUSTOM"],
+  ["POST /projects/edit-lease/release", "CUSTOM"],
+  ["POST /projects/raw-archive/configure", "CUSTOM"],
+  ["POST /projects/raw-archive/allocate", "CUSTOM"],
 ]);
 
 const EXPECTED_RUNTIME_SECRETS = new Map<string, string>([
@@ -46,6 +56,7 @@ const EXPECTED_RUNTIME_SECRETS = new Map<string, string>([
   ["roomscan-dev-stripe-reconciliation", "roomscan_stripe_reconciliation_runtime"],
   ["roomscan-dev-audit-exporter", "roomscan_audit_export_runtime"],
   ["roomscan-dev-email-delivery", "roomscan_email_delivery_runtime"],
+  ["roomscan-dev-project-sync-validation", "roomscan_project_sync_runtime"],
 ]);
 
 let cached: Readonly<Record<string, Resource>> | undefined;
@@ -89,7 +100,7 @@ function environmentOf(resource: Resource): Readonly<Record<string, unknown>> {
   return environment?.Variables ?? {};
 }
 
-test("Task 6D synthesizes exactly the canonical 19 public/protected routes with no proxy", () => {
+test("Task 6D preserves the canonical Slice 4 routes and appends exactly the protected Slice 5 project-sync routes with no proxy", () => {
   const routes = ofType("AWS::ApiGatewayV2::Route").map(([, resource]) => resource);
   assert.equal(routes.length, EXPECTED_ROUTES.size);
   const actual = new Map(
@@ -156,7 +167,7 @@ test("Task 6D generates one attached database secret per runtime lane and isolat
     "roomscan_cluster_admin",
     ...EXPECTED_RUNTIME_SECRETS.values(),
   ]));
-  assert.equal(databaseUsernames.length, 8);
+  assert.equal(databaseUsernames.length, 9);
 
   for (const [functionName, username] of EXPECTED_RUNTIME_SECRETS) {
     const variables = environmentOf(functionByName(functionName));
@@ -176,7 +187,7 @@ test("Task 6D generates one attached database secret per runtime lane and isolat
   assert.doesNotMatch(serialized, /DB_RUNTIME_SECRET_ARN|"username":"roomscan_app"/u);
 });
 
-test("Task 6D gives Stripe ingress durable Data API authority and removes active/published reads from API", () => {
+test("Task 6D gives Stripe ingress durable Data API authority and confines API project-sync recovery reads to exact active working versions", () => {
   const stripePolicy = JSON.stringify(policyByPrefix("StripeIngressPolicy").Properties?.PolicyDocument);
   for (const action of [
     "rds-data:BeginTransaction",
@@ -189,7 +200,12 @@ test("Task 6D gives Stripe ingress durable Data API authority and removes active
   const apiPolicy = JSON.stringify(policyByPrefix("PrivateApiPolicy").Properties?.PolicyDocument);
   assert.match(apiPolicy, /s3:PutObject/u);
   assert.match(apiPolicy, /QuarantineBucket/u);
-  assert.doesNotMatch(apiPolicy, /s3:GetObject|ActiveBucket|PublishedDerivativeBucket/u);
+  assert.match(apiPolicy, /s3:GetObjectVersion/u);
+  assert.doesNotMatch(apiPolicy, /"s3:GetObject"/u,
+    "recovery always signs an exact persisted version and needs no current-object read");
+  assert.match(apiPolicy, /ProjectSyncBucket/u);
+  assert.match(apiPolicy, /server\/active\/v1\/\*\/professional-sync\/active\/working\/\*/u);
+  assert.doesNotMatch(apiPolicy, /ActiveBucket|PublishedDerivativeBucket|BackupBucket|s3:List|s3:Delete/u);
 });
 
 test("Task 6D keeps refresh on API, Apple session issuance on challenge, and credential bootstrap owner-only", () => {
@@ -210,12 +226,14 @@ test("Task 6D keeps refresh on API, Apple session issuance on challenge, and cre
     "StripeReconciliationDatabaseSecret",
     "AuditExportDatabaseSecret",
     "EmailDeliveryDatabaseSecret",
+    "ProjectSyncDatabaseSecret",
   ]) assert.match(migrationPolicy, new RegExp(runtimePrefix, "u"));
 
   const migrationEnvironment = JSON.stringify(environmentOf(functionByName("roomscan-dev-migration-operator")));
   assert.match(migrationEnvironment, /MIGRATION_MANIFEST_SHA256/u);
   assert.match(migrationEnvironment, /RUNTIME_ROLE_SECRET_ARNS_JSON/u);
   assert.match(migrationEnvironment, /roomscan_email_delivery_runtime/u);
+  assert.match(migrationEnvironment, /roomscan_project_sync_runtime/u);
   assert.doesNotMatch(migrationEnvironment, /password|secretString|credentialValue/ui);
 });
 
@@ -304,13 +322,14 @@ test("Task 6D gives email delivery only its DB lane, envelope key, SES, and wake
   assert.doesNotMatch(policy, /s3:GetObject|ActiveBucket|PublishedDerivativeBucket|ApiDatabaseSecret/u);
 });
 
-test("Task 6D schedules durable reconciliation, audit, and email recovery in addition to CloudTrail monitoring", () => {
+test("Task 6D schedules durable reconciliation, audit, email, and targetless project-sync recovery in addition to CloudTrail monitoring", () => {
   const rules = ofType("AWS::Events::Rule").map(([, resource]) => resource);
-  assert.equal(rules.length, 4);
+  assert.equal(rules.length, 5);
   const names = rules.map((rule) => String(rule.Properties?.Name));
   assert.ok(names.includes("roomscan-dev-stripe-reconciliation-recovery"));
   assert.ok(names.includes("roomscan-dev-audit-outbox-recovery"));
   assert.ok(names.includes("roomscan-dev-email-delivery-recovery"));
+  assert.ok(names.includes("roomscan-dev-project-sync-validation-recovery"));
   const recoveryRules = rules.filter((rule) => String(rule.Properties?.Name).includes("recovery"));
   assert.equal(recoveryRules.every((rule) => JSON.stringify(rule.Properties?.Targets).includes("Queue")), true);
 });

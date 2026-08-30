@@ -66,6 +66,32 @@ struct ProfessionalLocalConfiguration: Equatable, Sendable {
     )
 }
 
+/// Local professional inputs are attached after the app has created its
+/// offline stores. They deliberately contain no provider, credential, or
+/// hosted transport and attaching them must not enter the professional
+/// workspace or construct a hosted environment.
+@MainActor
+struct ProfessionalLocalProjectAccess {
+    let libraryController: RoomLibraryController
+    let aiRedesignModelFactory: RoomAIRedesignModelFactory
+}
+
+@MainActor
+struct ProfessionalProjectSyncWorkspaceDependencies {
+    let service: ProfessionalProjectSyncService
+    let libraryController: RoomLibraryController
+    let actionContext: ProfessionalProjectSyncActionContext
+    let isSessionUnlocked: @MainActor () -> Bool
+}
+
+/// Configured builds install this closure without invoking it. It is the sole
+/// composition seam through which a hosted project-sync transport/service can
+/// be created after explicit professional entry; guest/default-off builds
+/// leave it absent.
+typealias ProfessionalProjectSyncServiceBuilder = @MainActor (
+    ProfessionalLocalProjectAccess
+) throws -> ProfessionalProjectSyncService
+
 enum ProfessionalEntryState: Equatable, Sendable {
     case notEntered
     case checkingAvailability
@@ -91,6 +117,9 @@ final class ProfessionalEnvironment {
     let telemetryClient: (any ProfessionalTelemetryClient)?
     let remoteConfigurationClient: (any ProfessionalRemoteConfigurationClient)?
     let magicLinkCompletion: MagicLinkCompletionCoordinator?
+    let projectSyncActionContext: ProfessionalProjectSyncActionContext?
+    private let makeProjectSyncService: ProfessionalProjectSyncServiceBuilder?
+    private var projectSyncService: ProfessionalProjectSyncService?
 
     init(
         availabilityClient: any ProfessionalAvailabilityClient,
@@ -99,7 +128,9 @@ final class ProfessionalEnvironment {
         entitlementClient: (any ProfessionalEntitlementClient)? = nil,
         telemetryClient: (any ProfessionalTelemetryClient)? = nil,
         remoteConfigurationClient: (any ProfessionalRemoteConfigurationClient)? = nil,
-        magicLinkCompletion: MagicLinkCompletionCoordinator? = nil
+        magicLinkCompletion: MagicLinkCompletionCoordinator? = nil,
+        projectSyncActionContext: ProfessionalProjectSyncActionContext? = nil,
+        makeProjectSyncService: ProfessionalProjectSyncServiceBuilder? = nil
     ) {
         self.availabilityClient = availabilityClient
         self.sessionClient = sessionClient
@@ -108,11 +139,29 @@ final class ProfessionalEnvironment {
         self.telemetryClient = telemetryClient
         self.remoteConfigurationClient = remoteConfigurationClient
         self.magicLinkCompletion = magicLinkCompletion
+        self.projectSyncActionContext = projectSyncActionContext
+        self.makeProjectSyncService = makeProjectSyncService
     }
 
     func handleLifecycle(_ event: ProfessionalLifecycleEvent) {
         deviceAuthentication.handleLifecycle(event)
         magicLinkCompletion?.handleLifecycle(event)
+    }
+
+    var hasConstructedProjectSyncService: Bool {
+        projectSyncService != nil
+    }
+
+    func professionalProjectSyncService(
+        access: ProfessionalLocalProjectAccess
+    ) throws -> ProfessionalProjectSyncService {
+        if let projectSyncService { return projectSyncService }
+        guard let makeProjectSyncService else {
+            throw ProfessionalProjectSyncError.unavailable
+        }
+        let created = try makeProjectSyncService(access)
+        projectSyncService = created
+        return created
     }
 }
 
@@ -137,6 +186,7 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
     private let localConfiguration: ProfessionalLocalConfiguration
     private let makeEnvironment: (@MainActor () -> ProfessionalEnvironment)?
     private var environment: ProfessionalEnvironment?
+    private(set) var localProjectAccess: ProfessionalLocalProjectAccess?
     private var lifecycleEpoch: UInt64 = 0
     private var activeSignInID: UUID?
     private var activeSignInTask: Task<ProfessionalPreparedSession, Error>?
@@ -167,6 +217,51 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
 
     var hasConstructedEnvironment: Bool {
         environment != nil
+    }
+
+    var hasConstructedProjectSyncService: Bool {
+        environment?.hasConstructedProjectSyncService ?? false
+    }
+
+    /// App composition may supply already-created offline stores. This is not
+    /// professional entry and cannot instantiate the configured hosted client.
+    func attachLocalProjectAccess(_ access: ProfessionalLocalProjectAccess) {
+        localProjectAccess = access
+    }
+
+    /// UI/actions call this only after the user has explicitly entered a
+    /// configured professional workspace. It lazily creates and memoizes the
+    /// hosted sync service once, while default-off composition stays inert.
+    func professionalProjectSyncService() throws -> ProfessionalProjectSyncService {
+        guard case .available = state,
+              let environment,
+              let localProjectAccess
+        else { throw ProfessionalProjectSyncError.unavailable }
+        return try environment.professionalProjectSyncService(access: localProjectAccess)
+    }
+
+    /// Returns one live workspace only after explicit professional entry and
+    /// local unlock. Provider policy versions and device identity must come
+    /// from configured professional state; the UI never supplies literals.
+    func professionalProjectSyncWorkspaceDependencies() throws
+        -> ProfessionalProjectSyncWorkspaceDependencies
+    {
+        guard case .available = state,
+              !isProtectedUIObscured,
+              let environment,
+              let actionContext = environment.projectSyncActionContext,
+              let localProjectAccess
+        else { throw ProfessionalProjectSyncError.unavailable }
+        return ProfessionalProjectSyncWorkspaceDependencies(
+            service: try environment.professionalProjectSyncService(
+                access: localProjectAccess
+            ),
+            libraryController: localProjectAccess.libraryController,
+            actionContext: actionContext,
+            isSessionUnlocked: { [weak self] in
+                self?.refreshProtectedState() == true
+            }
+        )
     }
 
     func enterProfessionalWorkspace() async {

@@ -29,6 +29,16 @@ public struct NoRoomConceptStoreFaultInjector: RoomConceptStoreFaultInjecting {
     public func throwIfNeeded(at point: RoomConceptStoreFaultPoint) throws {}
 }
 
+/// Internal recovery-test synchronization only. The public store surface has
+/// no recovery scheduling controls; production instances receive the no-op.
+protocol RoomConceptRecoverySynchronizing: Sendable {
+    func didPromoteRecoveredConceptSet(_ conceptSetID: String)
+}
+
+struct NoRoomConceptRecoverySynchronizer: RoomConceptRecoverySynchronizing {
+    func didPromoteRecoveredConceptSet(_ conceptSetID: String) {}
+}
+
 private struct RoomConceptOwnershipRecord: Codable, Sendable, Equatable {
     static let formatVersionValue = "roomscan-concept-store-ownership-v1"
 
@@ -72,6 +82,20 @@ private struct PendingRoomConceptTransaction: Codable, Sendable, Equatable {
     }
 }
 
+/// Ordinary imports are deliberately constrained to pending/active state;
+/// trusted professional recovery has already captured strict persisted state
+/// and must preserve it without widening the public new-import boundary.
+private enum RoomConceptPersistencePurpose: Sendable {
+    case newImport
+    case recoveredSnapshot
+}
+
+private struct PreparedRoomConceptSetPersistence {
+    let canonicalManifest: Data
+    let concept: RoomConceptSet
+    let attachmentBytes: [String: Data]
+}
+
 /// Serializes all store instances for one canonical source-bound companion
 /// directory. The current app has one process writer; this intentionally does
 /// not claim coordination with an app extension or another process.
@@ -108,6 +132,7 @@ public actor LocalRoomConceptStore {
     private let rootURL: URL
     private let sourcePackageRootURL: URL
     private let faultInjector: any RoomConceptStoreFaultInjecting
+    private let recoverySynchronizer: any RoomConceptRecoverySynchronizing
     private let fileManager = FileManager.default
 
     public init(
@@ -118,126 +143,194 @@ public actor LocalRoomConceptStore {
         self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.sourcePackageRootURL = sourcePackageRootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.faultInjector = faultInjector
+        self.recoverySynchronizer = NoRoomConceptRecoverySynchronizer()
+    }
+
+    init(
+        rootURL: URL,
+        sourcePackageRootURL: URL,
+        faultInjector: any RoomConceptStoreFaultInjecting = NoRoomConceptStoreFaultInjector(),
+        recoverySynchronizer: any RoomConceptRecoverySynchronizing
+    ) {
+        self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
+        self.sourcePackageRootURL = sourcePackageRootURL.standardizedFileURL.resolvingSymlinksInPath()
+        self.faultInjector = faultInjector
+        self.recoverySynchronizer = recoverySynchronizer
     }
 
     public func importConceptSet(
         _ materialization: RoomConceptSetImport,
         context: RoomConceptSetValidationContext
     ) async throws -> RoomConceptSet {
+        try persistConceptSet(
+            materialization,
+            context: context,
+            purpose: .newImport
+        )
+    }
+
+    private func persistConceptSet(
+        _ materialization: RoomConceptSetImport,
+        context: RoomConceptSetValidationContext,
+        purpose: RoomConceptPersistencePurpose
+    ) throws -> RoomConceptSet {
         guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
         try validateConfiguration()
+        let prepared = try prepareConceptSetPersistence(
+            materialization,
+            context: context,
+            purpose: purpose
+        )
+        let revisionRoot = try revisionDirectory(context: context)
+
+        return try RoomConceptProcessLockRegistry.shared.withLock(key: revisionRoot.path) {
+            try persistPreparedConceptSetLocked(
+                prepared,
+                revisionRoot: revisionRoot,
+                context: context
+            )
+        }
+    }
+
+    private func prepareConceptSetPersistence(
+        _ materialization: RoomConceptSetImport,
+        context: RoomConceptSetValidationContext,
+        purpose: RoomConceptPersistencePurpose
+    ) throws -> PreparedRoomConceptSetPersistence {
         let canonicalManifest = try RoomConceptSetCanonicalJSON.encode(materialization.conceptSet)
         let validatedConcept = try RoomConceptSetDecoder.decodeCanonical(canonicalManifest, context: context)
-        guard validatedConcept == materialization.conceptSet,
-              validatedConcept.approvalState == .pending,
-              validatedConcept.archiveState == .active
-        else {
+        guard validatedConcept == materialization.conceptSet else {
             throw RoomConceptSetError.invalidValue(
                 path: "conceptSet",
-                reason: "A new import must begin pending and active without changing its canonical model."
+                reason: "Concept Set persistence must preserve its canonical model."
             )
+        }
+        if case .newImport = purpose {
+            guard validatedConcept.approvalState == .pending,
+                  validatedConcept.archiveState == .active
+            else {
+                throw RoomConceptSetError.invalidValue(
+                    path: "conceptSet",
+                    reason: "A new import must begin pending and active without changing its canonical model."
+                )
+            }
         }
         let attachmentBytes = try validatedAttachmentBytes(
             materialization.attachments,
             for: validatedConcept
         )
-        let revisionRoot = try revisionDirectory(context: context)
-        let lockKey = revisionRoot.path
 
-        return try RoomConceptProcessLockRegistry.shared.withLock(key: lockKey) {
-            guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
-            try prepareRevisionDirectory(revisionRoot, context: context)
-            try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
+        return PreparedRoomConceptSetPersistence(
+            canonicalManifest: canonicalManifest,
+            concept: validatedConcept,
+            attachmentBytes: attachmentBytes
+        )
+    }
 
-            let finalURL = revisionRoot.appendingPathComponent(
-                validatedConcept.conceptSetID,
+    /// Runs only while the caller owns the source-revision process lock. This
+    /// shared transaction primitive is used by ordinary imports and by the
+    /// single-lock recovery window without recursively acquiring that lock.
+    private func persistPreparedConceptSetLocked(
+        _ prepared: PreparedRoomConceptSetPersistence,
+        revisionRoot: URL,
+        context: RoomConceptSetValidationContext
+    ) throws -> RoomConceptSet {
+        let canonicalManifest = prepared.canonicalManifest
+        let validatedConcept = prepared.concept
+        let attachmentBytes = prepared.attachmentBytes
+
+        guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
+        try prepareRevisionDirectory(revisionRoot, context: context)
+        try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
+
+        let finalURL = revisionRoot.appendingPathComponent(
+            validatedConcept.conceptSetID,
+            isDirectory: true
+        )
+        guard !pathExists(finalURL) else {
+            throw RoomConceptSetError.conceptAlreadyExists(validatedConcept.conceptSetID)
+        }
+        let transactionID = UUID().uuidString.lowercased()
+        let stageName = ".roomscan-concept-stage-\(validatedConcept.conceptSetID)-\(transactionID)"
+        let stageURL = revisionRoot.appendingPathComponent(stageName, isDirectory: true)
+        let ownership = RoomConceptOwnershipRecord(
+            sourceRevision: context.expectedSourceRevision,
+            conceptSetID: validatedConcept.conceptSetID,
+            transactionID: transactionID
+        )
+        let pending = PendingRoomConceptTransaction(
+            sourceRevision: context.expectedSourceRevision,
+            conceptSetID: validatedConcept.conceptSetID,
+            stagingDirectoryName: stageName,
+            transactionID: transactionID
+        )
+        let pendingURL = revisionRoot.appendingPathComponent(Self.pendingFilename)
+        var stageCreated = false
+        var markerWritten = false
+
+        do {
+            try fileManager.createDirectory(at: stageURL, withIntermediateDirectories: false)
+            stageCreated = true
+            try writeNewCanonical(ownership, to: stageURL.appendingPathComponent(Self.ownershipFilename))
+            try canonicalManifest.write(
+                to: stageURL.appendingPathComponent(Self.manifestFilename),
+                options: .withoutOverwriting
+            )
+            let attachmentsURL = stageURL.appendingPathComponent(
+                Self.attachmentsDirectoryName,
                 isDirectory: true
             )
+            try fileManager.createDirectory(at: attachmentsURL, withIntermediateDirectories: false)
+            for attachment in validatedConcept.attachments {
+                guard let data = attachmentBytes[attachment.attachmentID] else {
+                    throw RoomConceptSetError.invalidValue(
+                        path: "attachments",
+                        reason: "Every declared attachment must have exactly one input payload."
+                    )
+                }
+                let destination = stageURL.appendingPathComponent(attachment.relativePath)
+                try data.write(to: destination, options: .withoutOverwriting)
+            }
+            _ = try loadConcept(
+                from: stageURL,
+                expectedConceptSetID: validatedConcept.conceptSetID,
+                context: context,
+                expectedOwnership: ownership
+            )
+
+            try writeNewCanonical(pending, to: pendingURL)
+            markerWritten = true
+            try faultInjector.throwIfNeeded(at: .beforePromotion)
+            guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
             guard !pathExists(finalURL) else {
                 throw RoomConceptSetError.conceptAlreadyExists(validatedConcept.conceptSetID)
             }
-            let transactionID = UUID().uuidString.lowercased()
-            let stageName = ".roomscan-concept-stage-\(validatedConcept.conceptSetID)-\(transactionID)"
-            let stageURL = revisionRoot.appendingPathComponent(stageName, isDirectory: true)
-            let ownership = RoomConceptOwnershipRecord(
-                sourceRevision: context.expectedSourceRevision,
-                conceptSetID: validatedConcept.conceptSetID,
-                transactionID: transactionID
-            )
-            let pending = PendingRoomConceptTransaction(
-                sourceRevision: context.expectedSourceRevision,
-                conceptSetID: validatedConcept.conceptSetID,
-                stagingDirectoryName: stageName,
-                transactionID: transactionID
-            )
-            let pendingURL = revisionRoot.appendingPathComponent(Self.pendingFilename)
-            var stageCreated = false
-            var markerWritten = false
-
+            try fileManager.moveItem(at: stageURL, to: finalURL)
+            stageCreated = false
+            try faultInjector.throwIfNeeded(at: .afterPromotionBeforeCommit)
+            guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
+            try removeRegularFile(pendingURL)
+            markerWritten = false
+            return validatedConcept
+        } catch {
             do {
-                try fileManager.createDirectory(at: stageURL, withIntermediateDirectories: false)
-                stageCreated = true
-                try writeNewCanonical(ownership, to: stageURL.appendingPathComponent(Self.ownershipFilename))
-                try canonicalManifest.write(
-                    to: stageURL.appendingPathComponent(Self.manifestFilename),
-                    options: .withoutOverwriting
-                )
-                let attachmentsURL = stageURL.appendingPathComponent(
-                    Self.attachmentsDirectoryName,
-                    isDirectory: true
-                )
-                try fileManager.createDirectory(at: attachmentsURL, withIntermediateDirectories: false)
-                for attachment in validatedConcept.attachments {
-                    guard let data = attachmentBytes[attachment.attachmentID] else {
-                        throw RoomConceptSetError.invalidValue(
-                            path: "attachments",
-                            reason: "Every declared attachment must have exactly one input payload."
-                        )
-                    }
-                    let destination = stageURL.appendingPathComponent(attachment.relativePath)
-                    try data.write(to: destination, options: .withoutOverwriting)
+                if markerWritten {
+                    try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
+                } else if stageCreated {
+                    try removeOwnedDirectoryIfPresent(stageURL, expectedOwnership: ownership)
                 }
-                _ = try loadConcept(
-                    from: stageURL,
-                    expectedConceptSetID: validatedConcept.conceptSetID,
-                    context: context,
-                    expectedOwnership: ownership
-                )
-
-                try writeNewCanonical(pending, to: pendingURL)
-                markerWritten = true
-                try faultInjector.throwIfNeeded(at: .beforePromotion)
-                guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
-                guard !pathExists(finalURL) else {
-                    throw RoomConceptSetError.conceptAlreadyExists(validatedConcept.conceptSetID)
-                }
-                try fileManager.moveItem(at: stageURL, to: finalURL)
-                stageCreated = false
-                try faultInjector.throwIfNeeded(at: .afterPromotionBeforeCommit)
-                guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
-                try removeRegularFile(pendingURL)
-                markerWritten = false
-                return validatedConcept
             } catch {
-                do {
-                    if markerWritten {
-                        try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
-                    } else if stageCreated {
-                        try removeOwnedDirectoryIfPresent(stageURL, expectedOwnership: ownership)
-                    }
-                } catch {
-                    throw RoomConceptSetError.unsafeStore(
-                        "A failed Concept Set transaction could not be safely reconciled."
-                    )
-                }
-                if error is CancellationError || error as? RoomConceptSetError == .cancelled {
-                    throw RoomConceptSetError.cancelled
-                }
-                if let conceptError = error as? RoomConceptSetError {
-                    throw conceptError
-                }
-                throw RoomConceptSetError.unsafeStore("Unable to atomically import the Concept Set.")
+                throw RoomConceptSetError.unsafeStore(
+                    "A failed Concept Set transaction could not be safely reconciled."
+                )
             }
+            if error is CancellationError || error as? RoomConceptSetError == .cancelled {
+                throw RoomConceptSetError.cancelled
+            }
+            if let conceptError = error as? RoomConceptSetError {
+                throw conceptError
+            }
+            throw RoomConceptSetError.unsafeStore("Unable to atomically import the Concept Set.")
         }
     }
 
@@ -248,31 +341,11 @@ public actor LocalRoomConceptStore {
         try validateConfiguration()
         let revisionRoot = try revisionDirectory(context: context)
         return try RoomConceptProcessLockRegistry.shared.withLock(key: revisionRoot.path) {
-            guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
-            guard pathExists(revisionRoot) else { return [] }
-            try requireDirectoryNonSymlink(revisionRoot)
-            try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
-            let entries = try fileManager.contentsOfDirectory(
-                at: revisionRoot,
-                includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-                options: [.skipsHiddenFiles]
-            ).sorted { $0.lastPathComponent < $1.lastPathComponent }
-            var concepts: [RoomConceptSet] = []
-            for entry in entries {
-                try requireDirectoryNonSymlink(entry)
-                let concept = try loadConcept(
-                    from: entry,
-                    expectedConceptSetID: entry.lastPathComponent,
-                    context: context
-                )
-                if archiveState == nil || concept.archiveState == archiveState {
-                    concepts.append(concept)
-                }
-            }
-            return concepts.sorted { lhs, rhs in
-                if lhs.importedAt == rhs.importedAt { return lhs.conceptSetID < rhs.conceptSetID }
-                return lhs.importedAt < rhs.importedAt
-            }
+            try listLocked(
+                revisionRoot: revisionRoot,
+                context: context,
+                archiveState: archiveState
+            )
         }
     }
 
@@ -298,22 +371,130 @@ public actor LocalRoomConceptStore {
         try requireIdentifier(attachmentID, at: "attachmentID")
         let revisionRoot = try revisionDirectory(context: context)
         return try RoomConceptProcessLockRegistry.shared.withLock(key: revisionRoot.path) {
-            let concept = try loadLocked(
+            try attachmentDataLocked(
                 conceptSetID: conceptSetID,
+                attachmentID: attachmentID,
                 revisionRoot: revisionRoot,
                 context: context
             )
-            guard let attachment = concept.attachments.first(where: { $0.attachmentID == attachmentID }) else {
-                throw RoomConceptSetError.invalidValue(
-                    path: "attachmentID",
-                    reason: "The selected attachment does not belong to this Concept Set."
-                )
-            }
-            let fileURL = revisionRoot
-                .appendingPathComponent(conceptSetID, isDirectory: true)
-                .appendingPathComponent(attachment.relativePath)
-            return try Data(contentsOf: fileURL)
         }
+    }
+
+    /// Captures every stored Concept Set for one immutable source revision as
+    /// strict canonical manifest bytes plus its exact sanitized attachment
+    /// closure. The returned value uses the professional working-set companion
+    /// path vocabulary and never reaches into the source room package.
+    public func snapshot(
+        context: RoomConceptSetValidationContext
+    ) async throws -> RoomProfessionalConceptSnapshot {
+        try validateConfiguration()
+        let concepts = try await list(context: context)
+        var snapshots: [RoomProfessionalConceptSetSnapshot] = []
+        for concept in concepts.sorted(by: { $0.conceptSetID < $1.conceptSetID }) {
+            let canonicalManifestData = try RoomConceptSetCanonicalJSON.encode(concept)
+            var attachments: [RoomProfessionalConceptAttachmentSnapshot] = []
+            for attachment in concept.attachments {
+                let data = try await attachmentData(
+                    conceptSetID: concept.conceptSetID,
+                    attachmentID: attachment.attachmentID,
+                    context: context
+                )
+                let attachmentSnapshot = try RoomProfessionalConceptAttachmentSnapshot(
+                    attachmentID: attachment.attachmentID,
+                    relativePath: attachment.relativePath,
+                    mediaType: attachment.mediaType,
+                    data: data,
+                    byteCount: attachment.byteCount,
+                    sha256: attachment.sha256
+                )
+                attachments.append(attachmentSnapshot)
+            }
+            snapshots.append(try RoomProfessionalConceptSetSnapshot(
+                sourceRevision: context.expectedSourceRevision,
+                conceptSetID: concept.conceptSetID,
+                canonicalManifestData: canonicalManifestData,
+                manifestSHA256: RoomSHA256.hexDigest(of: canonicalManifestData),
+                attachments: attachments
+            ))
+        }
+        return try RoomProfessionalConceptSnapshot(
+            sourceRevision: context.expectedSourceRevision,
+            conceptSets: snapshots
+        )
+    }
+
+    /// Restores only a fully valid, source-bound snapshot. All manifests and
+    /// attachment bytes are revalidated before a destination directory is
+    /// prepared or a single Concept Set can be promoted. Existing local sets
+    /// must be exact byte-for-byte matches; restore never rewrites them.
+    public func restoreSnapshot(
+        _ snapshot: RoomProfessionalConceptSnapshot,
+        context: RoomConceptSetValidationContext,
+        recoveredCopyMapping: RoomProfessionalRecoveredCopyMapping? = nil
+    ) async throws -> RoomProfessionalConceptRestoreResult {
+        try validateConfiguration()
+
+        // This deliberately precedes revisionDirectory/importConceptSet:
+        // a corrupt multi-set snapshot must not make any destination store
+        // path or partial state caller-visible.
+        try snapshot.validateStructure()
+        let restorePlan = try snapshot.restoreImports(
+            context: context,
+            recoveredCopyMapping: recoveredCopyMapping
+        )
+        let imports = restorePlan.imports
+        // The recovery-only persistence path admits fully validated reviewed
+        // and archived state, so all inputs must prove that exact persisted
+        // shape before this method looks up or creates destination paths.
+        let preparedImports = try imports.map { materialization in
+            try prepareConceptSetPersistence(
+                materialization,
+                context: context,
+                purpose: .recoveredSnapshot
+            )
+        }
+        let revisionRoot = try revisionDirectory(context: context)
+
+        // Do not release this process-shared lock between existing-state
+        // validation and later promotions. A second store otherwise can write
+        // a conflicting later set after the first recovery set is committed.
+        try RoomConceptProcessLockRegistry.shared.withLock(key: revisionRoot.path) {
+            let existingByID = Dictionary(
+                uniqueKeysWithValues: try listLocked(
+                    revisionRoot: revisionRoot,
+                    context: context,
+                    archiveState: nil
+                ).map { ($0.conceptSetID, $0) }
+            )
+            var missingImports: [PreparedRoomConceptSetPersistence] = []
+            for prepared in preparedImports {
+                if let existing = existingByID[prepared.concept.conceptSetID] {
+                    try requireExactExistingConceptLocked(
+                        existing,
+                        matches: prepared,
+                        revisionRoot: revisionRoot,
+                        context: context
+                    )
+                } else {
+                    missingImports.append(prepared)
+                }
+            }
+
+            // All incoming bytes and all pre-existing state are now validated;
+            // only absent, exact-source directories can enter the recovery-only
+            // marker-owned staging/promotion path while this lock remains held.
+            for prepared in missingImports {
+                _ = try persistPreparedConceptSetLocked(
+                    prepared,
+                    revisionRoot: revisionRoot,
+                    context: context
+                )
+                recoverySynchronizer.didPromoteRecoveredConceptSet(prepared.concept.conceptSetID)
+            }
+        }
+        return RoomProfessionalConceptRestoreResult(
+            conceptMappingAdjustments: restorePlan.conceptMappingAdjustments
+        )
     }
 
     /// Persists the user-review fields of one existing Concept Set. The full
@@ -436,6 +617,38 @@ public actor LocalRoomConceptStore {
         }
     }
 
+    private func listLocked(
+        revisionRoot: URL,
+        context: RoomConceptSetValidationContext,
+        archiveState: RoomConceptArchiveState?
+    ) throws -> [RoomConceptSet] {
+        guard !Task.isCancelled else { throw RoomConceptSetError.cancelled }
+        guard pathExists(revisionRoot) else { return [] }
+        try requireDirectoryNonSymlink(revisionRoot)
+        try reconcilePendingLocked(revisionRoot: revisionRoot, context: context)
+        let entries = try fileManager.contentsOfDirectory(
+            at: revisionRoot,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        ).sorted { $0.lastPathComponent < $1.lastPathComponent }
+        var concepts: [RoomConceptSet] = []
+        for entry in entries {
+            try requireDirectoryNonSymlink(entry)
+            let concept = try loadConcept(
+                from: entry,
+                expectedConceptSetID: entry.lastPathComponent,
+                context: context
+            )
+            if archiveState == nil || concept.archiveState == archiveState {
+                concepts.append(concept)
+            }
+        }
+        return concepts.sorted { lhs, rhs in
+            if lhs.importedAt == rhs.importedAt { return lhs.conceptSetID < rhs.conceptSetID }
+            return lhs.importedAt < rhs.importedAt
+        }
+    }
+
     private func loadLocked(
         conceptSetID: String,
         revisionRoot: URL,
@@ -455,6 +668,29 @@ public actor LocalRoomConceptStore {
             expectedConceptSetID: conceptSetID,
             context: context
         )
+    }
+
+    private func attachmentDataLocked(
+        conceptSetID: String,
+        attachmentID: String,
+        revisionRoot: URL,
+        context: RoomConceptSetValidationContext
+    ) throws -> Data {
+        let concept = try loadLocked(
+            conceptSetID: conceptSetID,
+            revisionRoot: revisionRoot,
+            context: context
+        )
+        guard let attachment = concept.attachments.first(where: { $0.attachmentID == attachmentID }) else {
+            throw RoomConceptSetError.invalidValue(
+                path: "attachmentID",
+                reason: "The selected attachment does not belong to this Concept Set."
+            )
+        }
+        let fileURL = revisionRoot
+            .appendingPathComponent(conceptSetID, isDirectory: true)
+            .appendingPathComponent(attachment.relativePath)
+        return try Data(contentsOf: fileURL)
     }
 
     private func validatedAttachmentBytes(
@@ -495,6 +731,45 @@ public actor LocalRoomConceptStore {
             )
         }
         return byID
+    }
+
+    private func requireExactExistingConceptLocked(
+        _ existing: RoomConceptSet,
+        matches prepared: PreparedRoomConceptSetPersistence,
+        revisionRoot: URL,
+        context: RoomConceptSetValidationContext
+    ) throws {
+        let existingManifest = try RoomConceptSetCanonicalJSON.encode(existing)
+        let incomingManifest = prepared.canonicalManifest
+        guard existingManifest == incomingManifest else {
+            throw RoomProfessionalRecoveryError.existingStateConflict(
+                "A different Concept Set already exists for this immutable source revision."
+            )
+        }
+        let incomingByID = prepared.attachmentBytes
+        guard incomingByID.count == existing.attachments.count else {
+            throw RoomProfessionalRecoveryError.existingStateConflict(
+                "Existing Concept Set attachment closure differs from the recovery snapshot."
+            )
+        }
+        for attachment in existing.attachments {
+            guard let incomingData = incomingByID[attachment.attachmentID] else {
+                throw RoomProfessionalRecoveryError.existingStateConflict(
+                    "Existing Concept Set attachment closure differs from the recovery snapshot."
+                )
+            }
+            let existingData = try attachmentDataLocked(
+                conceptSetID: existing.conceptSetID,
+                attachmentID: attachment.attachmentID,
+                revisionRoot: revisionRoot,
+                context: context
+            )
+            guard existingData == incomingData else {
+                throw RoomProfessionalRecoveryError.existingStateConflict(
+                    "Existing Concept Set attachment bytes differ from the recovery snapshot."
+                )
+            }
+        }
     }
 
     private func validateReviewTransition(

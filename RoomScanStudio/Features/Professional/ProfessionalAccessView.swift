@@ -9,6 +9,7 @@ struct ProfessionalAccessView: View {
     @State private var transferCode = ""
     @State private var awaitingTransferCode = false
     @State private var pendingItemMessage: String?
+    @State private var syncWorkspaceModel: ProfessionalProjectSyncViewModel?
 
     var body: some View {
         NavigationStack {
@@ -43,6 +44,9 @@ struct ProfessionalAccessView: View {
                 factory.refreshProtectedState()
                 try? await Task.sleep(for: .seconds(1))
             }
+        }
+        .sheet(item: $syncWorkspaceModel) { model in
+            ProfessionalProjectSyncView(model: model)
         }
     }
 
@@ -118,6 +122,19 @@ struct ProfessionalAccessView: View {
         } else {
             Label("Local unlock confirmed.", systemImage: "lock.open")
                 .foregroundStyle(AppPalette.ink)
+            Button("Open project recovery") {
+                do {
+                    syncWorkspaceModel = ProfessionalProjectSyncViewModel(
+                        dependencies: try factory
+                            .professionalProjectSyncWorkspaceDependencies()
+                    )
+                } catch {
+                    pendingItemMessage = (error as? LocalizedError)?.errorDescription
+                        ?? "Professional project synchronization is unavailable."
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("professional.sync.open")
             if awaitingTransferCode {
                 TextField("8-character confirmation code", text: $transferCode)
                     .textInputAutocapitalization(.characters)

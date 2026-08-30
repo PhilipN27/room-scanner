@@ -77,6 +77,26 @@ let unsafe = URLSession.shared
             errors,
         )
 
+    def test_direct_guest_reference_to_slice5_transport_remains_detectable(self) -> None:
+        verifier = verify_slice4_static_controls.verify_xcode_scaffold
+        sources = verifier.read_guest_production_sources()
+        app_environment = verifier.ROOT / "RoomScanStudio" / "App" / "AppEnvironment.swift"
+        unsafe = dict(sources)
+        unsafe[app_environment] += (
+            "\nprivate let directSlice5Transport = FoundationProfessionalHTTPTransport.self\n"
+        )
+
+        errors = verifier.guest_hosted_boundary_errors(unsafe)
+
+        self.assertTrue(
+            any(
+                "guest composition reaches dedicated professional/auth adapter" in error
+                and "ProfessionalTransportBoundary.swift" in error
+                for error in errors
+            ),
+            errors,
+        )
+
     def test_real_guest_network_and_secret_detectors_reach_their_positive_controls(self) -> None:
         result = verify_slice4_static_controls.run_controls()
 

@@ -48,12 +48,17 @@ async function prepareMutation(transform, additionalMutations = []) {
   for (const additional of additionalMutations) {
     const additionalTarget = path.join(migrationsDir, additional.file);
     const additionalSource = await readFile(additionalTarget, 'utf8');
-    const additionalMutated = replaceOnce(
-      additionalSource,
-      additional.before,
-      additional.after,
-      additional.label,
-    );
+    const additionalMutated = additional.transform
+      ? additional.transform(additionalSource)
+      : additional.append
+        ? `${additionalSource}${additional.append}`
+        : replaceOnce(
+          additionalSource,
+          additional.before,
+          additional.after,
+          additional.label,
+        );
+    assert.notEqual(additionalMutated, additionalSource, `${additional.file} mutation made no change`);
     await writeFile(additionalTarget, additionalMutated);
   }
   return { root, migrationsDir };
@@ -1857,6 +1862,30 @@ async function identityMutationIsolationOracle({ cluster, bootstrapPool }) {
   }
 }
 
+const removeHostedLiteralTrueGuards = (source) => mutateFunction(
+  source,
+  'hosted_mutation_grant_matches',
+  (block) => {
+    const anchor = '        AND global_flag.enabled IS TRUE\n';
+    const workspaceAnchor = '        AND workspace_flag.enabled IS TRUE\n';
+    assert.equal(block.split(anchor).length - 1, 2, 'global literal-TRUE anchors drifted');
+    assert.equal(block.split(workspaceAnchor).length - 1, 2, 'workspace literal-TRUE anchors drifted');
+    return block.replaceAll(anchor, '').replaceAll(workspaceAnchor, '');
+  },
+);
+
+const removeHostedVersionGuards = (source) => mutateFunction(
+  source,
+  'hosted_mutation_grant_matches',
+  (block) => {
+    const globalAnchor = '        AND global_flag.version = hosted_global_version\n';
+    const workspaceAnchor = '        AND workspace_flag.version = hosted_workspace_version\n';
+    assert.equal(block.split(globalAnchor).length - 1, 1, 'hosted global version anchor drifted');
+    assert.equal(block.split(workspaceAnchor).length - 1, 1, 'hosted workspace version anchor drifted');
+    return block.replace(globalAnchor, '').replace(workspaceAnchor, '');
+  },
+);
+
 const mutations = [
   {
     name: 'shared roomscan_app LOGIN re-enabled',
@@ -1893,6 +1922,10 @@ const mutations = [
   {
     name: 'refresh reducer granted to PUBLIC',
     transform: (source) => `${source}\nGRANT EXECUTE ON FUNCTION roomscan.rotate_session_from_refresh(bytea, bytea, bytea, timestamptz, timestamptz, timestamptz) TO PUBLIC;\n`,
+    additionalMutations: [{
+      file: '0008_professional_project_sync.up.sql',
+      append: '\nGRANT EXECUTE ON FUNCTION roomscan.rotate_session_from_refresh(bytea, bytea, bytea, timestamptz, timestamptz, timestamptz) TO PUBLIC;\n',
+    }],
     oracle: publicExecuteOracle,
   },
   {
@@ -1944,24 +1977,20 @@ const mutations = [
   },
   {
     name: 'hosted flag literal-TRUE checks removed',
-    transform: (source) => mutateFunction(source, 'hosted_mutation_grant_matches', (block) => {
-      const anchor = '        AND global_flag.enabled IS TRUE\n';
-      const workspaceAnchor = '        AND workspace_flag.enabled IS TRUE\n';
-      assert.equal(block.split(anchor).length - 1, 2, 'global literal-TRUE anchors drifted');
-      assert.equal(block.split(workspaceAnchor).length - 1, 2, 'workspace literal-TRUE anchors drifted');
-      return block.replaceAll(anchor, '').replaceAll(workspaceAnchor, '');
-    }),
+    transform: removeHostedLiteralTrueGuards,
+    additionalMutations: [{
+      file: '0008_professional_project_sync.up.sql',
+      transform: removeHostedLiteralTrueGuards,
+    }],
     oracle: flagLiteralTrueOracle,
   },
   {
     name: 'hosted flag version checks removed',
-    transform: (source) => mutateFunction(source, 'hosted_mutation_grant_matches', (block) => {
-      const globalAnchor = '        AND global_flag.version = hosted_global_version\n';
-      const workspaceAnchor = '        AND workspace_flag.version = hosted_workspace_version\n';
-      assert.equal(block.split(globalAnchor).length - 1, 1, 'hosted global version anchor drifted');
-      assert.equal(block.split(workspaceAnchor).length - 1, 1, 'hosted workspace version anchor drifted');
-      return block.replace(globalAnchor, '').replace(workspaceAnchor, '');
-    }),
+    transform: removeHostedVersionGuards,
+    additionalMutations: [{
+      file: '0008_professional_project_sync.up.sql',
+      transform: removeHostedVersionGuards,
+    }],
     oracle: flagVersionOracle,
   },
   {

@@ -18,6 +18,7 @@ export function assertInfrastructurePolicy(template: Readonly<Record<string, unk
   assertStripeEnvelopeContract(resources);
   assertNoLaterSliceResources(resources);
   assertS3Boundaries(resources);
+  assertProjectSyncBoundary(template, resources);
   assertLogBoundaries(resources);
   assertAuroraBoundary(resources);
   assertRuntimeDatabaseLanes(resources);
@@ -79,8 +80,8 @@ function assertStripeEnvelopeContract(
 
 function assertS3Boundaries(resources: Readonly<Record<string, CloudFormationResource>>): void {
   const buckets = Object.entries(resources).filter(([, resource]) => resource.Type === "AWS::S3::Bucket");
-  if (buckets.length !== 5) {
-    throw new InfrastructurePolicyError("exactly five private S3 data boundaries are required");
+  if (buckets.length !== 6) {
+    throw new InfrastructurePolicyError("exactly six private S3 data boundaries are required");
   }
   for (const [logicalId, bucket] of buckets) {
     const properties = bucket.Properties ?? {};
@@ -118,7 +119,7 @@ function assertS3Boundaries(resources: Readonly<Record<string, CloudFormationRes
   }
 
   const policies = ofType(resources, "AWS::S3::BucketPolicy");
-  if (policies.length !== 5) {
+  if (policies.length !== 6) {
     throw new InfrastructurePolicyError("every S3 boundary requires an explicit bucket policy");
   }
   for (const policy of policies) {
@@ -185,6 +186,182 @@ function assertS3Boundaries(resources: Readonly<Record<string, CloudFormationRes
   if (deleteDeny === undefined) {
     throw new InfrastructurePolicyError("audit bucket requires caller-driven object and bucket deletion denies");
   }
+}
+
+function assertProjectSyncBoundary(
+  template: Readonly<Record<string, unknown>>,
+  resources: Readonly<Record<string, CloudFormationResource>>,
+): void {
+  const bucketEntry = Object.entries(resources).find(
+    ([logicalId, resource]) => logicalId.startsWith("ProjectSyncBucket") && resource.Type === "AWS::S3::Bucket",
+  );
+  if (bucketEntry === undefined) {
+    throw new InfrastructurePolicyError("Slice 5 requires one dedicated private project-sync bucket");
+  }
+  const bucketPolicy = Object.values(resources).find((resource) =>
+    resource.Type === "AWS::S3::BucketPolicy" && serialized(resource.Properties?.Bucket).includes(bucketEntry[0]),
+  );
+  if (bucketPolicy === undefined) {
+    throw new InfrastructurePolicyError("project-sync bucket policy is required");
+  }
+  const bucketPolicyText = serialized(bucketPolicy.Properties?.PolicyDocument);
+  for (const marker of [
+    "server/quarantine/v1/",
+    "server/active/v1/",
+    "s3:DeleteObject",
+    "s3:DeleteObjectVersion",
+    "s3:DeleteBucket",
+  ]) {
+    if (!bucketPolicyText.includes(marker)) {
+      throw new InfrastructurePolicyError("project-sync retention or namespace deny is incomplete");
+    }
+  }
+  // Conditional CopyObject must be expressed by the adapter's destination
+  // If-None-Match header. AWS documents that enforcing conditional writes in
+  // a bucket policy makes CopyObject return 501, so the policy cannot add one.
+  if (/if-none-match|IfNoneMatch/iu.test(bucketPolicyText)) {
+    throw new InfrastructurePolicyError("project-sync bucket policy must not break conditional CopyObject");
+  }
+
+  const queues = Object.entries(resources).filter(([, resource]) => resource.Type === "AWS::SQS::Queue");
+  const validationQueue = queues.find(([logicalId]) => logicalId.startsWith("ProjectSyncValidationQueue"));
+  const dlq = queues.find(([logicalId]) => logicalId.startsWith("ProjectSyncValidationDlq"));
+  if (validationQueue === undefined || dlq === undefined) {
+    throw new InfrastructurePolicyError("project-sync validation queue and DLQ are required");
+  }
+  const validationProperties = validationQueue[1].Properties ?? {};
+  if (validationProperties.KmsMasterKeyId === undefined || validationProperties.VisibilityTimeout !== 60
+    || !serialized(validationProperties.RedrivePolicy).includes(dlq[0])
+    || !serialized(validationProperties.RedrivePolicy).includes("maxReceiveCount\":5")) {
+    throw new InfrastructurePolicyError("project-sync validation queue requires KMS, 60-second visibility, and five-attempt DLQ redrive");
+  }
+  if (!serialized(validationProperties.KmsMasterKeyId).includes("ProjectSyncQueuesKey")
+    || !serialized(dlq[1].Properties?.KmsMasterKeyId).includes("ProjectSyncQueuesKey")) {
+    throw new InfrastructurePolicyError("project-sync validation queue and DLQ require their dedicated CMK");
+  }
+  const worker = Object.entries(resources).find(([, resource]) =>
+    resource.Type === "AWS::Lambda::Function"
+      && typeof resource.Properties?.FunctionName === "string"
+      && resource.Properties.FunctionName.endsWith("-project-sync-validation"),
+  );
+  if (worker === undefined || worker[1].Properties?.Timeout !== 30
+    || worker[1].Properties?.ReservedConcurrentExecutions !== 1) {
+    throw new InfrastructurePolicyError("project-sync validation requires exactly one bounded worker Lambda");
+  }
+  if (!(typeof validationProperties.VisibilityTimeout === "number")
+    || validationProperties.VisibilityTimeout <= (worker[1].Properties?.Timeout as number)) {
+    throw new InfrastructurePolicyError("project-sync queue visibility must exceed worker timeout");
+  }
+  const mapping = ofType(resources, "AWS::Lambda::EventSourceMapping").find((resource) =>
+    serialized(resource.Properties?.EventSourceArn).includes(validationQueue[0])
+      && serialized(resource.Properties?.FunctionName).includes("ProjectSyncValidationLiveAlias"),
+  );
+  if (mapping === undefined || mapping.Properties?.BatchSize !== 1) {
+    throw new InfrastructurePolicyError("project-sync validation worker requires one-record queue delivery");
+  }
+  const schedule = ofType(resources, "AWS::Events::Rule").find((resource) =>
+    typeof resource.Properties?.Name === "string"
+      && resource.Properties.Name.endsWith("-project-sync-validation-recovery"),
+  );
+  if (schedule === undefined || schedule.Properties?.ScheduleExpression !== "rate(1 minute)"
+    || !serialized(schedule.Properties?.Targets).includes("roomscan-project-validation-wake-v1")) {
+    throw new InfrastructurePolicyError("project-sync validation requires a fixed targetless recovery wake");
+  }
+  const configuredSourceAccount = projectSyncConfiguredSourceAccount(template, schedule);
+  const recoveryQueuePolicy = Object.values(resources).find((resource) =>
+    resource.Type === "AWS::SQS::QueuePolicy"
+      && serialized(resource.Properties?.Queues).includes(validationQueue[0]),
+  );
+  const recoveryProducer = recoveryQueuePolicy === undefined ? undefined : policyStatements(recoveryQueuePolicy).find((statement) =>
+    serialized(statement.Principal).includes("events.amazonaws.com"),
+  );
+  if (recoveryProducer === undefined
+    || !sameStrings(strings(recoveryProducer.Action), new Set(["sqs:SendMessage"]))
+    || !exactProjectSyncRecoveryRuleArn(recoveryProducer)
+    || exactStringEqualsCondition(recoveryProducer, "aws:SourceAccount") !== configuredSourceAccount
+    || serialized(recoveryQueuePolicy).includes("sqs:GetQueue")) {
+    throw new InfrastructurePolicyError("project-sync recovery schedule must have an exact EventBridge SendMessage queue policy");
+  }
+  const projectSyncQueueKey = Object.entries(resources).find(
+    ([logicalId, resource]) => logicalId.startsWith("ProjectSyncQueuesKey") && resource.Type === "AWS::KMS::Key",
+  );
+  const eventBridgeKeyGrant = projectSyncQueueKey === undefined ? undefined : keyPolicyStatements(projectSyncQueueKey[1]).find((statement) =>
+    serialized(statement.Principal).includes("events.amazonaws.com"),
+  );
+  if (eventBridgeKeyGrant === undefined
+    || !sameStrings(strings(eventBridgeKeyGrant.Action), new Set(["kms:Decrypt", "kms:GenerateDataKey"]))
+    || exactStringEqualsCondition(eventBridgeKeyGrant, "aws:SourceAccount") !== configuredSourceAccount) {
+    throw new InfrastructurePolicyError("project-sync queue CMK requires the exact EventBridge source-account grant");
+  }
+  const dlqAlarm = Object.entries(resources).find(([logicalId, resource]) =>
+    logicalId.startsWith("ProjectSyncValidationDlqVisibleMessagesAlarm") && resource.Type === "AWS::CloudWatch::Alarm",
+  );
+  if (dlqAlarm === undefined) {
+    throw new InfrastructurePolicyError("project-sync validation DLQ requires an operator alarm");
+  }
+
+  const apiPolicy = policyByPrefix(resources, "PrivateApiPolicy");
+  const workerPolicy = policyByPrefix(resources, "ProjectSyncValidationPolicy");
+  const apiText = serialized(apiPolicy.Properties?.PolicyDocument);
+  const workerText = serialized(workerPolicy.Properties?.PolicyDocument);
+  const apiRecoveryRead = policyStatements(apiPolicy).find((statement) =>
+    serialized(statement.Resource).includes("server/active/v1/*/professional-sync/active/working/*"),
+  );
+  if (!apiText.includes("server/quarantine/v1/*")
+    || !apiText.includes("server/active/v1/*/professional-sync/active/working/*")
+    || !apiText.includes("s3:PutObject") || apiRecoveryRead === undefined
+    || !sameStrings(strings(apiRecoveryRead.Action), new Set(["s3:GetObjectVersion"]))
+    || /s3:Delete|s3:List|PublishedDerivativeBucket|BackupBucket/u.test(apiText)) {
+    throw new InfrastructurePolicyError("API project-sync authority must be exact upload/recovery only");
+  }
+  if (!workerText.includes("server/quarantine/v1/*") || !workerText.includes("server/active/v1/*")
+    || !workerText.includes("s3:GetObjectVersion") || !workerText.includes("s3:PutObject")
+    || /s3:Delete|s3:List|PublishedDerivativeBucket|BackupBucket/u.test(workerText)) {
+    throw new InfrastructurePolicyError("project-sync worker object authority must be exact and non-destructive");
+  }
+  if (!workerText.includes("ProjectSyncDatabaseSecret") || !workerText.includes("AssetsKey")
+    || !workerText.includes("ProjectSyncQueuesKey")) {
+    throw new InfrastructurePolicyError("project-sync worker requires its exact database and encrypted storage grants");
+  }
+}
+
+function projectSyncConfiguredSourceAccount(
+  template: Readonly<Record<string, unknown>>,
+  schedule: CloudFormationResource,
+): string {
+  const scheduleName = schedule.Properties?.Name;
+  const stage = typeof scheduleName === "string"
+    ? /^roomscan-(dev|staging|production)-project-sync-validation-recovery$/u.exec(scheduleName)?.[1]
+    : undefined;
+  const outputName = stage === undefined
+    ? undefined
+    : `${stage[0]!.toUpperCase()}${stage.slice(1)}WorkloadAccountId`;
+  const outputs = template.Outputs;
+  const output = outputName === undefined || !isRecord(outputs) ? undefined : outputs[outputName];
+  const accountId = isRecord(output) ? output.Value : undefined;
+  if (typeof accountId !== "string" || !/^\d{12}$/u.test(accountId)) {
+    throw new InfrastructurePolicyError("project-sync recovery schedule must resolve its configured workload source account");
+  }
+  return accountId;
+}
+
+function exactStringEqualsCondition(statement: Readonly<Record<string, unknown>>, key: string): string | undefined {
+  const condition = statement.Condition;
+  const stringEquals = isRecord(condition) ? condition.StringEquals : undefined;
+  const value = isRecord(stringEquals) ? stringEquals[key] : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+function exactProjectSyncRecoveryRuleArn(statement: Readonly<Record<string, unknown>>): boolean {
+  const condition = statement.Condition;
+  const arnEquals = isRecord(condition) ? condition.ArnEquals : undefined;
+  const sourceArn = isRecord(arnEquals) ? arnEquals["aws:SourceArn"] : undefined;
+  const getAtt = isRecord(sourceArn) ? sourceArn["Fn::GetAtt"] : undefined;
+  return Array.isArray(getAtt)
+    && getAtt.length === 2
+    && typeof getAtt[0] === "string"
+    && getAtt[0].startsWith("ProjectSyncValidationRecoverySchedule")
+    && getAtt[1] === "Arn";
 }
 
 function hasExactCmkOverrideDenies(policy: CloudFormationResource, bucketEncryption: unknown): boolean {
@@ -322,7 +499,8 @@ function assertRuntimeDatabaseLanes(
     "roomscan_stripe_ingress_runtime",
     "roomscan_stripe_reconciliation_runtime",
     "roomscan_audit_export_runtime",
-    "roomscan_email_delivery_runtime"
+    "roomscan_email_delivery_runtime",
+    "roomscan_project_sync_runtime",
   ]);
   const usernames = ofType(resources, "AWS::SecretsManager::Secret").flatMap((secret) => {
     const generated = secret.Properties?.GenerateSecretString;
@@ -336,7 +514,7 @@ function assertRuntimeDatabaseLanes(
   });
   if (!sameStrings(usernames, expectedUsernames) || usernames.includes("roomscan_app")) {
     throw new InfrastructurePolicyError(
-      "database credentials require exactly seven separated runtime roles plus the owner",
+      "database credentials require exactly eight separated runtime roles plus the owner",
     );
   }
 
@@ -347,7 +525,8 @@ function assertRuntimeDatabaseLanes(
     ["-stripe-ingress", ["roomscan_stripe_ingress_runtime", "StripeIngressDatabaseSecret"]],
     ["-stripe-reconciliation", ["roomscan_stripe_reconciliation_runtime", "StripeReconciliationDatabaseSecret"]],
     ["-audit-exporter", ["roomscan_audit_export_runtime", "AuditExportDatabaseSecret"]],
-    ["-email-delivery", ["roomscan_email_delivery_runtime", "EmailDeliveryDatabaseSecret"]]
+    ["-email-delivery", ["roomscan_email_delivery_runtime", "EmailDeliveryDatabaseSecret"]],
+    ["-project-sync-validation", ["roomscan_project_sync_runtime", "ProjectSyncDatabaseSecret"]],
   ] as const);
   const functions = ofType(resources, "AWS::Lambda::Function");
   for (const [functionSuffix, [runtimeRole, secretMarker]] of expectedLanes) {
@@ -385,6 +564,7 @@ function assertRuntimeDatabaseLanes(
     migrationVariables.DB_PORT !== "5432" ||
     migrationVariables.DB_NAME !== "roomscan" ||
     migrationVariables.MIGRATION_MANIFEST_SHA256 === undefined ||
+    !serialized(migrationVariables.RUNTIME_ROLE_SECRET_ARNS_JSON).includes("roomscan_project_sync_runtime") ||
     migrationVariables.DB_CLUSTER_ARN !== undefined ||
     migrationVariables.ROOMSCAN_DB_ROLE_SECRET_ARN !== undefined ||
     migrationVariables.DB_RUNTIME_SECRET_ARN !== undefined
@@ -400,8 +580,8 @@ function assertRuntimeDatabaseLanes(
   const stripePolicy = policyByPrefix(resources, "StripeIngressPolicy");
   const apiSerialized = serialized(apiPolicy.Properties?.PolicyDocument);
   const stripeSerialized = serialized(stripePolicy.Properties?.PolicyDocument);
-  if (/s3:GetObject|ActiveBucket|PublishedDerivativeBucket/u.test(apiSerialized)) {
-    throw new InfrastructurePolicyError("API must not read active or published object storage");
+  if (/ActiveBucket|PublishedDerivativeBucket/u.test(apiSerialized)) {
+    throw new InfrastructurePolicyError("API must not read legacy active or published object storage");
   }
   for (const marker of [
     "rds-data:BeginTransaction",
@@ -418,8 +598,8 @@ function assertRuntimeDatabaseLanes(
 
 function assertLambdaBoundary(resources: Readonly<Record<string, CloudFormationResource>>): void {
   const functions = ofType(resources, "AWS::Lambda::Function");
-  if (functions.length !== 9) {
-    throw new InfrastructurePolicyError("exactly nine separated application Lambda functions are required");
+  if (functions.length !== 10) {
+    throw new InfrastructurePolicyError("exactly ten separated application Lambda functions are required");
   }
   if (functions.some((fn) => fn.Properties?.Runtime !== "nodejs24.x")) {
     throw new InfrastructurePolicyError("every application Lambda must target nodejs24.x");
@@ -507,10 +687,11 @@ function assertKmsUsageBoundary(
   resources: Readonly<Record<string, CloudFormationResource>>,
 ): void {
   const requiredPolicyReferences = [
-    ["PrivateApiPolicy", ["AssetsKey", "QueuesKey"]],
+    ["PrivateApiPolicy", ["AssetsKey", "QueuesKey", "ProjectSyncQueuesKey"]],
     ["StripeIngressPolicy", ["QueuesKey", "arn:aws:kms:us-east-1:"]],
     ["StripeReconciliationPolicy", ["QueuesKey", "arn:aws:kms:us-east-1:"]],
-    ["AuditExporterPolicy", ["AuditKey"]]
+    ["AuditExporterPolicy", ["AuditKey"]],
+    ["ProjectSyncValidationPolicy", ["AssetsKey", "ProjectSyncQueuesKey"]],
   ] as const;
   for (const [logicalPrefix, keyReferences] of requiredPolicyReferences) {
     const entry = Object.entries(resources).find(
@@ -615,12 +796,16 @@ function assertCloudTrail(resources: Readonly<Record<string, CloudFormationResou
   for (const logicalPrefix of [
     "QuarantineBucket",
     "ActiveBucket",
+    "ProjectSyncBucket",
     "PublishedDerivativeBucket",
     "BackupBucket"
   ]) {
     if (!eventSelectors.includes(logicalPrefix)) {
       throw new InfrastructurePolicyError(`CloudTrail is missing ${logicalPrefix} S3 data events`);
     }
+  }
+  if (!eventSelectors.includes("server/quarantine/v1/") || !eventSelectors.includes("server/active/v1/")) {
+    throw new InfrastructurePolicyError("CloudTrail must record project-sync quarantine and active object data events");
   }
   if (eventSelectors.includes("AuditBucket")) {
     throw new InfrastructurePolicyError(
@@ -756,29 +941,14 @@ function assertHttpApi(resources: Readonly<Record<string, CloudFormationResource
     }
   }
   const routes = ofType(resources, "AWS::ApiGatewayV2::Route");
-  const expected = new Map<string, "NONE" | "CUSTOM">([
-    ["GET /health", "NONE"],
-    ["POST /auth/magic-link/request", "NONE"],
-    ["POST /auth/magic-link/candidate/request", "CUSTOM"],
-    ["GET /auth/magic-link/{selector}", "NONE"],
-    ["POST /auth/magic-link/consume", "NONE"],
-    ["POST /auth/magic-link/completion/redeem", "NONE"],
-    ["POST /auth/apple/begin", "NONE"],
-    ["POST /auth/apple/finish", "NONE"],
-    ["POST /auth/session/refresh", "NONE"],
-    ["POST /billing/stripe/webhook", "NONE"],
-    ["POST /auth/apple/candidate/begin", "CUSTOM"],
-    ["POST /auth/session/logout", "CUSTOM"],
-    ["POST /workspace/bootstrap", "CUSTOM"],
-    ["POST /workspace/activate", "CUSTOM"],
-    ["GET /workspace", "CUSTOM"],
-    ["GET /membership", "CUSTOM"],
-    ["GET /subscription", "CUSTOM"],
-    ["GET /quota", "CUSTOM"],
-    ["POST /identity/mutate", "CUSTOM"]
-  ]);
+  const expected = new Map<string, "NONE" | "CUSTOM">(
+    SLICE5_ROUTE_MANIFEST.map((route) => [
+      `${route.method} ${route.pathTemplate.replace(/:([A-Za-z][A-Za-z0-9_]*)/gu, "{$1}")}`,
+      route.authorization.kind === "public" ? "NONE" : "CUSTOM",
+    ] as const),
+  );
   if (routes.length !== expected.size) {
-    throw new InfrastructurePolicyError("HTTP API requires exactly the canonical 19 routes");
+    throw new InfrastructurePolicyError("HTTP API requires exactly the canonical Slice 5 route manifest");
   }
   for (const route of routes) {
     const properties = route.Properties ?? {};
@@ -801,7 +971,8 @@ function assertRecoverySchedules(resources: Readonly<Record<string, CloudFormati
   for (const suffix of [
     "stripe-reconciliation-recovery",
     "audit-outbox-recovery",
-    "email-delivery-recovery"
+    "email-delivery-recovery",
+    "project-sync-validation-recovery",
   ] as const) {
     const rule = rules.find((candidate) =>
       typeof candidate.Properties?.Name === "string" && candidate.Properties.Name.endsWith(suffix));
@@ -883,3 +1054,4 @@ function serialized(value: unknown): string {
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+import { SLICE5_ROUTE_MANIFEST } from "roomscan-studio-hosted-service/contracts";

@@ -161,6 +161,9 @@ def command_plan(root: Path, evidence_directory: Path, *, install: bool) -> list
                 "Scripts/test_verify_slice4_static_controls.py",
                 "Scripts/test_inspect_ios_artifact.py",
                 "Scripts/test_slice4_ci_contract.py",
+                "Scripts/test_inspect_slice5_ios_artifact.py",
+                "Scripts/test_verify_slice5_mutation_controls.py",
+                "Scripts/test_verify_slice5_sync.py",
             ),
         )
     ]

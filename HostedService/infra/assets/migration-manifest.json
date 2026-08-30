@@ -39,6 +39,11 @@
       "version": "0007",
       "name": "0007_policy_billing_integration.up.sql",
       "checksumSha256": "c2a3af7db980d3d32933f008c17da6b68e8bdf94408e10c8bc694c5968841030"
+    },
+    {
+      "version": "0008",
+      "name": "0008_professional_project_sync.up.sql",
+      "checksumSha256": "a35f9ec814667a1bbdaaada3a3fc3ebb8cd2977f9e101884d540bcbd7a8ae2e5"
     }
   ]
 }

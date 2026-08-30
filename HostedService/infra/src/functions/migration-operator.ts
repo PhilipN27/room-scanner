@@ -29,6 +29,7 @@ const REQUIRED_MIGRATION_NAMES = Object.freeze([
   "0005_hardened_reducers.up.sql",
   "0006_auth_persistence.up.sql",
   "0007_policy_billing_integration.up.sql",
+  "0008_professional_project_sync.up.sql",
 ] as const);
 
 export interface MigrationOperatorConfiguration {

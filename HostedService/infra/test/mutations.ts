@@ -221,6 +221,191 @@ const mutations: readonly {
         (statement) => !JSON.stringify(statement).includes("s3:x-amz-server-side-encryption"),
       );
     }
+  },
+  {
+    name: "project-sync bucket public access block removed",
+    expected: /S3 public access/u,
+    mutate(template) {
+      const [, bucket] = resourceEntry(template, "AWS::S3::Bucket", "ProjectSyncBucket");
+      bucket.Properties!.PublicAccessBlockConfiguration = {
+        BlockPublicAcls: false,
+        BlockPublicPolicy: false,
+        IgnorePublicAcls: false,
+        RestrictPublicBuckets: false,
+      };
+    }
+  },
+  {
+    name: "project-sync object deletion retention deny removed",
+    expected: /project-sync retention or namespace deny/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::S3::BucketPolicy", "ProjectSyncBucketPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: unknown[] };
+      document.Statement = document.Statement.filter(
+        (statement) => !JSON.stringify(statement).includes("DenyProjectSyncObjectDeletion"),
+      );
+    }
+  },
+  {
+    name: "project-sync validation queue encryption removed",
+    expected: /project-sync validation queue requires KMS/u,
+    mutate(template) {
+      const [, queue] = resourceEntry(template, "AWS::SQS::Queue", "ProjectSyncValidationQueue");
+      delete queue.Properties!.KmsMasterKeyId;
+    }
+  },
+  {
+    name: "project-sync validation queue falls back to the legacy CMK",
+    expected: /dedicated CMK/u,
+    mutate(template) {
+      const [, queue] = resourceEntry(template, "AWS::SQS::Queue", "ProjectSyncValidationQueue");
+      queue.Properties!.KmsMasterKeyId = { "Fn::GetAtt": ["QueuesKeyMutant", "Arn"] };
+    }
+  },
+  {
+    name: "project-sync EventBridge producer source binding removed",
+    expected: /exact EventBridge SendMessage queue policy/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::SQS::QueuePolicy", "ProjectSyncValidationQueuePolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      const producer = document.Statement.find((statement) => JSON.stringify(statement.Principal).includes("events.amazonaws.com"));
+      assert.ok(producer !== undefined);
+      delete producer.Condition;
+    }
+  },
+  {
+    name: "project-sync EventBridge producer source account is another workload",
+    expected: /exact EventBridge SendMessage queue policy/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::SQS::QueuePolicy", "ProjectSyncValidationQueuePolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      const producer = document.Statement.find((statement) => JSON.stringify(statement.Principal).includes("events.amazonaws.com"));
+      assert.ok(producer !== undefined);
+      const condition = producer.Condition as { StringEquals?: Record<string, unknown> };
+      assert.ok(condition?.StringEquals !== undefined);
+      condition.StringEquals["aws:SourceAccount"] = "999999999999";
+    }
+  },
+  {
+    name: "project-sync EventBridge producer broadens its exact rule ARN",
+    expected: /exact EventBridge SendMessage queue policy/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::SQS::QueuePolicy", "ProjectSyncValidationQueuePolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      const producer = document.Statement.find((statement) => JSON.stringify(statement.Principal).includes("events.amazonaws.com"));
+      assert.ok(producer !== undefined);
+      const condition = producer.Condition as Record<string, unknown>;
+      const arnEquals = condition.ArnEquals as Record<string, unknown>;
+      assert.ok(arnEquals !== undefined);
+      const exactRuleArn = arnEquals["aws:SourceArn"];
+      delete condition.ArnEquals;
+      condition.ArnLike = {
+        "aws:SourceArn": { "Fn::Join": ["", [exactRuleArn, "*"]] },
+      };
+    }
+  },
+  {
+    name: "project-sync EventBridge producer gains queue discovery",
+    expected: /exact EventBridge SendMessage queue policy/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::SQS::QueuePolicy", "ProjectSyncValidationQueuePolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      const producer = document.Statement.find((statement) => JSON.stringify(statement.Principal).includes("events.amazonaws.com"));
+      assert.ok(producer !== undefined);
+      producer.Action = ["sqs:SendMessage", "sqs:GetQueueAttributes"];
+    }
+  },
+  {
+    name: "project-sync EventBridge KMS grant gains an unnecessary encrypt action",
+    expected: /exact EventBridge source-account grant/u,
+    mutate(template) {
+      const [, key] = resourceEntry(template, "AWS::KMS::Key", "ProjectSyncQueuesKey");
+      const document = key.Properties!.KeyPolicy as { Statement: Array<Record<string, unknown>> };
+      const grant = document.Statement.find((statement) =>
+        JSON.stringify(statement.Principal).includes("events.amazonaws.com"),
+      );
+      assert.ok(grant !== undefined);
+      grant.Action = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"];
+    }
+  },
+  {
+    name: "project-sync EventBridge KMS grant trusts another workload account",
+    expected: /exact EventBridge source-account grant/u,
+    mutate(template) {
+      const [, key] = resourceEntry(template, "AWS::KMS::Key", "ProjectSyncQueuesKey");
+      const document = key.Properties!.KeyPolicy as { Statement: Array<Record<string, unknown>> };
+      const grant = document.Statement.find((statement) =>
+        JSON.stringify(statement.Principal).includes("events.amazonaws.com"),
+      );
+      assert.ok(grant !== undefined);
+      const condition = grant.Condition as { StringEquals?: Record<string, unknown> };
+      assert.ok(condition?.StringEquals !== undefined);
+      condition.StringEquals["aws:SourceAccount"] = "999999999999";
+    }
+  },
+  {
+    name: "project-sync validation queue redrive count weakened",
+    expected: /five-attempt DLQ redrive/u,
+    mutate(template) {
+      const [, queue] = resourceEntry(template, "AWS::SQS::Queue", "ProjectSyncValidationQueue");
+      const redrive = queue.Properties!.RedrivePolicy as Record<string, unknown>;
+      assert.ok(redrive !== null && typeof redrive === "object");
+      redrive.maxReceiveCount = 4;
+    }
+  },
+  {
+    name: "project-sync validation batch delivery broadened",
+    expected: /one-record queue delivery/u,
+    mutate(template) {
+      const [, mapping] = resourceEntry(template, "AWS::Lambda::EventSourceMapping", "ProjectSyncValidation");
+      mapping.Properties!.BatchSize = 2;
+    }
+  },
+  {
+    name: "project-sync CloudTrail quarantine data events removed",
+    expected: /CloudTrail must record project-sync quarantine and active/u,
+    mutate(template) {
+      const trail = firstResource(template, "AWS::CloudTrail::Trail");
+      const selectors = trail.Properties!.EventSelectors as unknown[];
+      assert.ok(Array.isArray(selectors));
+      const objectSelector = selectors.find((selector) =>
+        JSON.stringify(selector).includes("AWS::S3::Object"),
+      ) as { DataResources?: Array<{ Values?: unknown[] }> } | undefined;
+      assert.ok(objectSelector?.DataResources !== undefined);
+      const dataResource = objectSelector.DataResources.find((resource) =>
+        JSON.stringify(resource).includes("AWS::S3::Object"),
+      );
+      assert.ok(dataResource?.Values !== undefined);
+      dataResource.Values = dataResource.Values.filter(
+        (value) => !JSON.stringify(value).includes("server/quarantine/v1/"),
+      );
+    }
+  },
+  {
+    name: "API project-sync list authority introduced",
+    expected: /API project-sync authority must be exact upload\/recovery only/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::IAM::Policy", "PrivateApiPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: unknown[] };
+      document.Statement.push({
+        Action: "s3:ListBucket",
+        Effect: "Allow",
+        Resource: { "Fn::GetAtt": ["ProjectSyncBucketMutant", "Arn"] },
+      });
+    }
+  },
+  {
+    name: "API project-sync recovery broadens from exact-version read",
+    expected: /API project-sync authority must be exact upload\/recovery only/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::IAM::Policy", "PrivateApiPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      const recovery = document.Statement.find((statement) =>
+        JSON.stringify(statement.Resource).includes("professional-sync/active/working"),
+      );
+      assert.ok(recovery !== undefined);
+      recovery.Action = ["s3:GetObject", "s3:GetObjectVersion"];
+    }
   }
 ];
 

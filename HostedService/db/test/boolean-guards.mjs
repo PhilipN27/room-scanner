@@ -28,12 +28,14 @@ assert.deepEqual(booleanArguments, [
   'requested_enabled',
   'requested_editor_publishing_allowed',
   'deliberate_confirmation',
+  'recent_authentication_required',
 ]);
 assert.match(allSql, /IF signature_is_verified IS DISTINCT FROM true THEN/u);
 assert.match(allSql, /requested_enabled IS NULL/u);
 assert.match(allSql, /requested_editor_publishing_allowed IS NULL/u);
 assert.match(allSql, /deliberate_confirmation IS NULL/u);
 assert.match(allSql, /deliberate_confirmation IS DISTINCT FROM true/u);
+assert.match(allSql, /recent_authentication_required IS TRUE/u);
 assert.doesNotMatch(allSql, /IF\s+NOT\s+signature_is_verified\b/u);
 
 // Other Boolean branch variables are either positive tests where NULL means
@@ -45,4 +47,4 @@ assert.match(allSql, /was_applied boolean := false;[\s\S]*IF was_applied THEN/u)
 assert.match(allSql, /removing_owner boolean;[\s\S]*removing_owner :=[\s\S]*IF removing_owner THEN/u);
 assert.match(allSql, /SELECT EXISTS \([\s\S]*\)\s+INTO another_owner_exists;[\s\S]*IF NOT another_owner_exists THEN/u);
 
-console.log('BOOLEAN_GUARD_SCAN_SUMMARY boolean_arguments=4 literal_true_guards=2 explicit_null_guards=3 nullable_negated_guards=0 internal_guards_classified=4 status=pass');
+console.log('BOOLEAN_GUARD_SCAN_SUMMARY boolean_arguments=5 literal_true_guards=3 explicit_null_guards=3 nullable_negated_guards=0 internal_guards_classified=5 status=pass');

@@ -451,3 +451,49 @@ credential/customer data, Slice 5 implementation, Slice 7 resource, commit,
 push, pull request or deployment is claimed by this reconciliation. See the
 [current Slice 4 ledger](Docs/evidence/2026-08-19-ai-redesign-slice-4-verification.md)
 for exact hashes and open evidence slots.
+
+## Slice 5 immutable professional synchronization — 2026-08-29
+
+Slice 5 adds explicit guest-project migration, immutable expected-head
+revision append, offline draft preservation, stale-branch conflict actions,
+bounded advisory edit leases, staged cross-device recovery, and a separately
+reviewed raw storage tier. Local packages remain authoritative; migration
+preview and approval never delete the source project. Private CloudKit backup
+is unchanged and separate.
+
+The default professional working set is recoverable but raw-redacted. RGB,
+depth, confidence, diagnostics, capture-bundle, and world-map evidence stay
+local unless an owner explicitly accepts an exact size/privacy review and
+uploads a separate raw archive. Concurrent appends preserve both candidates:
+one expected-head CAS may become canonical and a valid loser remains a
+downloadable stale branch for compare, explicit rebase, or explicit duplicate.
+No geometry merge or last-writer-wins behavior is implemented.
+
+The hosted boundary is still local/synthetic in this repository: the frozen
+Slice 4 19-route manifest remains available, while
+`roomscan-slice5-routes-v1` adds exactly 10 project-sync routes. PostgreSQL
+`0008` is forward-only with forced RLS; infrastructure adds an encrypted
+targetless validation queue/DLQ, worker, recovery schedule, private versioned
+object access, and alarms. No deployment, provider account, credential,
+customer data, publication/portal route, or Slice 7 lifecycle feature is
+included.
+
+Run the local Slice 5 component and mutation oracles with Node 24 and
+PostgreSQL 16:
+
+```sh
+python3 -B Scripts/verify_slice5_sync.py \
+  --artifacts-dir .artifacts/slice5-sync
+python3 -B Scripts/verify_slice5_mutation_controls.py \
+  --artifacts-dir .artifacts/slice5-mutations
+```
+
+The complete acceptance run must begin with a fresh run marker, include full
+Swift and iPhone/iPad schemes plus a generic unsigned artifact and reviewed
+screenshots, and call `verify_slice5_sync.py --finalize` last. See the
+[Slice 5 plan](Docs/superpowers/plans/2026-08-28-ai-redesign-platform-slice-5.md),
+[v2 contract](Docs/contracts/ai-redesign-service-contracts-v2.md), and
+[professional runbook](Docs/operations/professional-service-runbook.md). The
+[integrated verification record](Docs/evidence/2026-08-29-ai-redesign-slice-5-verification.md)
+binds the final commands, counts, mutations, screenshots, limitations, and
+rollback state.

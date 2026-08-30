@@ -52,6 +52,9 @@ class Slice4CIContractTests(unittest.TestCase):
             "Scripts/test_verify_slice4_static_controls.py",
             "Scripts/test_inspect_ios_artifact.py",
             "Scripts/test_slice4_ci_contract.py",
+            "Scripts/test_inspect_slice5_ios_artifact.py",
+            "Scripts/test_verify_slice5_mutation_controls.py",
+            "Scripts/test_verify_slice5_sync.py",
         ):
             self.assertIn(test_module, verifier)
 
@@ -59,8 +62,8 @@ class Slice4CIContractTests(unittest.TestCase):
         workflow = WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("-derivedDataPath \"$RUNNER_TEMP/RoomScanStudio-build-derived\"", workflow)
-        self.assertIn("Scripts/inspect_ios_artifact.py", workflow)
-        self.assertIn("RoomScanStudio-artifact-inspection.json", workflow)
+        self.assertIn("Scripts/inspect_slice5_ios_artifact.py", workflow)
+        self.assertIn("RoomScanStudio-slice5-artifact-inspection.json", workflow)
 
     def test_legacy_scanner_scopes_xctest_upload_contract_to_its_named_step(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")

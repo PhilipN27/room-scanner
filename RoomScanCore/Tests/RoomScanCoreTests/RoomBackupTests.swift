@@ -696,6 +696,28 @@ final class RoomBackupTests: XCTestCase {
         let noOp = try await target.commitPreparedRecovery(noOpPreparation, conflictPolicy: .failIfDivergent)
         XCTAssertEqual(noOp, .noOp)
 
+        // A caller-held copy identity is an explicit duplicate/rebase choice,
+        // not merely a conflict fallback. Even when the original package is
+        // byte-identical, the durable professional recovery transaction must
+        // materialize that exact separate copy or its next phase would point
+        // at a project that does not exist.
+        let identicalCopyPreparation = try await target.prepareRecovery(
+            archiveURL: snapshot.archiveURL,
+            expectedCloudDescriptor: snapshot.descriptor,
+            into: recoveryWorkspace.appendingPathComponent("identical-copy", isDirectory: true)
+        )
+        let identicalCopy = try await target.commitPreparedRecovery(
+            identicalCopyPreparation,
+            conflictPolicy: .recoverAsCopy,
+            recoveredCopyProjectID: "recovered-identical-copy-001"
+        )
+        guard case let .recoveredCopy(identicalCopySummary) = identicalCopy else {
+            return XCTFail("A caller-held recovered-copy identity must force the exact copy.")
+        }
+        XCTAssertEqual(identicalCopySummary.projectID, "recovered-identical-copy-001")
+        let identicalCopyPackage = try await target.load(projectID: identicalCopySummary.projectID)
+        XCTAssertEqual(identicalCopyPackage.manifest.headRevisionID, "revision-002")
+
         var divergentPayload = try XCTUnwrap(restoredPackage.revisions.last).payload
         divergentPayload.semanticSnapshot.objectElements[0].label = "Local divergence"
         _ = try await target.commitEditRevision(

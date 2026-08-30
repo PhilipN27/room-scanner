@@ -1,7 +1,7 @@
 /**
- * Opaque server-only repository bundle. Concrete repository methods are added
- * by the composition root once the corresponding migrations are frozen.
- * Handlers receive this bundle, never a raw SQL executor or provider client.
+ * Opaque server-only repository bundle. Slice 5 adds its project-sync
+ * capability as a separately branded extension in persistence; handlers still
+ * receive neither a raw SQL executor nor a provider client.
  */
 export interface TransactionBoundRepositoryBundle {
   readonly contract: "roomscan-transaction-repositories-v1";

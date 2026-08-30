@@ -116,6 +116,15 @@
 		54000000000000000000000A /* MagicLinkCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000017 /* MagicLinkCompletionTests.swift */; };
 		54000000000000000000000B /* ProfessionalMagicLinkKeychainAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000018 /* ProfessionalMagicLinkKeychainAdapter.swift */; };
 		54000000000000000000000C /* PhysicalProfessionalEvidenceHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540000000000000000000019 /* PhysicalProfessionalEvidenceHarness.swift */; };
+		5A50000000000000000000001 /* ProfessionalProjectSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000001 /* ProfessionalProjectSyncTests.swift */; };
+		5A50000000000000000000002 /* ProfessionalProjectRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000002 /* ProfessionalProjectRecoveryTests.swift */; };
+		5A50000000000000000000003 /* ProfessionalProjectSyncModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000003 /* ProfessionalProjectSyncModels.swift */; };
+		5A50000000000000000000004 /* ProfessionalProjectSyncJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000004 /* ProfessionalProjectSyncJournal.swift */; };
+		5A50000000000000000000005 /* ProfessionalProjectSyncTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000005 /* ProfessionalProjectSyncTransport.swift */; };
+		5A50000000000000000000006 /* ProfessionalProjectSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000006 /* ProfessionalProjectSyncService.swift */; };
+		5A50000000000000000000007 /* ProfessionalProjectRecoveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000007 /* ProfessionalProjectRecoveryCoordinator.swift */; };
+		5A50000000000000000000008 /* ProfessionalRawArchiveMaterializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000008 /* ProfessionalRawArchiveMaterializer.swift */; };
+		5A50000000000000000000009 /* ProfessionalProjectSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51000000000000000000009 /* ProfessionalProjectSyncView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -236,6 +245,15 @@
 		540000000000000000000017 /* MagicLinkCompletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicLinkCompletionTests.swift; sourceTree = "<group>"; };
 		540000000000000000000018 /* ProfessionalMagicLinkKeychainAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalMagicLinkKeychainAdapter.swift; sourceTree = "<group>"; };
 		540000000000000000000019 /* PhysicalProfessionalEvidenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhysicalProfessionalEvidenceHarness.swift; sourceTree = "<group>"; };
+		5A51000000000000000000001 /* ProfessionalProjectSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncTests.swift; sourceTree = "<group>"; };
+		5A51000000000000000000002 /* ProfessionalProjectRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectRecoveryTests.swift; sourceTree = "<group>"; };
+		5A51000000000000000000003 /* ProfessionalProjectSyncModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncModels.swift; sourceTree = "<group>"; };
+		5A51000000000000000000004 /* ProfessionalProjectSyncJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncJournal.swift; sourceTree = "<group>"; };
+		5A51000000000000000000005 /* ProfessionalProjectSyncTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncTransport.swift; sourceTree = "<group>"; };
+		5A51000000000000000000006 /* ProfessionalProjectSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncService.swift; sourceTree = "<group>"; };
+		5A51000000000000000000007 /* ProfessionalProjectRecoveryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectRecoveryCoordinator.swift; sourceTree = "<group>"; };
+		5A51000000000000000000008 /* ProfessionalRawArchiveMaterializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalRawArchiveMaterializer.swift; sourceTree = "<group>"; };
+		5A51000000000000000000009 /* ProfessionalProjectSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfessionalProjectSyncView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -403,6 +421,8 @@
 				530000000000000000000038 /* RoomAIRedesignProductionIntegrationTests.swift */,
 				540000000000000000000002 /* ProfessionalBoundaryTests.swift */,
 				540000000000000000000017 /* MagicLinkCompletionTests.swift */,
+				5A51000000000000000000001 /* ProfessionalProjectSyncTests.swift */,
+				5A51000000000000000000002 /* ProfessionalProjectRecoveryTests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioTests;
 			sourceTree = "<group>";
@@ -456,8 +476,22 @@
 				F62000000000000000000001 /* CloudBackup */,
 				530000000000000000000005 /* AIRedesign */,
 				540000000000000000000102 /* DeviceAuthentication */,
+				5A52000000000000000000001 /* ProfessionalSync */,
 			);
 			path = RoomScanStudio/Infrastructure;
+			sourceTree = "<group>";
+		};
+		5A52000000000000000000001 /* ProfessionalSync */ = {
+			isa = PBXGroup;
+			children = (
+				5A51000000000000000000003 /* ProfessionalProjectSyncModels.swift */,
+				5A51000000000000000000004 /* ProfessionalProjectSyncJournal.swift */,
+				5A51000000000000000000005 /* ProfessionalProjectSyncTransport.swift */,
+				5A51000000000000000000006 /* ProfessionalProjectSyncService.swift */,
+				5A51000000000000000000007 /* ProfessionalProjectRecoveryCoordinator.swift */,
+				5A51000000000000000000008 /* ProfessionalRawArchiveMaterializer.swift */,
+			);
+			path = ProfessionalSync;
 			sourceTree = "<group>";
 		};
 		7C0000000000000000000009 /* Background */ = {
@@ -520,6 +554,7 @@
 			isa = PBXGroup;
 			children = (
 				540000000000000000000014 /* ProfessionalAccessView.swift */,
+				5A51000000000000000000009 /* ProfessionalProjectSyncView.swift */,
 			);
 			path = Professional;
 			sourceTree = "<group>";
@@ -828,6 +863,13 @@
 				540000000000000000000009 /* ProfessionalMagicLinkCompletion.swift in Sources */,
 				54000000000000000000000B /* ProfessionalMagicLinkKeychainAdapter.swift in Sources */,
 				54000000000000000000000C /* PhysicalProfessionalEvidenceHarness.swift in Sources */,
+				5A50000000000000000000003 /* ProfessionalProjectSyncModels.swift in Sources */,
+				5A50000000000000000000004 /* ProfessionalProjectSyncJournal.swift in Sources */,
+				5A50000000000000000000005 /* ProfessionalProjectSyncTransport.swift in Sources */,
+				5A50000000000000000000006 /* ProfessionalProjectSyncService.swift in Sources */,
+				5A50000000000000000000007 /* ProfessionalProjectRecoveryCoordinator.swift in Sources */,
+				5A50000000000000000000008 /* ProfessionalRawArchiveMaterializer.swift in Sources */,
+				5A50000000000000000000009 /* ProfessionalProjectSyncView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -854,6 +896,8 @@
 				530000000000000000000037 /* RoomAIRedesignProductionIntegrationTests.swift in Sources */,
 				540000000000000000000001 /* ProfessionalBoundaryTests.swift in Sources */,
 				54000000000000000000000A /* MagicLinkCompletionTests.swift in Sources */,
+				5A50000000000000000000001 /* ProfessionalProjectSyncTests.swift in Sources */,
+				5A50000000000000000000002 /* ProfessionalProjectRecoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

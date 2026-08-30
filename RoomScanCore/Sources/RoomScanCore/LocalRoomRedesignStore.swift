@@ -15,6 +15,9 @@ public actor LocalRoomRedesignStore {
     ) throws -> RoomLocalRedesignExtensionV2? {
         try sourceRevision.validate()
         let fileURL = try stateURL(for: sourceRevision)
+        try requireExistingStorePathComponentsNonSymlink(
+            through: fileURL.deletingLastPathComponent()
+        )
         guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
         try requireRegularNonSymlink(fileURL)
         let data = try Data(contentsOf: fileURL)
@@ -47,9 +50,108 @@ public actor LocalRoomRedesignStore {
         try requireRegularNonSymlink(fileURL)
     }
 
+    /// Captures the exact canonical local companion payload bound to one
+    /// immutable source revision. A missing companion is deliberately not an
+    /// error so a professional working set can omit redesign state.
+    public func snapshot(
+        sourceRevision: RoomRedesignSourceRevision
+    ) throws -> RoomProfessionalRedesignSnapshot? {
+        try sourceRevision.validate()
+        let fileURL = try stateURL(for: sourceRevision)
+        try requireExistingStorePathComponentsNonSymlink(
+            through: fileURL.deletingLastPathComponent()
+        )
+        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        try requireRegularNonSymlink(fileURL)
+        let data = try Data(contentsOf: fileURL)
+        return try RoomProfessionalRedesignSnapshot(
+            sourceRevision: sourceRevision,
+            canonicalDocumentData: data,
+            documentSHA256: RoomSHA256.hexDigest(of: data)
+        )
+    }
+
+    /// Restores a strict snapshot only when it remains bound to the requested
+    /// source revision, or when the caller presents the one explicit mapping
+    /// that authorizes a recovered-copy rebind. Existing local state is never
+    /// overwritten: exact canonical bytes are idempotent and any difference
+    /// fails closed.
+    public func restoreSnapshot(
+        _ snapshot: RoomProfessionalRedesignSnapshot,
+        expectedSourceRevision: RoomRedesignSourceRevision,
+        recoveredCopyMapping: RoomProfessionalRecoveredCopyMapping? = nil
+    ) throws {
+        try expectedSourceRevision.validate()
+        let original = try snapshot.validatedDocument()
+        let destinationSource = try RoomProfessionalRecoveryRebinding.targetSourceRevision(
+            original: snapshot.sourceRevision,
+            expected: expectedSourceRevision,
+            mapping: recoveredCopyMapping
+        )
+        let destination: RoomLocalRedesignExtensionV2
+        if destinationSource == snapshot.sourceRevision {
+            destination = original
+        } else {
+            guard let recoveredCopyMapping else {
+                throw RoomProfessionalRecoveryError.sourceRevisionMismatch(
+                    "A different destination source revision requires an explicit recovered-copy mapping."
+                )
+            }
+            destination = try RoomProfessionalRecoveryRebinding.rebind(
+                redesign: original,
+                targetSourceRevision: destinationSource,
+                mapping: recoveredCopyMapping
+            )
+        }
+        let destinationData = try RoomRedesignCanonicalJSON.encode(destination)
+        guard case let .localRedesignExtensionV2(reopened) = try RoomRedesignContractValidator.validate(
+            data: destinationData
+        ), reopened == destination, reopened.sourceRevision == expectedSourceRevision else {
+            throw RoomProfessionalRecoveryError.invalidSnapshot(
+                "Restored redesign companion did not remain canonical and bound to its destination source revision."
+            )
+        }
+
+        let fileURL = try stateURL(for: expectedSourceRevision)
+        try requireExistingStorePathComponentsNonSymlink(
+            through: fileURL.deletingLastPathComponent()
+        )
+        if fileManager.fileExists(atPath: fileURL.path) {
+            try requireExactExistingSnapshot(
+                at: fileURL,
+                expectedData: destinationData,
+                expectedSourceRevision: expectedSourceRevision
+            )
+            return
+        }
+
+        try prepareParent(of: fileURL)
+        do {
+            try destinationData.write(to: fileURL, options: .withoutOverwriting)
+        } catch {
+            // A competing local writer can only make this idempotent when it
+            // wrote the exact same canonical, source-bound payload.
+            guard fileManager.fileExists(atPath: fileURL.path) else { throw error }
+            try requireExactExistingSnapshot(
+                at: fileURL,
+                expectedData: destinationData,
+                expectedSourceRevision: expectedSourceRevision
+            )
+            return
+        }
+        try requireExactExistingSnapshot(
+            at: fileURL,
+            expectedData: destinationData,
+            expectedSourceRevision: expectedSourceRevision
+        )
+    }
+
     public func remove(sourceRevision: RoomRedesignSourceRevision) throws {
         try sourceRevision.validate()
         let fileURL = try stateURL(for: sourceRevision)
+        try requireExistingStorePathComponentsNonSymlink(
+            through: fileURL.deletingLastPathComponent()
+        )
         guard fileManager.fileExists(atPath: fileURL.path) else { return }
         try requireRegularNonSymlink(fileURL)
         try fileManager.removeItem(at: fileURL)
@@ -78,6 +180,61 @@ public actor LocalRoomRedesignStore {
         } else {
             try fileManager.createDirectory(at: parent, withIntermediateDirectories: false)
         }
+    }
+
+    private func requireExactExistingSnapshot(
+        at fileURL: URL,
+        expectedData: Data,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) throws {
+        try requireExistingStorePathComponentsNonSymlink(
+            through: fileURL.deletingLastPathComponent()
+        )
+        try requireRegularNonSymlink(fileURL)
+        let existingData = try Data(contentsOf: fileURL)
+        guard case let .localRedesignExtensionV2(existing) = try RoomRedesignContractValidator.validate(
+            data: existingData
+        ), existing.sourceRevision == expectedSourceRevision,
+              try RoomRedesignCanonicalJSON.encode(existing) == existingData,
+              existingData == expectedData
+        else {
+            throw RoomProfessionalRecoveryError.existingStateConflict(
+                "A different redesign companion already exists for this immutable source revision."
+            )
+        }
+    }
+
+    /// A strict leaf check is insufficient when the configured companion root
+    /// or its project directory was replaced with a symlink. Walk only from
+    /// the configured root (not system ancestors such as `/var`) through the
+    /// selected project directory and reject every existing symbolic component
+    /// before reading or accepting an idempotent destination.
+    private func requireExistingStorePathComponentsNonSymlink(
+        through target: URL
+    ) throws {
+        let rootComponents = rootURL.standardizedFileURL.pathComponents
+        let targetComponents = target.standardizedFileURL.pathComponents
+        guard targetComponents.count >= rootComponents.count,
+              zip(rootComponents, targetComponents).allSatisfy({ $0 == $1 })
+        else {
+            throw RoomProjectStoreError.invalidPackage(
+                "Redesign companion path escapes its configured store root."
+            )
+        }
+        guard pathExists(rootURL) else { return }
+        try requireDirectoryNonSymlink(rootURL)
+
+        var current = rootURL
+        for component in targetComponents.dropFirst(rootComponents.count) {
+            current.appendPathComponent(component, isDirectory: true)
+            guard pathExists(current) else { return }
+            try requireDirectoryNonSymlink(current)
+        }
+    }
+
+    private func pathExists(_ url: URL) -> Bool {
+        fileManager.fileExists(atPath: url.path)
+            || (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
     }
 
     private func requireDirectoryNonSymlink(_ url: URL) throws {

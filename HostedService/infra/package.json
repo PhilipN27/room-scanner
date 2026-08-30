@@ -15,7 +15,7 @@
     "test": "node scripts/run-offline-verify.mjs",
     "test:local": "npm run build && npm run build:test && node --test .test-dist/test/*.test.js",
     "test:mutations": "npm run build:test && node .test-dist/test/mutations.js",
-    "synth": "npm run build && cdk synth --quiet",
+    "synth": "npm run build && rm -rf cdk.out && cdk synth --quiet",
     "synth:local": "npm run synth",
     "inspect:synth": "node scripts/inspect-synth.mjs",
     "verify": "node scripts/run-offline-verify.mjs"

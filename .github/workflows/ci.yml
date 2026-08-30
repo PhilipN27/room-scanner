@@ -51,11 +51,11 @@ jobs:
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           build
 
-      - name: Inspect compiled iOS professional-boundary artifact
+      - name: Inspect compiled iOS Slice 5 professional-sync artifact
         run: >-
-          python3 -B Scripts/inspect_ios_artifact.py
+          python3 -B Scripts/inspect_slice5_ios_artifact.py
           --app "$RUNNER_TEMP/RoomScanStudio-build-derived/Build/Products/Debug-iphoneos/RoomScanStudio.app"
-          --output "$RUNNER_TEMP/RoomScanStudio-artifact-inspection.json"
+          --output "$RUNNER_TEMP/RoomScanStudio-slice5-artifact-inspection.json"
 
       - name: Select available iPhone and iPad simulators
         id: simulators
@@ -87,7 +87,7 @@ jobs:
           path: |
             ${{ runner.temp }}/RoomScanStudio-iPhone.xcresult
             ${{ runner.temp }}/RoomScanStudio-iPad.xcresult
-            ${{ runner.temp }}/RoomScanStudio-artifact-inspection.json
+            ${{ runner.temp }}/RoomScanStudio-slice5-artifact-inspection.json
           if-no-files-found: warn
           retention-days: 7
 

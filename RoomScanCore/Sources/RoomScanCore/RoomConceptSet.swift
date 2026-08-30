@@ -282,12 +282,42 @@ public struct RoomConceptSet: Encodable, Sendable, Equatable {
     }
 
     public func validate(context: RoomConceptSetValidationContext) throws {
+        try validateIntrinsic(expectedSourceRevision: context.expectedSourceRevision)
+
+        let currentCameras = try RoomConceptSetRules.validatedIdentifiers(
+            context.currentCanonicalCameraIDs,
+            at: "context.currentCanonicalCameraIDs"
+        )
+        let validatedSourcePackage = context.validatedSourceAIRoomPackage(
+            matching: sourceAIRoomPackage
+        )
+        let packageCameras = Set(validatedSourcePackage?.canonicalCameraIDs ?? [])
+        let hasExactReviewedSourcePackage = validatedSourcePackage != nil
+        for (index, attachment) in attachments.enumerated() {
+            try attachment.validateMapping(
+                hasExactReviewedSourcePackage: hasExactReviewedSourcePackage,
+                currentCanonicalCameraIDs: currentCameras,
+                packageCanonicalCameraIDs: packageCameras,
+                at: "attachments[\(index)]"
+            )
+        }
+    }
+
+    /// Validates the canonical Concept Set document and its intrinsic
+    /// attachment declarations without pretending that a transport archive has
+    /// the separately retained camera/package authority required to restore
+    /// automatic mappings. Archive import uses this before matching every
+    /// declared attachment to its exact copied bytes; a restore still calls
+    /// `validate(context:)` with its independently validated authority.
+    func validateIntrinsic(
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) throws {
         guard schemaVersion == Self.schemaVersionValue else {
             throw RoomConceptSetError.unsupportedSchemaVersion(schemaVersion)
         }
         try RoomConceptSetRules.requireIdentifier(conceptSetID, at: "conceptSetID")
         try sourceRevision.validate()
-        guard sourceRevision == context.expectedSourceRevision else {
+        guard sourceRevision == expectedSourceRevision else {
             throw RoomConceptSetError.invalidValue(
                 path: "sourceRevision",
                 reason: "A Concept Set must bind to the exact immutable source revision."
@@ -357,22 +387,9 @@ public struct RoomConceptSet: Encodable, Sendable, Equatable {
         }
         try RoomConceptSetRules.requireUnique(attachments.map(\.attachmentID), at: "attachments.attachmentID")
         try RoomConceptSetRules.requireUniqueCaseFolded(attachments.map(\.relativePath), at: "attachments.relativePath")
-
-        let currentCameras = try RoomConceptSetRules.validatedIdentifiers(
-            context.currentCanonicalCameraIDs,
-            at: "context.currentCanonicalCameraIDs"
-        )
-        let validatedSourcePackage = context.validatedSourceAIRoomPackage(
-            matching: sourceAIRoomPackage
-        )
-        let packageCameras = Set(validatedSourcePackage?.canonicalCameraIDs ?? [])
-        let hasExactReviewedSourcePackage = validatedSourcePackage != nil
         for (index, attachment) in attachments.enumerated() {
-            try attachment.validate(
+            try attachment.validateIntrinsic(
                 importKind: importProvenance.kind,
-                hasExactReviewedSourcePackage: hasExactReviewedSourcePackage,
-                currentCanonicalCameraIDs: currentCameras,
-                packageCanonicalCameraIDs: packageCameras,
                 at: "attachments[\(index)]"
             )
         }
@@ -432,6 +449,28 @@ public enum RoomConceptSetDecoder {
         _ data: Data,
         context: RoomConceptSetValidationContext
     ) throws -> RoomConceptSet {
+        try decodeStrictCanonical(data) { model in
+            try model.validate(context: context)
+        }
+    }
+
+    /// Strict transport-bound decode for a Concept Set companion. It retains
+    /// duplicate-key rejection, closed-key decoding, and canonical byte
+    /// equality while deliberately leaving only context-dependent automatic
+    /// mapping authority to the later restore boundary.
+    static func decodeCanonicalIntrinsic(
+        _ data: Data,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) throws -> RoomConceptSet {
+        try decodeStrictCanonical(data) { model in
+            try model.validateIntrinsic(expectedSourceRevision: expectedSourceRevision)
+        }
+    }
+
+    private static func decodeStrictCanonical(
+        _ data: Data,
+        validate: (RoomConceptSet) throws -> Void
+    ) throws -> RoomConceptSet {
         try RoomConceptJSONMemberScanner.rejectDuplicateObjectMembers(in: data)
 
         let root: [String: Any]
@@ -464,7 +503,7 @@ public enum RoomConceptSetDecoder {
         } catch {
             throw RoomConceptSetError.invalidJSON
         }
-        try model.validate(context: context)
+        try validate(model)
         guard try RoomConceptSetCanonicalJSON.encode(model) == data else {
             throw RoomConceptSetError.noncanonicalJSON
         }
@@ -726,11 +765,8 @@ public enum RoomConceptImageValidator {
 }
 
 private extension RoomConceptSetAttachment {
-    func validate(
+    func validateIntrinsic(
         importKind: RoomConceptImportKind,
-        hasExactReviewedSourcePackage: Bool,
-        currentCanonicalCameraIDs: Set<String>,
-        packageCanonicalCameraIDs: Set<String>,
         at path: String
     ) throws {
         try RoomConceptSetRules.requireIdentifier(attachmentID, at: "\(path).attachmentID")
@@ -778,6 +814,31 @@ private extension RoomConceptSetAttachment {
             )
         }
         switch mapping.status {
+        case .automatic, .manual:
+            guard let cameraID = mapping.cameraID else {
+                throw RoomConceptSetError.invalidValue(
+                    path: "\(path).mapping",
+                    reason: "Mapped attachments require an explicit canonical camera identifier."
+                )
+            }
+            try RoomConceptSetRules.requireIdentifier(cameraID, at: "\(path).mapping.cameraID")
+        case .unmatched:
+            guard mapping.cameraID == nil else {
+                throw RoomConceptSetError.invalidValue(
+                    path: "\(path).mapping.cameraID",
+                    reason: "Unmatched attachments cannot carry a camera ID."
+                )
+            }
+        }
+    }
+
+    func validateMapping(
+        hasExactReviewedSourcePackage: Bool,
+        currentCanonicalCameraIDs: Set<String>,
+        packageCanonicalCameraIDs: Set<String>,
+        at path: String
+    ) throws {
+        switch mapping.status {
         case .automatic:
             guard let cameraID = mapping.cameraID,
                   hasExactReviewedSourcePackage,
@@ -799,12 +860,7 @@ private extension RoomConceptSetAttachment {
                 )
             }
         case .unmatched:
-            guard mapping.cameraID == nil else {
-                throw RoomConceptSetError.invalidValue(
-                    path: "\(path).mapping.cameraID",
-                    reason: "Unmatched attachments cannot carry a camera ID."
-                )
-            }
+            break
         }
     }
 }

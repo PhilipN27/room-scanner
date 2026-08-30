@@ -149,3 +149,49 @@ non-production provider evidence and the physical Face ID/
 passcode worksheet remain open; production privacy decisions, provisioning and
 release approval remain pending by design. The repository is not
 production-ready or legally/release approved.
+
+## Slice 5 storage and synchronization addendum — 2026-08-29
+
+The Slice 4 reconciliation above is historical. Slice 5 now supports explicit
+professional project migration and synchronization, but guest use remains
+offline/account-free and the existing private CloudKit backup remains a
+separate opt-in system. Professional transport is still constructed only after
+explicit professional entry; there is no upload observer on app launch, local
+save, foregrounding, or network restoration.
+
+The default recoverable professional working set may contain the raw-redacted
+room package, immutable local revisions, semantic documents, native USDZ/raw
+mesh already in the supported package, redesign/orientation state, Concept Sets
+and attachments, and exact canonical AI-ready provenance manifests required by
+included automatic mappings. It does not contain capture-bundle enumeration,
+frame RGB, depth, confidence, diagnostics, a world map, AI artifact payloads,
+or precise GPS. Tests first inject a forbidden raw artifact to prove the
+detector reaches the archive and then require the ordinary working object to be
+clean.
+
+Full capture evidence is a separate default-off raw archive. Enabling it
+requires an owner/recent-auth size and privacy review bound to the exact
+revision, selected ledger, and SHA-256 digest. Its bytes use a separate object
+tier, quota reservation, audit action, and manifest; attachment never changes
+the canonical project head. Approval does not retroactively authorize scanning
+or background enumeration of local capture sidecars.
+
+Client journals contain public hosted mappings, acknowledged/local draft heads,
+stable idempotency state, conflict public IDs, and recovery phase only. They do
+not persist room bytes, tokens, signed URLs, object keys/versions, database IDs,
+or lease plaintext. Ordinary logs likewise exclude request bodies, filenames,
+free-form project content, precise GPS, room/raw bytes, credentials, and storage
+coordinates.
+
+Recovery downloads enter an owned scratch area, validate exact outer and
+manifest digests and all package/companion bytes, then use the existing local
+prepare/commit recovery boundary. Corrupt or interrupted input does not mutate
+the live project. Canonical and stale branches remain separately recoverable;
+conflict handling does not infer geometry. Rollback disables new hosted writes
+without deleting remote immutable versions or local packages/drafts.
+
+No real customer, room, biometric, GPS, identity, billing, or raw-capture data
+was used for local Slice 5 verification. No AWS, CloudKit, Apple, Cognito, SES,
+Stripe, DNS, email, hosting, deployment, or account mutation is claimed.
+Physical-device, live-provider, production retention/quota, legal disclosure,
+and release approval remain external gates.

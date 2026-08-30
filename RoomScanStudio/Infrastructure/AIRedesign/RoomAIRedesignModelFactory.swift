@@ -31,6 +31,7 @@ enum RoomAIRedesignModelFactoryError: Error, LocalizedError {
 final class RoomAIRedesignModelFactory {
     private let controller: RoomLibraryController
     private let workspaceFactory: RoomExportWorkspaceFactory
+    private let conceptStore: LocalRoomConceptStore
     private let conceptCoordinator: RoomConceptImportCoordinator
     private let conceptPackageProvenance: RoomAIConceptPackageProvenanceRegistry
     private let mintPackageIdentifier: () -> String
@@ -53,6 +54,7 @@ final class RoomAIRedesignModelFactory {
             rootURL: conceptRootURL,
             sourcePackageRootURL: projectRootURL
         )
+        conceptStore = store
         conceptCoordinator = RoomConceptImportCoordinator(
             store: store,
             scratchRootURL: conceptImportScratchRootURL
@@ -63,6 +65,76 @@ final class RoomAIRedesignModelFactory {
                 .appendingPathComponent("AIRedesignProvenance", isDirectory: true),
             sourcePackageRootURL: projectRootURL
         )
+    }
+
+    /// Captures the exact additive companion closure for an immutable local
+    /// revision. This is intentionally separate from `makeModel`: migration
+    /// must work for a valid local room even when the AI editor has never been
+    /// opened or an orientation has not been confirmed.
+    func professionalWorkingSetCompanionPreparation(
+        sourceRevision: RoomRedesignSourceRevision
+    ) async throws -> RoomProfessionalWorkingSetCompanionPreparation {
+        let package = try await controller.loadPackage(projectID: sourceRevision.projectID)
+        guard package.manifest.headRevisionID == sourceRevision.revisionID else {
+            throw RoomAIRedesignModelFactoryError.staleSourceRevision
+        }
+        let currentBinding = try await controller.redesignSourceBinding(
+            projectID: sourceRevision.projectID,
+            revisionID: sourceRevision.revisionID
+        )
+        guard currentBinding == sourceRevision else {
+            throw RoomAIRedesignModelFactoryError.staleSourceRevision
+        }
+
+        let redesign = try await controller.professionalRedesignSnapshot(
+            sourceRevision: sourceRevision
+        )
+        let localRedesign = try await controller.redesignState(sourceRevision: sourceRevision)
+        let cameraIDs = localRedesign?.orientation.canonicalCameras
+            .map(\.cameraID)
+            .sorted() ?? []
+        let sourcePackages = try conceptPackageProvenance.bindings(for: sourceRevision)
+        let conceptContext = RoomConceptSetValidationContext(
+            expectedSourceRevision: sourceRevision,
+            currentCanonicalCameraIDs: cameraIDs,
+            validatedSourceAIRoomPackages: sourcePackages
+        )
+        let conceptSnapshot = try await conceptStore.snapshot(context: conceptContext)
+        let transport = try RoomProfessionalConceptTransportSnapshot(
+            sourceSnapshot: conceptSnapshot,
+            sourcePackageManifestData: try conceptPackageProvenance.canonicalManifestData(
+                for: sourceRevision
+            ),
+            currentCanonicalCameraIDs: cameraIDs
+        )
+        return try transport.workingSetCompanionPreparation(
+            additionalCompanions: try redesign?.workingSetCompanions() ?? []
+        )
+    }
+
+    /// Builds the app wrapper around Core's package-first recovery primitive.
+    /// The exact canonical provenance bytes are installed only when Core
+    /// reports original-ID recovery; recovered copies never reach this
+    /// closure.
+    func makeProfessionalRecoveryCoordinator(
+        scratchRootURL: URL,
+        journal: ProfessionalProjectSyncJournal?,
+        faultInjector: any RoomProfessionalRecoveryFaultInjecting = NoRoomProfessionalRecoveryFaultInjector()
+    ) throws -> ProfessionalProjectRecoveryCoordinator {
+        let coordinator = try controller.makeProfessionalRecoveryCoordinator(
+            conceptStore: conceptStore,
+            scratchRootURL: scratchRootURL,
+            faultInjector: faultInjector
+        )
+        let registry = conceptPackageProvenance
+        return ProfessionalProjectRecoveryCoordinator(dependencies: .init(
+            coreRecoveryCoordinator: coordinator,
+            scratchRootURL: scratchRootURL,
+            journal: journal,
+            installCanonicalProvenance: { snapshot in
+                try registry.installCanonical(snapshot)
+            }
+        ))
     }
 
     func makeModel(projectID: String) async throws -> RoomAIRedesignProductionModel {
@@ -432,6 +504,78 @@ final class RoomAIConceptPackageProvenanceRegistry {
         return [try loadBinding(at: recordURL, expectedSourceRevision: sourceRevision)]
     }
 
+    /// Returns the exact canonical manifest bytes, not a reconstruction from
+    /// parsed fields. These bytes are the authority carried in a professional
+    /// working set for automatic Concept mapping eligibility.
+    func canonicalManifestData(
+        for sourceRevision: RoomRedesignSourceRevision
+    ) throws -> [Data] {
+        guard let directory = try existingRecordDirectory(for: sourceRevision) else {
+            return []
+        }
+        let entries = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
+            options: []
+        )
+        var recordURL: URL?
+        for entry in entries {
+            let name = entry.lastPathComponent
+            if name == Self.recordFilename {
+                try requireRegularFile(entry)
+                guard recordURL == nil else {
+                    throw RoomAIConceptPackageProvenanceError.unsafeStorage
+                }
+                recordURL = entry
+            } else if name.hasPrefix(Self.stagePrefix) {
+                try removeOwnedStage(entry)
+            } else {
+                throw RoomAIConceptPackageProvenanceError.unsafeStorage
+            }
+        }
+        guard let recordURL else { return [] }
+        return [try storedBinding(
+            at: recordURL,
+            expectedSourceRevision: sourceRevision
+        ).manifestData]
+    }
+
+    /// Core supplies this exact snapshot only after full archive/package and
+    /// companion validation. Recovered copies deliberately do not invoke this
+    /// method, preserving the no-copy provenance rule.
+    func installCanonical(
+        _ snapshot: RoomProfessionalConceptSourcePackageProvenanceSnapshot
+    ) throws {
+        let validated = try snapshot.validatedSourcePackage()
+        let sourceRevision = snapshot.sourceRevision
+        let stored = StoredBinding(
+            schemaVersion: Self.schemaVersion,
+            sourceRevision: sourceRevision,
+            manifestSHA256: snapshot.manifestSHA256,
+            manifestData: snapshot.canonicalManifestData
+        )
+        guard validated.sourceRevision == sourceRevision,
+              snapshot.manifestSHA256 == RoomSHA256.hexDigest(of: snapshot.canonicalManifestData)
+        else {
+            throw RoomAIConceptPackageProvenanceError.invalidBinding
+        }
+        let directory = try ensureRecordDirectory(for: sourceRevision)
+        let recordURL = directory.appendingPathComponent(Self.recordFilename)
+        if fileManager.fileExists(atPath: recordURL.path) {
+            guard try storedBinding(
+                at: recordURL,
+                expectedSourceRevision: sourceRevision
+            ) == stored else {
+                throw RoomAIConceptPackageProvenanceError.invalidBinding
+            }
+            return
+        }
+        try writeOwnedRecord(try RoomRedesignCanonicalJSON.encode(stored), to: recordURL)
+        guard try storedBinding(at: recordURL, expectedSourceRevision: sourceRevision) == stored else {
+            throw RoomAIConceptPackageProvenanceError.unsafeStorage
+        }
+    }
+
     /// No identifier is committed until `record` receives a successful
     /// independently validated archive. A later build reloads the first
     /// persisted capability instead of minting a second package identity.
@@ -500,6 +644,18 @@ final class RoomAIConceptPackageProvenanceRegistry {
         at url: URL,
         expectedSourceRevision: RoomRedesignSourceRevision
     ) throws -> RoomConceptValidatedSourcePackage {
+        let stored = try storedBinding(at: url, expectedSourceRevision: expectedSourceRevision)
+        do {
+            return try .init(validatedManifestData: stored.manifestData)
+        } catch {
+            throw RoomAIConceptPackageProvenanceError.unsafeStorage
+        }
+    }
+
+    private func storedBinding(
+        at url: URL,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) throws -> StoredBinding {
         try requireBoundedBindingFile(url)
         let data = try Data(contentsOf: url, options: [.mappedIfSafe])
         let stored: StoredBinding
@@ -526,7 +682,7 @@ final class RoomAIConceptPackageProvenanceRegistry {
         else {
             throw RoomAIConceptPackageProvenanceError.unsafeStorage
         }
-        return binding
+        return stored
     }
 
     private func ensureRecordDirectory(

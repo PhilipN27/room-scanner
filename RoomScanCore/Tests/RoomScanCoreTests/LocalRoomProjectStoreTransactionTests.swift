@@ -126,6 +126,32 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(result).projectID, "project-001")
     }
 
+    func testUnsafeGeneratedTransactionIDFailsBeforeInitialPackageWrite() async throws {
+        let root = makeRoot()
+        let prepared = try makeAssetBackedDraft()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: prepared.sourceDirectory)
+        }
+
+        let store = makeStore(
+            root: root,
+            transactionIDGenerator: UnsafeTransactionIDGenerator()
+        )
+        await assertStoreError(.invalidIdentifier("../unsafe-transaction")) {
+            _ = try await store.saveDraft(
+                prepared.draft,
+                disposition: .save,
+                assets: prepared.assets
+            )
+        }
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: root.path),
+            "An unsafe generated ownership ID must fail before the package root is created."
+        )
+    }
+
     func testAppendFailureRollsBackMarkerOwnedPromotionAndSameRevisionIDCanRetry() async throws {
         let root = makeRoot()
         let prepared = try makeAssetBackedDraft()
@@ -191,6 +217,61 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
             retriedPackage.manifest.headRevisionID,
             "revision-002"
         )
+    }
+
+    func testUnsafeGeneratedTransactionIDCannotCreateInterruptedAppendOrBreakReconciliation() async throws {
+        let root = makeRoot()
+        let prepared = try makeAssetBackedDraft()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: prepared.sourceDirectory)
+        }
+
+        let initialStore = makeStore(root: root)
+        let savedResult = try await initialStore.saveDraft(
+            prepared.draft,
+            disposition: .save,
+            assets: prepared.assets
+        )
+        let saved = try XCTUnwrap(savedResult)
+        let initialPackage = try await initialStore.load(projectID: saved.projectID)
+        let payload = try XCTUnwrap(initialPackage.revisions.first).payload
+        let projectURL = root.appendingPathComponent(saved.projectID, isDirectory: true)
+        let projectBytesBeforeAppend = try byteSnapshot(at: projectURL)
+
+        let unsafeStore = makeStore(
+            root: root,
+            transactionIDGenerator: UnsafeTransactionIDGenerator(),
+            faultInjector: FailingRoomProjectStoreFaultInjector(
+                point: .afterRevisionPromotionBeforeManifest
+            )
+        )
+        await assertStoreError(.invalidIdentifier("../unsafe-transaction")) {
+            _ = try await unsafeStore.appendRevision(
+                projectID: saved.projectID,
+                revisionID: "revision-002",
+                parentRevisionID: "revision-001",
+                reason: .edit,
+                payload: payload,
+                restoredFromRevisionID: nil,
+                assets: prepared.revisionAssets
+            )
+        }
+
+        XCTAssertEqual(try byteSnapshot(at: projectURL), projectBytesBeforeAppend)
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: projectURL.appendingPathComponent(".pending-revision.json").path
+            )
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: projectURL.appendingPathComponent("revisions/revision-002").path
+            )
+        )
+
+        let reloaded = try await makeStore(root: root).load(projectID: saved.projectID)
+        XCTAssertEqual(reloaded, initialPackage)
     }
 
     func testLockedLoadReconcilesOnlyMarkerOwnedInterruptedRevision() async throws {
@@ -502,6 +583,7 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
         clock: any RoomProjectClock = FixedRoomProjectClock(
             date: Date(timeIntervalSince1970: 1_704_067_200)
         ),
+        transactionIDGenerator: any RoomProjectTransactionIDGenerating = UUIDRoomProjectTransactionIDGenerator(),
         faultInjector: any RoomProjectStoreFaultInjecting = NoRoomProjectStoreFaultInjector()
     ) -> LocalRoomProjectStore {
         LocalRoomProjectStore(
@@ -511,8 +593,15 @@ final class LocalRoomProjectStoreTransactionTests: XCTestCase {
                 projectIDs: ["project-001"],
                 revisionIDs: ["revision-001"]
             ),
+            transactionIDGenerator: transactionIDGenerator,
             faultInjector: faultInjector
         )
+    }
+
+    private final class UnsafeTransactionIDGenerator: RoomProjectTransactionIDGenerating, @unchecked Sendable {
+        func nextTransactionID() -> String {
+            "../unsafe-transaction"
+        }
     }
 
     private func makeAssetBackedDraft() throws -> PreparedDraft {

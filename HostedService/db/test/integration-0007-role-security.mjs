@@ -34,7 +34,7 @@ const bootstrapPool = new Pool(cluster.bootstrapConfig);
 
 try {
   const applied = await applyMigrations({ pool: bootstrapPool });
-  assert.equal(applied.applied.at(-1)?.version, '0007', 'forward 0007 migration must be applied');
+  assert.equal(applied.applied.at(-1)?.version, '0008', 'current forward migration must be applied');
 
   const roleRows = (await bootstrapPool.query(
     `SELECT rolname, rolcanlogin, rolinherit, rolsuper, rolcreatedb,

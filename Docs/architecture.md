@@ -660,3 +660,50 @@ the SecretsKey. The allowed path is guarded by an exact Secrets Manager
 `ViaService` + `SecretARN` synth oracle and restored mutation. Its focused live
 test was observed RED before the fix and GREEN after restoration; live AWS
 policy evaluation remains an external gate.
+
+## Slice 5 architecture reconciliation — 2026-08-29
+
+The Slice 4 section above remains the historical baseline. Slice 5 adds an
+explicit professional synchronization composition without moving local package
+truth or changing private CloudKit backup. `roomscan-slice5-routes-v1` is a
+separate sealed 29-route manifest: the unchanged Slice 4 v3 19-route export plus
+10 migration, append, status, recovery, edit-lease, and raw-archive routes.
+
+The recoverable hosted unit is an immutable, raw-redacted professional working
+set. It contains a validated package backup plus the exact redesign/orientation,
+Concept Set, attachment, and canonical AI-ready provenance companions needed to
+reproduce supported working state. Initial migration is previewed and approved
+explicitly; no live local package is deleted, archived, or rewritten. Later
+local edits remain immutable offline drafts until an explicit append.
+
+Hosted writes are allocation-first and append-only. A 300-second create-only
+quarantine capability is followed by durable completion, targetless validation,
+an immutable private-active copy, and one PostgreSQL expected-head CAS. Exactly
+one competing append can become canonical; another valid candidate becomes a
+preserved stale branch. The app exposes compare, explicit rebase, and explicit
+duplicate recovery and has no geometry merge or last-writer-wins path. A
+900-second advisory edit lease coordinates editor entry but never authorizes a
+write, blocks local save, or replaces the CAS.
+
+The PostgreSQL `0008_professional_project_sync` migration is additive and
+forward-only. It adds professional project/head state, immutable revisions,
+durable uploads, separate raw attachments, and edit leases under forced RLS,
+plus exact API and targetless worker reducers. Infrastructure adds a dedicated
+encrypted validation queue/DLQ, recovery schedule, worker/runtime role, private
+versioned storage access, alarms, and migration-digest wiring. The queue message
+contains no target coordinates; the worker reaps expired incomplete allocations
+and claims eligible work from server order.
+
+Full RGB, depth, confidence, diagnostics, capture-bundle, and world-map data are
+excluded from the default working set. A separately reviewed raw archive has a
+distinct contract, prefix, ledger, quota, and audit path and never changes the
+head. Downloads always stage, verify outer and inner digests, validate package
+and companion closure, and promote through the existing prepare/commit recovery
+boundary. An interrupted companion promotion is resumed from a durable local
+transaction rather than mutating a live package in place.
+
+The exact contract is documented in
+[`ai-redesign-service-contracts-v2.md`](contracts/ai-redesign-service-contracts-v2.md).
+Slice 6 publication/portal and Slice 7 lifecycle/resources remain absent. Local
+synthetic verification does not establish physical-device background behavior
+or live AWS, provider, credential, alarm, deployment, or release evidence.

@@ -36,6 +36,27 @@ protocol ProfessionalHTTPTransport: Sendable {
     func send(_ request: ProfessionalHTTPRequest) async throws -> ProfessionalHTTPResponse
 }
 
+/// File transfers are a separate capability because professional working-set
+/// archives can be large. The only production implementation remains this
+/// audited Foundation boundary; callers never obtain a URLSession directly.
+struct ProfessionalFileTransferResponse: Equatable, Sendable {
+    let statusCode: Int
+}
+
+protocol ProfessionalFileStreamingTransport: Sendable {
+    func uploadFile(
+        at fileURL: URL,
+        to url: URL,
+        method: String,
+        headers: [String: String]
+    ) async throws -> ProfessionalFileTransferResponse
+
+    func downloadFile(
+        from url: URL,
+        to destinationURL: URL
+    ) async throws -> ProfessionalFileTransferResponse
+}
+
 protocol ProfessionalTransportRequestObserving: AnyObject, Sendable {
     func observe(_ attempt: ProfessionalTransportAttempt) throws
 }
@@ -94,6 +115,7 @@ private final class GuestProfessionalTransportDenyingObserver:
 /// the one send path before the Foundation request is created or any I/O starts.
 final class FoundationProfessionalHTTPTransport:
     ProfessionalHTTPTransport,
+    ProfessionalFileStreamingTransport,
     @unchecked Sendable
 {
     private let session: URLSession
@@ -110,6 +132,7 @@ final class FoundationProfessionalHTTPTransport:
     func send(
         _ request: ProfessionalHTTPRequest
     ) async throws -> ProfessionalHTTPResponse {
+        try requireHTTPS(request.url)
         try boundary.observe(
             ProfessionalTransportAttempt(
                 url: request.url,
@@ -132,4 +155,65 @@ final class FoundationProfessionalHTTPTransport:
             statusCode: response.statusCode
         )
     }
+
+    func uploadFile(
+        at fileURL: URL,
+        to url: URL,
+        method: String,
+        headers: [String: String]
+    ) async throws -> ProfessionalFileTransferResponse {
+        try requireHTTPS(url)
+        guard !headers.keys.contains(where: { $0.caseInsensitiveCompare("Authorization") == .orderedSame }) else {
+            throw ProfessionalSignedTransferError.authorizationHeaderForbidden
+        }
+        let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw ProfessionalSignedTransferError.invalidFile
+        }
+        try boundary.observe(ProfessionalTransportAttempt(url: url, method: method))
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        for (header, value) in headers {
+            request.setValue(value, forHTTPHeaderField: header)
+        }
+        let (_, response) = try await session.upload(for: request, fromFile: fileURL)
+        guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        return ProfessionalFileTransferResponse(statusCode: response.statusCode)
+    }
+
+    func downloadFile(
+        from url: URL,
+        to destinationURL: URL
+    ) async throws -> ProfessionalFileTransferResponse {
+        try requireHTTPS(url)
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw ProfessionalSignedTransferError.destinationExists
+        }
+        try boundary.observe(ProfessionalTransportAttempt(url: url, method: "GET"))
+        let (temporaryURL, response) = try await session.download(from: url)
+        guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200..<300).contains(response.statusCode) else {
+            throw ProfessionalSignedTransferError.unsuccessfulStatus(response.statusCode)
+        }
+        try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
+        return ProfessionalFileTransferResponse(statusCode: response.statusCode)
+    }
+
+    private func requireHTTPS(_ url: URL) throws {
+        guard url.scheme?.lowercased() == "https",
+              url.host != nil,
+              url.user == nil,
+              url.password == nil
+        else {
+            throw ProfessionalSignedTransferError.insecureURL
+        }
+    }
+}
+
+private enum ProfessionalSignedTransferError: Error {
+    case insecureURL
+    case authorizationHeaderForbidden
+    case invalidFile
+    case destinationExists
+    case unsuccessfulStatus(Int)
 }

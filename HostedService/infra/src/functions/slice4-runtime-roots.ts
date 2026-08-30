@@ -14,7 +14,7 @@ import {
   createSlice4CognitoAppleChallengeBridge,
   createSlice4CognitoCustomChallengeAdapter,
   createSlice4CognitoChallengeHandler,
-  createSlice4DataApiApiHandler,
+  createSlice4DataApiRouteApplications,
   createSlice4MagicDeliveryWorker,
   createSlice4MagicDeliverySqsHandler,
   createSlice4ProviderAuditExporterWorker,
@@ -22,8 +22,13 @@ import {
   createSlice4StripeIngressApplication,
   createSlice4StripeIngressHandler,
   createSlice4StripeReconciliationWorker,
+  createSlice5DataApiProjectSyncHandler,
 } from "roomscan-studio-hosted-service/composition";
-import { DataApiAppAuthorizer } from "roomscan-studio-hosted-service/persistence";
+import { ProjectSyncObjectAdapter } from "roomscan-studio-hosted-service/adapters";
+import {
+  DataApiAppAuthorizer,
+  DataApiCapabilityOperationPort,
+} from "roomscan-studio-hosted-service/persistence";
 
 import {
   AwsAppleJwksPort,
@@ -35,6 +40,8 @@ import {
   BoundedGetHttpTransport,
   BoundedHttpTransport,
 } from "../aws/runtime-clients.js";
+import { AwsProjectSyncObjectProvider } from "../aws/project-sync-object-provider.js";
+import { AwsProjectSyncValidationWakePort } from "../aws/project-sync-wake.js";
 import {
   LambdaRuntimeConfigurationError,
   deriveKey,
@@ -46,8 +53,8 @@ import {
   systemRandom,
 } from "./runtime-support.js";
 
-type DataApiClient = Parameters<typeof createSlice4DataApiApiHandler>[0]["apiClient"];
-type ApiHandler = ReturnType<typeof createSlice4DataApiApiHandler>;
+type DataApiClient = Parameters<typeof createSlice4DataApiRouteApplications>[0]["apiClient"];
+type ApiHandler = ReturnType<typeof createSlice5DataApiProjectSyncHandler>;
 type AuthorizerHandler = ReturnType<typeof createSlice4AppAuthorizer>;
 type CognitoHandler = ReturnType<typeof createSlice4CognitoChallengeHandler>;
 type StripeHandler = ReturnType<typeof createSlice4StripeIngressHandler>;
@@ -135,6 +142,8 @@ export async function createApiRoot(
   const userPoolId = requiredIdentifier(environment, "COGNITO_USER_POOL_ID", 1, 55, /^[A-Za-z0-9_-]+$/u);
   const cognitoClientId = requiredIdentifier(environment, "COGNITO_SERVER_CLIENT_ID", 3, 128, /^[A-Za-z0-9]+$/u);
   const magicDeliveryQueueUrl = requiredQueueUrl(environment, "MAGIC_DELIVERY_QUEUE_URL");
+  const projectSyncValidationQueueUrl = requiredQueueUrl(environment, "PROJECT_SYNC_VALIDATION_QUEUE_URL");
+  const projectSyncBucketName = requiredBucketName(environment, "PROJECT_SYNC_BUCKET_NAME");
   const magicDeliveryKeyId = requiredIdentifier(environment, "MAGIC_DELIVERY_KEY_ID", 3, 64, /^[A-Za-z0-9._-]+$/u);
   const authVersion = requiredVersion(environment, "AUTH_POLICY_VERSION");
   const magicVersion = requiredVersion(environment, "MAGIC_POLICY_VERSION");
@@ -166,7 +175,7 @@ export async function createApiRoot(
     });
   const magicWake = wake(dependencies, magicDeliveryQueueUrl, "magic-delivery-wake-v1");
 
-  return createSlice4DataApiApiHandler({
+  const legacyHandlers = createSlice4DataApiRouteApplications({
     apiClient: client,
     clock: systemClock,
     random: systemRandom,
@@ -230,6 +239,29 @@ export async function createApiRoot(
       handle: async () => unavailableResponse(),
     }),
     magicDeliveryWake: magicWake,
+  });
+  const legacy = Object.freeze({
+    handlers: legacyHandlers,
+    operations: new DataApiCapabilityOperationPort({
+      client,
+      accessTokenHmacKey,
+      clock: Object.freeze({ now: () => new Date(systemClock.nowMs()) }),
+    }),
+  });
+  return createSlice5DataApiProjectSyncHandler({
+    legacy,
+    apiClient: client,
+    clock: Object.freeze({ now: () => new Date(systemClock.nowMs()) }),
+    accessTokenHmacKey,
+    leaseHmacKey: key(derivationRoot, "slice5.project-sync-lease-hmac.v1"),
+    storage: new ProjectSyncObjectAdapter(new AwsProjectSyncObjectProvider({
+      sender: new S3Client({ region: "us-east-1" }),
+      bucketName: projectSyncBucketName,
+    })),
+    validationWake: new AwsProjectSyncValidationWakePort({
+      sender: new SQSClient({ region: "us-east-1" }),
+      queueUrl: projectSyncValidationQueueUrl,
+    }),
   });
 }
 

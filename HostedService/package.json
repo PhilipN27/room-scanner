@@ -8,7 +8,8 @@
     "./composition": "./dist/service/src/composition/index.js",
     "./contracts": "./dist/service/src/contracts/index.js",
     "./handlers": "./dist/service/src/handlers/index.js",
-    "./persistence": "./dist/service/src/persistence/index.js"
+    "./persistence": "./dist/service/src/persistence/index.js",
+    "./sync": "./dist/service/src/sync/index.js"
   },
   "engines": {
     "node": ">=24"

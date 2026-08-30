@@ -241,6 +241,15 @@ final class AppEnvironment: ObservableObject {
             conceptRootURL: aiRedesignRoots.concepts,
             conceptImportScratchRootURL: aiRedesignRoots.importScratch
         )
+        // This attaches only already-created local project access. It does not
+        // construct a hosted client, authenticate, or attempt synchronization;
+        // `ProfessionalEnvironmentFactory.defaultOff()` stays fully inert.
+        self.professionalEnvironmentFactory.attachLocalProjectAccess(
+            .init(
+                libraryController: libraryController,
+                aiRedesignModelFactory: aiRedesignModelFactory
+            )
+        )
         let usesFakeCloudBackup = arguments.contains("--use-fake-cloud-backup")
         privacyPolicyURL = PrivacyPolicyURLResolver.resolve(
             rawValue: Bundle.main.object(

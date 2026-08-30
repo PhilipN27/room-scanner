@@ -214,6 +214,11 @@ def guest_hosted_boundary_errors(production_sources: dict[Path, str]) -> list[st
     reachable = guest_reachable_swift_paths(production_sources)
     for path in sorted(reachable, key=str):
         if is_privileged_professional_path(path):
+            if (
+                path == audited_transport_path
+                and lazy_slice5_transport_reachability_is_exact(production_sources)
+            ):
+                continue
             errors.append(
                 "guest composition reaches dedicated professional/auth adapter: "
                 f"{path.relative_to(ROOT)}"
@@ -222,11 +227,19 @@ def guest_hosted_boundary_errors(production_sources: dict[Path, str]) -> list[st
 
 
 def audited_professional_transport_errors(source: str) -> list[str]:
-    """Validate the one structurally exclusive observed URLSession send path."""
+    """Validate the three structurally exclusive observed URLSession paths."""
     errors: list[str] = []
     code = swift_code_without_comments_or_literals(source)
-    send_body = swift_function_body(code, "func send(\n        _ request") or ""
-    io_marker = "session.data(for: foundationRequest)"
+    concrete_start = code.find("final class FoundationProfessionalHTTPTransport")
+    concrete = code[concrete_start:] if concrete_start >= 0 else ""
+    send_body = swift_function_body(concrete, "func send(\n        _ request") or ""
+    upload_body = swift_function_body(concrete, "func uploadFile(") or ""
+    download_body = swift_function_body(concrete, "func downloadFile(") or ""
+    io_markers = (
+        "session.data(for: foundationRequest)",
+        "session.upload(for: request, fromFile: fileURL)",
+        "session.download(from: url)",
+    )
     observation_marker = "boundary.observe("
     if "protocol ProfessionalHTTPTransport" not in code:
         errors.append("audited professional transport misses app-owned protocol")
@@ -236,7 +249,7 @@ def audited_professional_transport_errors(source: str) -> list[str]:
         errors.append(
             "audited professional transport must own exactly one injected URLSession"
         )
-    if len(re.findall(r"\bsession\b", code)) != 5:
+    if len(re.findall(r"\bsession\b", code)) != 7:
         errors.append(
             "audited professional transport contains an alternate session reference"
         )
@@ -245,16 +258,28 @@ def audited_professional_transport_errors(source: str) -> list[str]:
         r"uploadTask|streamTask|webSocketTask)\s*\(",
         code,
     )
-    if session_io_calls != [".data("]:
+    if session_io_calls != [".data(", ".upload(", ".download("]:
         errors.append(
-            "audited professional transport must have one recognized URLSession I/O operation"
+            "audited professional transport must have exact data/upload/download I/O operations"
         )
-    if code.count(io_marker) != 1:
-        errors.append("audited professional transport must have exactly one URLSession I/O call")
-    if send_body.count(io_marker) != 1 or observation_marker not in send_body:
-        errors.append("audited professional transport send path is not singular and observed")
-    elif send_body.index(observation_marker) > send_body.index(io_marker):
-        errors.append("audited professional transport observes after URLSession I/O")
+    bodies = (send_body, upload_body, download_body)
+    for body, io_marker in zip(bodies, io_markers, strict=True):
+        if code.count(io_marker) != 1 or body.count(io_marker) != 1:
+            errors.append("audited professional transport I/O path is not singular")
+            continue
+        if observation_marker not in body:
+            errors.append("audited professional transport I/O path is not observed")
+        elif body.index(observation_marker) > body.index(io_marker):
+            errors.append("audited professional transport observes after URLSession I/O")
+        if "requireHTTPS(" not in body or body.index("requireHTTPS(") > body.index(io_marker):
+            errors.append("audited professional transport performs I/O before HTTPS validation")
+    if (
+        "authorizationHeaderForbidden" not in upload_body
+        or "fromFile: fileURL" not in upload_body
+        or "destinationExists" not in download_body
+        or "moveItem(at: temporaryURL, to: destinationURL)" not in download_body
+    ):
+        errors.append("audited professional file transfer lost signed-upload or staged-download guards")
     for description, pattern in adapter_alternate_io_patterns().items():
         if pattern.search(code):
             errors.append(
@@ -262,6 +287,56 @@ def audited_professional_transport_errors(source: str) -> list[str]:
                 f"I/O ({description})"
             )
     return errors
+
+
+def lazy_slice5_transport_reachability_is_exact(
+    production_sources: dict[Path, str],
+) -> bool:
+    """Allow only the default-off factory -> sync adapter -> audited transport edge.
+
+    Slice 5 necessarily links the already-audited transport into the protected
+    professional screen.  The path-level guest graph cannot model the factory's
+    runtime ``defaultOff`` state, so this exception is constrained to the one
+    concrete adapter predecessor.  A direct root/helper reference creates an
+    extra predecessor and remains a finding.
+    """
+
+    target = ROOT / "RoomScanStudio" / "Professional" / "ProfessionalTransportBoundary.swift"
+    sync_adapter = (
+        ROOT
+        / "RoomScanStudio"
+        / "Infrastructure"
+        / "ProfessionalSync"
+        / "ProfessionalProjectSyncTransport.swift"
+    )
+    if target not in production_sources or sync_adapter not in production_sources:
+        return False
+    return guest_reachable_predecessors(production_sources, target) == {sync_adapter}
+
+
+def guest_reachable_predecessors(
+    production_sources: dict[Path, str], target: Path
+) -> set[Path]:
+    """Return reachable files that directly reference declarations in target."""
+
+    declaration = re.compile(
+        r"\b(?:actor|class|enum|protocol|struct|typealias)\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    token = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+    target_code = swift_code_without_comments_or_literals(
+        swift_release_projection(production_sources[target])
+    )
+    target_symbols = set(declaration.findall(target_code))
+    target_symbols.update(swift_adapter_entry_symbols(target_code))
+    reachable = guest_reachable_swift_paths(production_sources)
+    predecessors: set[Path] = set()
+    for path in reachable - {target}:
+        code = swift_code_without_comments_or_literals(
+            swift_release_projection(production_sources[path])
+        )
+        if target_symbols.intersection(token.findall(code)):
+            predecessors.add(path)
+    return predecessors
 
 
 def adapter_alternate_io_patterns() -> dict[str, re.Pattern[str]]:
@@ -2195,7 +2270,7 @@ def workflow_structure_errors(workflow: str) -> list[str]:
         "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "${{ runner.temp }}/RoomScanStudio-iPhone.xcresult",
         "${{ runner.temp }}/RoomScanStudio-iPad.xcresult",
-        "${{ runner.temp }}/RoomScanStudio-artifact-inspection.json",
+        "${{ runner.temp }}/RoomScanStudio-slice5-artifact-inspection.json",
         "if-no-files-found: warn",
         "retention-days: 7",
     ):

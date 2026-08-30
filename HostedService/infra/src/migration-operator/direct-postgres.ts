@@ -115,7 +115,7 @@ function assertConfiguration(input: Parameters<typeof initializeRuntimeRoleCrede
     || input.secretReader === null || typeof input.secretReader !== "object" || typeof input.secretReader.read !== "function"
     || typeof input.randomBytes !== "function"
     || input.secretArns === null || typeof input.secretArns !== "object"
-    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 7) {
+    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 8) {
     throw new DirectPostgresCredentialBootstrapError("invalid_configuration");
   }
   const keys = Object.keys(input.secretArns).sort();
