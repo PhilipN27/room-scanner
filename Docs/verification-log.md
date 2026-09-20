@@ -1910,3 +1910,98 @@ Local completion does not claim physical-device behavior, live AWS/provider
 semantics, credentials, deployment, production policy values, or release
 approval. No external account, customer data, commit, push, PR, Slice 6
 publication/portal feature, or Slice 7 product feature was involved.
+
+## 2026-09-01 — Slice 6 published snapshots, client portal, and professional web
+
+Historical checkpoint, reopened by the 2026-09-20 closure audit. The claims
+below are not current acceptance evidence; see the
+[closure continuation](evidence/2026-09-20-ai-redesign-slice-6-closure.md) for
+the implementation gaps, corrections, and current verification status.
+
+Slice 6 is locally complete from unchanged local `main` HEAD
+`9d213351b7e734968d82656fb86ca95affaac280`, the verified Slice 5 commit. The
+sign-off record is
+[`Docs/evidence/2026-08-31-ai-redesign-slice-6-verification.md`](evidence/2026-08-31-ai-redesign-slice-6-verification.md).
+
+The final matrix passed 318 Swift package tests, 364 hosted-service tests,
+PostgreSQL 16.13 fresh/staged/full integration with 31/31 Slice 6 database
+mutation restorations, 118 infrastructure assertions with 37/37 mutation
+restorations, 18 web unit tests, six Chromium desktop/mobile interaction tests,
+51 Python verifier tests, the full Xcode scaffold oracle, and a 14-step hosted
+umbrella. Each complete iPhone and iPad scheme passed 331/331 tests. The
+unsigned generic-iOS build and schema-v3 compiled-artifact inspection passed.
+After a final warning-only Swift trailing-closure disambiguation, the exact
+final source also passed all 45 focused room-publication tests before that
+generic build and artifact inspection were repeated.
+Four browser and six native publication screenshots were visually reviewed;
+the native screenshots are SHA-256-bound in the Slice 6 evidence manifest.
+
+The retained Slice 5 component oracle also passed all seven immutable-sync
+clauses with 318 current Swift tests; its guard oracle detected and restored
+9/9 database and 37/37 infrastructure mutations. Slice 4 compatibility is
+included in the passing hosted umbrella. New Slice 6 guards have recorded
+fail-before/restore/pass evidence for snapshot closure, media carrier removal,
+approval binding, native recovery ordering, upload-observer scrubbing,
+post-read asset authorization, feedback capability isolation, browser fragment
+scrubbing, database and infrastructure mutations, portal-asset byte binding,
+CI wiring, and static delivery inspection.
+
+The local result does not establish physical iPhone/iPad LiDAR, Face ID,
+passcode, background/resume, or mobile Safari behavior; a browser-provider
+matrix beyond Chromium; live email/AWS/KMS/S3/SQS/Lambda/API Gateway/CloudTrail,
+CDN/domain, credential, deployment, pricing, load, signing, App Store, legal,
+or release evidence. No provider/account mutation, real data, credential,
+deployment, commit, push, PR, or Slice 7 implementation was performed.
+
+## 2026-09-20 — Slice 6 formal local closure after reopened audit
+
+The reopened Slice 6 audit is resolved and formally closed by the local commit
+containing this entry. All 65 detailed task entries and seven Slice 6
+master-plan items are checked against the
+[current closure record](evidence/2026-09-20-ai-redesign-slice-6-closure.md).
+The earlier checkpoint above is retained only as history.
+
+The terminal report is
+`.artifacts/slice6-closure-2026-09-20/publication-closure-final/publication-verification.json`:
+all ten clauses `PASS`, no failed or incomplete evidence, and scoped runtime
+freshness `PASS`. Its SHA-256 is
+`4002ed0c4969aac971ad165a229a24701cd137aea50e58f4dbbbb80bd9e7a9e0`.
+
+The observed final matrix passed 318 Swift package tests, 337 unique tests on
+each full iPhone/iPad scheme (296 app plus 41 UI, no failures/skips), 368
+service tests, full PostgreSQL 16.13 role/RLS/catalogue/staged/concurrency
+coverage, 118 infrastructure tests, 32/32 database and 37/37 infrastructure
+mutation restorations, 18 web unit tests, six Chromium flows, 72 Python tests,
+the full scaffold, unsigned generic iOS build/compiled-artifact inspection,
+all 15 hosted-wrapper stages, and all seven Slice 5 sync clauses. Slice 5
+compatibility mutations remain green at 9/9 database and 37/37 infrastructure.
+Five current browser and six current native captures were visually reviewed;
+native bytes are matched to named attachments from the exact passing bundles.
+
+The real composed service/database/worker chain promotes all 12 fixture assets,
+delivers protected chunks and verified feedback, preserves the digest of
+private project/revision/archive/membership rows, then denies the first
+post-revocation requests. Its real private-row mutation control changes the
+digest, and the skip-revoke control fails at the intended live-denial assertion.
+This is synthetic-provider composition, not one deployed native/browser session.
+
+Final source fixes include deterministic source-project locks, safe room
+inventory and paging, worker JSON-null serialization, ordered browser curation
+and snapshot selection, bounded optional Vision analysis with complete manual
+privacy fallback, and strengthened evidence validation. Test-only native
+corrections retain bounded failure captures, show the actual publication error,
+and use three explicit 150-ms capture/GPS touches without retries or weaker
+assertions. Failed/interrupted earlier runs remain diagnostic-only.
+
+Graphform simulator testing was allowed to finish before the final native
+matrix. RoomScan's final simulator runs were serialized and both devices are
+shut down. Antigravity, Graphform's files/processes, and iPhone Mirroring were
+not closed or modified by this work.
+
+Freshness is an observed-local-run timestamp/source-inventory check, not an
+execution-time source attestation. Review used source/runtime evidence and
+same-family review; **this got no cross-model pass**. Physical-device, real
+Safari/provider/email/AWS/CDN/domain, signing, deployment, cost/load, legal,
+App Store, and production-release gates remain excluded. Publication remains
+default-off. This closure makes a local commit only: no push, PR, provider
+configuration, deployment, or Slice 7 implementation.

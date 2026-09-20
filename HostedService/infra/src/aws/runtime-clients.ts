@@ -239,7 +239,7 @@ export class AwsSecretValuePort implements SecretValuePort {
   }
 }
 
-/** Owner-operator-only reader for the eight generated database login
+/** Owner-operator-only reader for the ten generated database login
  * credentials. The caller may request only an ARN/username pair present in
  * the frozen construction-time map, and the secret payload must contain only
  * the generated credential schema. */

@@ -11,6 +11,9 @@ public enum RoomRedesignContractKind: String, Codable, Sendable, Equatable, Case
     case aiRoomPackage
     case workingProjectSync
     case portalSnapshot
+    case publishedRoomSnapshot
+    case publishedPropertySnapshot
+    case publicationArchive
 
     public var supportedSchemaVersion: String {
         switch self {
@@ -24,6 +27,12 @@ public enum RoomRedesignContractKind: String, Codable, Sendable, Equatable, Case
             return "roomscan-working-project-sync-v1"
         case .portalSnapshot:
             return "roomscan-portal-snapshot-v1"
+        case .publishedRoomSnapshot:
+            return "roomscan-published-room-snapshot-v2"
+        case .publishedPropertySnapshot:
+            return "roomscan-published-property-snapshot-v1"
+        case .publicationArchive:
+            return "roomscan-publication-archive-v1"
         }
     }
 }
@@ -38,6 +47,9 @@ public enum RoomRedesignContractDocument: Sendable, Equatable {
     case aiRoomPackage(RoomAIRoomPackage)
     case workingProjectSync(RoomWorkingProjectSync)
     case portalSnapshot(RoomPortalSnapshot)
+    case publishedRoomSnapshot(RoomPublishedRoomPresentationV2)
+    case publishedPropertySnapshot(RoomPublishedPropertyPresentationV1)
+    case publicationArchive(RoomPublishedPublicationManifest)
 
     public var kind: RoomRedesignContractKind {
         switch self {
@@ -51,6 +63,12 @@ public enum RoomRedesignContractDocument: Sendable, Equatable {
             return .workingProjectSync
         case .portalSnapshot:
             return .portalSnapshot
+        case .publishedRoomSnapshot:
+            return .publishedRoomSnapshot
+        case .publishedPropertySnapshot:
+            return .publishedPropertySnapshot
+        case .publicationArchive:
+            return .publicationArchive
         }
     }
 
@@ -67,6 +85,12 @@ public enum RoomRedesignContractDocument: Sendable, Equatable {
         case let .workingProjectSync(value):
             return value.schemaVersion
         case let .portalSnapshot(value):
+            return value.schemaVersion
+        case let .publishedRoomSnapshot(value):
+            return value.schemaVersion
+        case let .publishedPropertySnapshot(value):
+            return value.schemaVersion
+        case let .publicationArchive(value):
             return value.schemaVersion
         }
     }
@@ -1932,6 +1956,38 @@ public enum RoomRedesignContractValidator {
                 let model = try decoder.decode(RoomPortalSnapshotWire.self, from: validatedData).model
                 try model.validate()
                 return .portalSnapshot(model)
+            case .publishedRoomSnapshot:
+                try RoomRedesignStrictJSON.rejectPublishedPublicForbiddenKeys(in: root, path: "$")
+                try RoomRedesignStrictJSON.validatePublishedRoomSnapshot(root)
+                let model = try decoder.decode(RoomPublishedRoomPresentationV2.self, from: validatedData)
+                try model.validate()
+                try RoomRedesignStrictJSON.requireCanonicalPublishedDocument(
+                    RoomRedesignCanonicalJSON.encode(model),
+                    original: data,
+                    path: "presentation.json"
+                )
+                return .publishedRoomSnapshot(model)
+            case .publishedPropertySnapshot:
+                try RoomRedesignStrictJSON.rejectPublishedPublicForbiddenKeys(in: root, path: "$")
+                try RoomRedesignStrictJSON.validatePublishedPropertySnapshot(root)
+                let model = try decoder.decode(RoomPublishedPropertyPresentationV1.self, from: validatedData)
+                try model.validate()
+                try RoomRedesignStrictJSON.requireCanonicalPublishedDocument(
+                    RoomRedesignCanonicalJSON.encode(model),
+                    original: data,
+                    path: "presentation.json"
+                )
+                return .publishedPropertySnapshot(model)
+            case .publicationArchive:
+                try RoomRedesignStrictJSON.validatePublicationArchive(root)
+                let model = try decoder.decode(RoomPublishedPublicationManifest.self, from: validatedData)
+                try model.validate()
+                try RoomRedesignStrictJSON.requireCanonicalPublishedDocument(
+                    RoomRedesignCanonicalJSON.encode(model),
+                    original: data,
+                    path: "publication-manifest.json"
+                )
+                return .publicationArchive(model)
             }
         } catch let error as RoomRedesignContractValidationError {
             throw error
@@ -3165,6 +3221,267 @@ private enum RoomRedesignStrictJSON {
             allowed: ["displayName", "accentColorHex"],
             required: ["displayName"],
             path: "$.branding"
+        )
+    }
+
+    // MARK: - Slice 6 published snapshots
+
+    /// Public snapshot documents are intentionally strict rather than relying
+    /// on synthesized `Codable` (which would silently discard unknown keys).
+    /// This is a closure check for the small portal-safe allowlist, separate
+    /// from the private publication control manifest below.
+    static func validatePublishedRoomSnapshot(_ root: [String: Any]) throws {
+        let root = try object(
+            root,
+            allowed: ["schemaVersion", "contractKind", "title", "room", "branding", "downloads"],
+            required: ["schemaVersion", "contractKind", "title", "room", "branding", "downloads"],
+            path: "$"
+        )
+        try validatePublishedPublicRoom(
+            try requiredObject(root, key: "room", path: "$"),
+            path: "$.room"
+        )
+        try validatePublishedBranding(
+            try requiredObject(root, key: "branding", path: "$"),
+            path: "$.branding"
+        )
+        try validatePublishedDownloads(
+            try requiredObject(root, key: "downloads", path: "$"),
+            path: "$.downloads"
+        )
+    }
+
+    static func validatePublishedPropertySnapshot(_ root: [String: Any]) throws {
+        let root = try object(
+            root,
+            allowed: [
+                "schemaVersion", "contractKind", "propertyTitle", "independentRoomNotice",
+                "rooms", "branding", "downloads",
+            ],
+            required: [
+                "schemaVersion", "contractKind", "propertyTitle", "independentRoomNotice",
+                "rooms", "branding", "downloads",
+            ],
+            path: "$"
+        )
+        let rooms = try requiredArray(root, key: "rooms", path: "$")
+        for (index, room) in rooms.enumerated() {
+            guard let object = room as? [String: Any] else {
+                throw RoomRedesignContractValidationError.invalidType(path: "$.rooms[\(index)]")
+            }
+            try validatePublishedPublicRoom(object, path: "$.rooms[\(index)]")
+        }
+        try validatePublishedBranding(
+            try requiredObject(root, key: "branding", path: "$"),
+            path: "$.branding"
+        )
+        try validatePublishedDownloads(
+            try requiredObject(root, key: "downloads", path: "$"),
+            path: "$.downloads"
+        )
+    }
+
+    /// The publication archive is private control data, but it is still an
+    /// immutable, closed archive contract. It must not gain hidden entries or
+    /// fields through forward-compatible JSON decoding.
+    static func validatePublicationArchive(_ root: [String: Any]) throws {
+        let root = try object(
+            root,
+            allowed: [
+                "schemaVersion", "contractKind", "snapshotKind", "sourceBindings",
+                "sourceBindingsSHA256", "selectionManifestSHA256", "approval",
+                "presentationSHA256", "assets",
+            ],
+            required: [
+                "schemaVersion", "contractKind", "snapshotKind", "sourceBindings",
+                "sourceBindingsSHA256", "selectionManifestSHA256", "approval",
+                "presentationSHA256", "assets",
+            ],
+            path: "$"
+        )
+        let sourceBindings = try requiredArray(root, key: "sourceBindings", path: "$")
+        for (index, binding) in sourceBindings.enumerated() {
+            let path = "$.sourceBindings[\(index)]"
+            let binding = try object(
+                binding,
+                allowed: ["publicRoomKey", "sourceRevision"],
+                required: ["publicRoomKey", "sourceRevision"],
+                path: path
+            )
+            try validateSourceRevision(
+                try requiredObject(binding, key: "sourceRevision", path: path),
+                path: "\(path).sourceRevision"
+            )
+        }
+        let approval = try object(
+            try requiredObject(root, key: "approval", path: "$"),
+            allowed: ["reviewID", "reviewedAt", "decision", "sourceBindingsSHA256", "selectionManifestSHA256"],
+            required: ["reviewID", "reviewedAt", "decision", "sourceBindingsSHA256", "selectionManifestSHA256"],
+            path: "$.approval"
+        )
+        try requireUTCTimestamp(approval, key: "reviewedAt", path: "$.approval")
+        let assets = try requiredArray(root, key: "assets", path: "$")
+        for (index, asset) in assets.enumerated() {
+            let path = "$.assets[\(index)]"
+            let asset = try object(
+                asset,
+                allowed: [
+                    "assetID", "publicRoomKey", "assetClass", "relativePath", "sha256",
+                    "byteCount", "mediaType", "aiReadyPackageBinding",
+                ],
+                required: ["assetID", "assetClass", "relativePath", "sha256", "byteCount", "mediaType"],
+                path: path
+            )
+            if let binding = try optionalObject(asset, key: "aiReadyPackageBinding", path: path) {
+                _ = try object(
+                    binding,
+                    allowed: [
+                        "packageID", "manifestSHA256", "publicRoomKey", "artifactPlanSHA256",
+                        "selectionSHA256",
+                    ],
+                    required: [
+                        "packageID", "manifestSHA256", "publicRoomKey", "artifactPlanSHA256",
+                        "selectionSHA256",
+                    ],
+                    path: "\(path).aiReadyPackageBinding"
+                )
+            }
+        }
+    }
+
+    static func rejectPublishedPublicForbiddenKeys(in value: Any, path: String) throws {
+        try rejectKeys(
+            in: value,
+            forbidden: [
+                // Raw capture, diagnostics, world-state, and location data.
+                "rawrgb", "rawdepth", "rawconfidence", "diagnostics", "worldmap",
+                "privatenotes", "revisionhistory", "precisegps", "gps", "latitude",
+                "longitude", "horizontalaccuracymeters",
+                // Private lineage/control/object/link/audit identity must live
+                // only in the control manifest or hosted service, never in a
+                // presentation downloaded by a bearer recipient.
+                "projectid", "revisionid", "workspaceid", "snapshotid", "sourcerevision",
+                "sourcedigest", "sourcebindings", "sourcebindingssha256",
+                "selectionmanifestsha256", "presentationsha256", "approval", "reviewid",
+                "objectkey", "storagekey", "linktoken", "accesstoken", "audit", "email",
+            ],
+            path: path,
+            reason: "Private, raw, location, lineage, link, audit, and email fields are not part of published portal presentations."
+        )
+    }
+
+    static func requireCanonicalPublishedDocument(
+        _ canonical: Data,
+        original: Data,
+        path: String
+    ) throws {
+        guard canonical == original else {
+            throw RoomRedesignContractValidationError.invalidValue(
+                path: path,
+                reason: "Published snapshot documents must use exact canonical JSON bytes."
+            )
+        }
+    }
+
+    private static func validatePublishedPublicRoom(_ value: [String: Any], path: String) throws {
+        let room = try object(
+            value,
+            allowed: [
+                "roomKey", "displayName", "semanticLayout", "orientation", "dimensions",
+                "qualityWarnings", "comparisons", "assets",
+            ],
+            required: [
+                "roomKey", "displayName", "semanticLayout", "orientation", "dimensions",
+                "qualityWarnings", "comparisons", "assets",
+            ],
+            path: path
+        )
+        let layout = try object(
+            try requiredObject(room, key: "semanticLayout", path: path),
+            allowed: ["elements"],
+            required: ["elements"],
+            path: "\(path).semanticLayout"
+        )
+        let elements = try requiredArray(layout, key: "elements", path: "\(path).semanticLayout")
+        for (index, element) in elements.enumerated() {
+            _ = try object(
+                element,
+                allowed: ["kind", "label", "x", "y", "width", "height"],
+                required: ["kind", "label", "x", "y", "width", "height"],
+                path: "\(path).semanticLayout.elements[\(index)]"
+            )
+        }
+        _ = try object(
+            try requiredObject(room, key: "orientation", path: path),
+            allowed: ["initialView"],
+            required: ["initialView"],
+            path: "\(path).orientation"
+        )
+        let dimensions = try requiredArray(room, key: "dimensions", path: path)
+        for (index, dimension) in dimensions.enumerated() {
+            _ = try object(
+                dimension,
+                allowed: ["label", "meters"],
+                required: ["label", "meters"],
+                path: "\(path).dimensions[\(index)]"
+            )
+        }
+        let warnings = try requiredArray(room, key: "qualityWarnings", path: path)
+        for (index, warning) in warnings.enumerated() {
+            _ = try object(
+                warning,
+                allowed: ["code", "severity", "message"],
+                required: ["code", "severity", "message"],
+                path: "\(path).qualityWarnings[\(index)]"
+            )
+        }
+        let comparisons = try requiredArray(room, key: "comparisons", path: path)
+        for (index, comparison) in comparisons.enumerated() {
+            _ = try object(
+                comparison,
+                allowed: ["originalAssetID", "conceptAssetID", "label", "disclaimer"],
+                required: ["originalAssetID", "conceptAssetID", "label", "disclaimer"],
+                path: "\(path).comparisons[\(index)]"
+            )
+        }
+        let assets = try object(
+            try requiredObject(room, key: "assets", path: path),
+            allowed: [
+                "webGeometryAssetID", "floorPlanAssetID", "selectedImageAssetIDs",
+                "webTextureAssetIDs", "approvedConceptAssetIDs",
+            ],
+            required: [
+                "webGeometryAssetID", "floorPlanAssetID", "selectedImageAssetIDs",
+                "webTextureAssetIDs", "approvedConceptAssetIDs",
+            ],
+            path: "\(path).assets"
+        )
+        for key in ["selectedImageAssetIDs", "webTextureAssetIDs", "approvedConceptAssetIDs"] {
+            _ = try requiredArray(assets, key: key, path: "\(path).assets")
+        }
+    }
+
+    private static func validatePublishedBranding(_ value: [String: Any], path: String) throws {
+        let branding = try object(
+            value,
+            allowed: ["businessName", "logoAssetID", "contact", "accent"],
+            required: ["businessName", "contact", "accent"],
+            path: path
+        )
+        _ = try object(
+            try requiredObject(branding, key: "contact", path: path),
+            allowed: ["phone", "website"],
+            required: [],
+            path: "\(path).contact"
+        )
+    }
+
+    private static func validatePublishedDownloads(_ value: [String: Any], path: String) throws {
+        _ = try object(
+            value,
+            allowed: ["floorPlanPDF", "galleryZIP", "aiReadyPackageAssetID"],
+            required: ["floorPlanPDF", "galleryZIP"],
+            path: path
         )
     }
 

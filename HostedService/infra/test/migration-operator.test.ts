@@ -21,7 +21,9 @@ type RuntimeRole =
   | "roomscan_stripe_reconciliation_runtime"
   | "roomscan_audit_export_runtime"
   | "roomscan_email_delivery_runtime"
-  | "roomscan_project_sync_runtime";
+  | "roomscan_project_sync_runtime"
+  | "roomscan_publication_worker"
+  | "roomscan_portal_runtime";
 
 type RuntimeSecretArns = Readonly<Record<RuntimeRole, string>>;
 
@@ -126,6 +128,8 @@ const ROLES: readonly RuntimeRole[] = [
   "roomscan_audit_export_runtime",
   "roomscan_email_delivery_runtime",
   "roomscan_project_sync_runtime",
+  "roomscan_publication_worker",
+  "roomscan_portal_runtime",
 ];
 const CA = `-----BEGIN CERTIFICATE-----\n${"a".repeat(128)}\n-----END CERTIFICATE-----\n`;
 const CA_HASH = createHash("sha256").update(CA).digest("hex");
@@ -139,6 +143,7 @@ const MIGRATION_NAMES = Object.freeze([
   "0006_auth_persistence.up.sql",
   "0007_policy_billing_integration.up.sql",
   "0008_professional_project_sync.up.sql",
+  "0009_publication_portal.up.sql",
 ] as const);
 const RAW_MIGRATIONS = Object.freeze(Object.fromEntries(await Promise.all(MIGRATION_NAMES.map(async (name) => [
   name,
@@ -192,7 +197,7 @@ test("migration operator module import makes no Secrets Manager or PostgreSQL co
   assert.equal(providerCalls, 0);
 });
 
-test("generated migration manifest is an exact ordered digest of the source 0001–0008 migration bytes", () => {
+test("generated migration manifest is an exact ordered digest of the source 0001–0009 migration bytes", () => {
   assert.deepEqual(MIGRATION_MANIFEST, {
     schema: "roomscan-forward-migration-manifest-v1",
     migrationRunner: {
@@ -393,7 +398,7 @@ function dependencies(pool: RecordingPool, events: string[], overrides: Partial<
   };
 }
 
-test("migration operator applies the exact raw migration runner before owner-only eight-role credential initialization", async () => {
+test("migration operator applies the exact raw migration runner before owner-only ten-role credential initialization", async () => {
   const subject = await loadSubject();
   const events: string[] = [];
   const pool = new RecordingPool(events);
@@ -418,7 +423,7 @@ test("migration operator applies the exact raw migration runner before owner-onl
     "SELECT version, name, checksum_sha256 FROM public.roomscan_schema_migrations ORDER BY version",
   ]);
   const alters = pool.client.sql.filter((sql) => sql.startsWith("ALTER ROLE"));
-  assert.equal(alters.length, 8);
+  assert.equal(alters.length, 10);
   assert.deepEqual(alters.map((sql) => sql.match(/^ALTER ROLE ([a-z_]+) PASSWORD /u)?.[1]), ROLES);
   assert.equal(pool.client.sql.at(-1), "COMMIT");
   assert.doesNotMatch(JSON.stringify(pool.client.sql), /runtime-secret|owner-secret/u);
@@ -503,7 +508,7 @@ test("uncertain credential initialization rolls back, evicts the checked-out con
   assert.doesNotMatch(JSON.stringify(consoleEvents), /secret|ALTER ROLE|MIGRATION_CHECKSUM/u);
 });
 
-test("configuration accepts only the exact ordered ledger and eight fixed runtime lanes before any secret or provider work", async () => {
+test("configuration accepts only the exact ordered ledger and ten fixed runtime lanes before any secret or provider work", async () => {
   const subject = await loadSubject();
   const pool = new RecordingPool();
   const events: string[] = [];

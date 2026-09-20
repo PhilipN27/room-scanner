@@ -28,7 +28,7 @@ enum RoomAIRedesignModelFactoryError: Error, LocalizedError {
 /// Every preparation reloads and rechecks the immutable revision before it
 /// freezes outbound bytes into an app-owned export lease.
 @MainActor
-final class RoomAIRedesignModelFactory {
+final class RoomAIRedesignModelFactory: RoomPublicationAIReadyPackageProviding {
     private let controller: RoomLibraryController
     private let workspaceFactory: RoomExportWorkspaceFactory
     private let conceptStore: LocalRoomConceptStore
@@ -110,6 +110,111 @@ final class RoomAIRedesignModelFactory {
         return try transport.workingSetCompanionPreparation(
             additionalCompanions: try redesign?.workingSetCompanions() ?? []
         )
+    }
+
+    /// Publication reads only already-approved, source-bound Concept Set
+    /// attachment bytes through the existing concept-store validation seam.
+    /// It never returns a Concept Set path, package URL, private comments, or
+    /// provider request text. The publication-specific fresh raster sanitizer
+    /// runs later when the owner explicitly selects one of these candidates.
+    func approvedPublicationConceptAssets(
+        sourceRevision: RoomRedesignSourceRevision
+    ) async throws -> [RoomPublicationApprovedConceptAsset] {
+        let package = try await controller.loadPackage(projectID: sourceRevision.projectID)
+        guard package.manifest.headRevisionID == sourceRevision.revisionID,
+              try await controller.redesignSourceBinding(
+                projectID: sourceRevision.projectID,
+                revisionID: sourceRevision.revisionID
+              ) == sourceRevision
+        else {
+            throw RoomAIRedesignModelFactoryError.staleSourceRevision
+        }
+        // A room without a confirmed orientation cannot have a provenance
+        // valid approved Concept Set. That is an honest absence, not a reason
+        // to synthesize a comparison. In contrast, a present but stale or
+        // invalid set below throws and blocks publication rather than being
+        // silently omitted.
+        guard let companion = try await controller.redesignState(
+            sourceRevision: sourceRevision
+        ) else {
+            return []
+        }
+        guard companion.sourceRevision == sourceRevision else {
+            throw RoomAIRedesignModelFactoryError.staleSourceRevision
+        }
+        guard companion.orientation.source == .confirmed || companion.orientation.source == .manual else {
+            return []
+        }
+        let cameraIDs = companion.orientation.canonicalCameras.map(\.cameraID).sorted()
+        let context = RoomConceptSetValidationContext(
+            expectedSourceRevision: sourceRevision,
+            currentCanonicalCameraIDs: cameraIDs,
+            validatedSourceAIRoomPackages: try conceptPackageProvenance.bindings(
+                for: sourceRevision
+            )
+        )
+        let concepts = try await conceptCoordinator.list(
+            context: context,
+            archiveState: .active
+        )
+        // `sortKey` never crosses this private provenance boundary. The
+        // resulting selection identifiers and labels are fresh public ordinals
+        // so Concept Set/attachment IDs never enter a presentation document.
+        var candidates: [(sortKey: String, data: Data, declaredFilename: String)] = []
+        for concept in concepts where concept.approvalState == .approved {
+            for attachment in concept.attachments where attachment.mediaType == "image/jpeg" || attachment.mediaType == "image/png" {
+                let data = try await conceptCoordinator.attachmentData(
+                    conceptSetID: concept.conceptSetID,
+                    attachmentID: attachment.attachmentID,
+                    context: context
+                )
+                candidates.append((
+                    sortKey: "\(concept.conceptSetID)\u{0}\(attachment.attachmentID)",
+                    data: data,
+                    declaredFilename: attachment.relativePath
+                ))
+            }
+        }
+        return candidates
+            .sorted { $0.sortKey < $1.sortKey }
+            .enumerated()
+            .map { index, candidate in
+                .init(
+                    choice: .init(
+                        id: "approved-concept-\(String(format: "%03d", index + 1))",
+                        label: "Approved concept \(index + 1)"
+                    ),
+                    data: candidate.data,
+                    declaredFilename: candidate.declaredFilename
+                )
+            }
+    }
+
+    /// Returns only a transient local capability for an already-finalized
+    /// `aiReady` archive. It rechecks the exact current source head before
+    /// asking the private provenance registry to independently validate the
+    /// retained bytes. No archive URL, package ID, or provenance detail is
+    /// exposed to a view, journal, hosted transport, or public document.
+    func validatedAIReadyPackage(
+        for sourceRevision: RoomRedesignSourceRevision
+    ) async -> RoomPublicationAIReadyPackageCandidate? {
+        do {
+            let package = try await controller.loadPackage(projectID: sourceRevision.projectID)
+            guard package.manifest.headRevisionID == sourceRevision.revisionID,
+                  try await controller.redesignSourceBinding(
+                      projectID: sourceRevision.projectID,
+                      revisionID: sourceRevision.revisionID
+                  ) == sourceRevision
+            else { return nil }
+            return await conceptPackageProvenance.publicationAIReadyPackageCandidate(
+                for: sourceRevision
+            )
+        } catch {
+            // Absence is fail-closed: publication remains available without
+            // an AI package rather than treating a stale local archive as a
+            // downloadable public derivative.
+            return nil
+        }
     }
 
     /// Builds the app wrapper around Core's package-first recovery primitive.
@@ -450,10 +555,16 @@ final class RoomAIConceptPackageProvenanceRegistry {
     private static let schemaVersion = "roomscan-ai-concept-provenance-v1"
     private static let directoryVersion = "v1"
     private static let recordFilename = "binding.json"
+    private static let aiReadyArchiveFilename = "ai-ready-package.zip"
     private static let stagePrefix = ".roomscan-ai-provenance-stage-"
     /// The Core manifest ceiling is 8 MiB; base64 record storage plus the
     /// fixed envelope remains safely below this fail-closed local bound.
     private static let maximumStoredBindingBytes = 16 * 1_024 * 1_024
+    /// The retained archive is a private local source for a future explicit
+    /// publication selection. It is bounded by the frozen Core AI-ready
+    /// ceiling and never names its file URL in a model, journal, DTO, or UI.
+    private static let maximumStoredAIReadyArchiveBytes =
+        RoomPublicationTransportLimits.maximumAIReadyPackageBytes
 
     private struct StoredBinding: Codable, Equatable {
         var schemaVersion: String
@@ -465,15 +576,23 @@ final class RoomAIConceptPackageProvenanceRegistry {
     private let rootURL: URL
     private let sourcePackageRootURL: URL
     private let fileManager: FileManager
+    private let copyAIReadyArchive: (URL, URL) throws -> Void
+    private let beforeRecordWrite: (Data, URL) throws -> Void
 
     init(
         rootURL: URL,
         sourcePackageRootURL: URL,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        copyAIReadyArchive: ((URL, URL) throws -> Void)? = nil,
+        beforeRecordWrite: ((Data, URL) throws -> Void)? = nil
     ) {
         self.rootURL = rootURL.standardizedFileURL
         self.sourcePackageRootURL = sourcePackageRootURL.standardizedFileURL
         self.fileManager = fileManager
+        self.copyAIReadyArchive = copyAIReadyArchive ?? { [fileManager] source, destination in
+            try fileManager.copyItem(at: source, to: destination)
+        }
+        self.beforeRecordWrite = beforeRecordWrite ?? { _, _ in }
     }
 
     func bindings(for sourceRevision: RoomRedesignSourceRevision) throws -> [RoomConceptValidatedSourcePackage] {
@@ -494,6 +613,8 @@ final class RoomAIConceptPackageProvenanceRegistry {
                     throw RoomAIConceptPackageProvenanceError.unsafeStorage
                 }
                 recordURL = entry
+            } else if name == Self.aiReadyArchiveFilename {
+                try requireBoundedAIReadyArchiveFile(entry)
             } else if name.hasPrefix(Self.stagePrefix) {
                 try removeOwnedStage(entry)
             } else {
@@ -527,6 +648,8 @@ final class RoomAIConceptPackageProvenanceRegistry {
                     throw RoomAIConceptPackageProvenanceError.unsafeStorage
                 }
                 recordURL = entry
+            } else if name == Self.aiReadyArchiveFilename {
+                try requireBoundedAIReadyArchiveFile(entry)
             } else if name.hasPrefix(Self.stagePrefix) {
                 try removeOwnedStage(entry)
             } else {
@@ -617,14 +740,34 @@ final class RoomAIConceptPackageProvenanceRegistry {
         let directory = try ensureRecordDirectory(for: expectedSourceRevision)
         let recordURL = directory.appendingPathComponent(Self.recordFilename)
         if fileManager.fileExists(atPath: recordURL.path) {
-            let existingBinding = try loadBinding(
+            let existingStored = try storedBinding(
                 at: recordURL,
                 expectedSourceRevision: expectedSourceRevision
+            )
+            let existingBinding = try RoomConceptValidatedSourcePackage(
+                validatedManifestData: existingStored.manifestData
             )
             guard existingBinding.sourceAIRoomPackage == finalizedBinding.sourceAIRoomPackage,
                   existingBinding.canonicalCameraIDs == finalizedBinding.canonicalCameraIDs
             else {
                 throw RoomAIConceptPackageProvenanceError.invalidBinding
+            }
+            if archive.package.profile == .aiReady {
+                // A legacy v1 binding did not retain archive bytes. Backfill
+                // only when this independently finalized archive exactly
+                // reproduces its pre-existing canonical provenance. A
+                // different manifest cannot replace or silently rebind it.
+                guard existingStored.manifestData == archive.manifestData else {
+                    let retained = directory.appendingPathComponent(Self.aiReadyArchiveFilename)
+                    if fileManager.fileExists(atPath: retained.path) {
+                        throw RoomAIConceptPackageProvenanceError.invalidBinding
+                    }
+                    return existingBinding
+                }
+                _ = try retainAIReadyArchive(
+                    archive,
+                    expectedSourceRevision: expectedSourceRevision
+                )
             }
             return existingBinding
         }
@@ -636,8 +779,93 @@ final class RoomAIConceptPackageProvenanceRegistry {
             manifestData: archive.manifestData
         )
         let data = try RoomRedesignCanonicalJSON.encode(stored)
-        try writeOwnedRecord(data, to: recordURL)
+        let retainedByThisInvocation: Bool
+        if archive.package.profile == .aiReady {
+            retainedByThisInvocation = try retainAIReadyArchive(
+                archive,
+                expectedSourceRevision: expectedSourceRevision
+            )
+        } else {
+            retainedByThisInvocation = false
+        }
+        // Retain first: a failed copy leaves no durable authority record, so
+        // a later exact retry can repair it. If record promotion races/fails,
+        // the retained sidecar is still unreferenced and harmless until this
+        // same validated provenance is committed.
+        do {
+            try beforeRecordWrite(data, recordURL)
+            try writeOwnedRecord(data, to: recordURL)
+        } catch {
+            if retainedByThisInvocation,
+               !fileManager.fileExists(atPath: recordURL.path) {
+                try removeOwnedAIReadyArchive(
+                    at: directory.appendingPathComponent(Self.aiReadyArchiveFilename)
+                )
+            }
+            throw error
+        }
         return try loadBinding(at: recordURL, expectedSourceRevision: expectedSourceRevision)
+    }
+
+    /// Looks up and independently validates a private retained archive before
+    /// handing a transient candidate to the publication factory. Any storage
+    /// anomaly, stale source, profile mismatch, manifest mismatch, ZIP
+    /// closure error, or missing archive becomes an honest unavailable state.
+    /// The archive location never crosses this capability boundary except as
+    /// an in-memory value consumed immediately by Core preparation.
+    func publicationAIReadyPackageCandidate(
+        for sourceRevision: RoomRedesignSourceRevision
+    ) async -> RoomPublicationAIReadyPackageCandidate? {
+        do {
+            guard let directory = try existingRecordDirectory(for: sourceRevision) else {
+                return nil
+            }
+            let recordURL = directory.appendingPathComponent(Self.recordFilename)
+            let archiveURL = directory.appendingPathComponent(Self.aiReadyArchiveFilename)
+            guard fileManager.fileExists(atPath: recordURL.path),
+                  fileManager.fileExists(atPath: archiveURL.path)
+            else { return nil }
+            let stored = try storedBinding(
+                at: recordURL,
+                expectedSourceRevision: sourceRevision
+            )
+            try requireBoundedAIReadyArchiveFile(archiveURL)
+            let verificationRoot = fileManager.temporaryDirectory.appendingPathComponent(
+                "RoomScanStudio-AIRedesignPublicationVerify-\(UUID().uuidString)",
+                isDirectory: true
+            )
+            try fileManager.createDirectory(
+                at: verificationRoot,
+                withIntermediateDirectories: false
+            )
+            defer { try? fileManager.removeItem(at: verificationRoot) }
+            let validation = try await RoomAIRoomPackageArchive.extractAndValidate(
+                archiveURL: archiveURL,
+                into: verificationRoot,
+                expectedSourceRevision: sourceRevision,
+                expectedProfile: .aiReady,
+                limits: .init(
+                    maxEntries: 4_096,
+                    maxEntryBytes: Self.maximumStoredAIReadyArchiveBytes,
+                    maxArchiveBytes: Self.maximumStoredAIReadyArchiveBytes
+                )
+            )
+            let storedPackage = try RoomConceptValidatedSourcePackage(
+                validatedManifestData: stored.manifestData
+            )
+            guard validation.package.sourceRevision == sourceRevision,
+                  validation.package.profile == .aiReady,
+                  validation.manifestData == stored.manifestData,
+                  validation.package.packageID == storedPackage.sourceAIRoomPackage.packageID
+            else { return nil }
+            return .init(
+                archiveURL: archiveURL,
+                sourceRevision: sourceRevision,
+                expectedPackageID: validation.package.packageID
+            )
+        } catch {
+            return nil
+        }
     }
 
     private func loadBinding(
@@ -790,6 +1018,98 @@ final class RoomAIConceptPackageProvenanceRegistry {
         else {
             throw RoomAIConceptPackageProvenanceError.unsafeStorage
         }
+    }
+
+    private func requireBoundedAIReadyArchiveFile(_ url: URL) throws {
+        try requireNoSymbolicLinkInExistingAncestors(of: url)
+        let values = try url.resourceValues(forKeys: [
+            .isRegularFileKey,
+            .isSymbolicLinkKey,
+            .fileSizeKey,
+        ])
+        guard values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let byteCount = values.fileSize,
+              byteCount > 0,
+              UInt64(byteCount) <= Self.maximumStoredAIReadyArchiveBytes
+        else {
+            throw RoomAIConceptPackageProvenanceError.unsafeStorage
+        }
+    }
+
+    /// Copies only an already-finalized local `aiReady` archive into the
+    /// app-owned provenance root. The source URL is never recorded. A later
+    /// publication request independently validates the retained bytes before
+    /// it becomes a Core asset, so a failed/tampered copy can only disable
+    /// this optional download rather than broaden publication disclosure.
+    private func retainAIReadyArchive(
+        _ archive: RoomAIRoomPackageArchiveResult,
+        expectedSourceRevision: RoomRedesignSourceRevision
+    ) throws -> Bool {
+        guard archive.package.profile == .aiReady,
+              archive.package.sourceRevision == expectedSourceRevision
+        else { throw RoomAIConceptPackageProvenanceError.invalidBinding }
+        try requireBoundedAIReadyArchiveFile(archive.archiveURL)
+        let expectedDigest = archive.receipt.archiveSHA256
+        let expectedByteCount = archive.receipt.archiveByteCount
+        let sourceValues = try archive.archiveURL.resourceValues(forKeys: [.fileSizeKey])
+        guard expectedByteCount > 0,
+              expectedByteCount <= Self.maximumStoredAIReadyArchiveBytes,
+              sourceValues.fileSize.map(UInt64.init) == expectedByteCount,
+              try RoomSHA256.hexDigest(ofFile: archive.archiveURL) == expectedDigest
+        else {
+            throw RoomAIConceptPackageProvenanceError.invalidBinding
+        }
+        let directory = try ensureRecordDirectory(for: expectedSourceRevision)
+        let destination = directory.appendingPathComponent(Self.aiReadyArchiveFilename)
+        if fileManager.fileExists(atPath: destination.path) {
+            // Do not replace an existing private artifact. Exact bytes must
+            // match the same independently finalized receipt; otherwise the
+            // provenance is inconsistent and publication fails closed.
+            try requireBoundedAIReadyArchiveFile(destination)
+            let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+            guard values.fileSize.map(UInt64.init) == expectedByteCount,
+                  try RoomSHA256.hexDigest(ofFile: destination) == expectedDigest
+            else { throw RoomAIConceptPackageProvenanceError.invalidBinding }
+            return false
+        }
+        let stage = directory.appendingPathComponent(
+            Self.stagePrefix + UUID().uuidString.lowercased()
+        )
+        defer { try? removeOwnedStage(stage) }
+        try copyAIReadyArchive(archive.archiveURL, stage)
+        try requireBoundedAIReadyArchiveFile(stage)
+        guard expectedByteCount > 0,
+              expectedByteCount <= Self.maximumStoredAIReadyArchiveBytes,
+              try RoomSHA256.hexDigest(ofFile: stage) == expectedDigest
+        else {
+            throw RoomAIConceptPackageProvenanceError.invalidBinding
+        }
+        do {
+            try fileManager.moveItem(at: stage, to: destination)
+        } catch {
+            guard fileManager.fileExists(atPath: destination.path) else { throw error }
+            try requireBoundedAIReadyArchiveFile(destination)
+            let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+            guard values.fileSize.map(UInt64.init) == expectedByteCount,
+                  try RoomSHA256.hexDigest(ofFile: destination) == expectedDigest
+            else { throw RoomAIConceptPackageProvenanceError.invalidBinding }
+            return false
+        }
+        try requireBoundedAIReadyArchiveFile(destination)
+        let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+        guard values.fileSize.map(UInt64.init) == expectedByteCount,
+              try RoomSHA256.hexDigest(ofFile: destination) == expectedDigest
+        else { throw RoomAIConceptPackageProvenanceError.invalidBinding }
+        return true
+    }
+
+    private func removeOwnedAIReadyArchive(at url: URL) throws {
+        guard url.lastPathComponent == Self.aiReadyArchiveFilename else {
+            throw RoomAIConceptPackageProvenanceError.unsafeStorage
+        }
+        try requireBoundedAIReadyArchiveFile(url)
+        try fileManager.removeItem(at: url)
     }
 
     private func writeOwnedRecord(_ data: Data, to destination: URL) throws {

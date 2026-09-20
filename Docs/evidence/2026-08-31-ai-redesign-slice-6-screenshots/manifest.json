@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-01",
+  "review": {
+    "status": "PASS",
+    "criteria": [
+      "publication scope and privacy exclusions remain readable",
+      "room and property modes are distinguishable",
+      "property mode disclaims shared coordinates, alignment, connectivity, and reconstruction",
+      "source-revision and selection bindings are visible",
+      "selected derivative controls and fallback descriptions are visible",
+      "no clipping, overlap, or inaccessible control state was observed"
+    ]
+  },
+  "captures": [
+    {
+      "path": "iphone/publication-failure.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-iphone-20260901.xcresult",
+      "sourceAttachment": "ED915CE1-7468-4757-B8FA-0E63B7582BAA.png",
+      "deviceId": "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+      "device": "iPhone 16 Pro",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1206x2622",
+      "sha256": "dc77be38c3102c639da2948fd51e0e85541772d20ab96b48ce8148d72449902c"
+    },
+    {
+      "path": "iphone/publication-property-warning.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-iphone-20260901.xcresult",
+      "sourceAttachment": "CB5AC77B-DEB9-48FE-A346-BF2F2B4038E9.png",
+      "deviceId": "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+      "device": "iPhone 16 Pro",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1206x2622",
+      "sha256": "9c2b1155196a44ed9f7b0c48b7d3c4aaf1957e3b2e3e4cca8d20cde47089fcb6"
+    },
+    {
+      "path": "iphone/publication-room-review.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-iphone-20260901.xcresult",
+      "sourceAttachment": "A6E2B996-1E2B-4A6E-A302-A31E1036E070.png",
+      "deviceId": "B8FBE9EA-81AD-4134-BC1D-A67A7747271E",
+      "device": "iPhone 16 Pro",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1206x2622",
+      "sha256": "a0e383e4a742121ceb4cb5c9fcacb3a1c64ce3fdb9456662f53302389c6cd536"
+    },
+    {
+      "path": "ipad/publication-failure.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-ipad-20260901.xcresult",
+      "sourceAttachment": "413A73E6-1E88-4A49-B72C-9EE4926457AA.png",
+      "deviceId": "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+      "device": "iPad (10th generation)",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1640x2360",
+      "sha256": "fd0d2ef763ef37e5da2dede5c0793b55c6113213988bc4c31501414ca3c4a572"
+    },
+    {
+      "path": "ipad/publication-property-warning.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-ipad-20260901.xcresult",
+      "sourceAttachment": "585C00A5-FE29-4C14-81B7-1E69B1119BED.png",
+      "deviceId": "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+      "device": "iPad (10th generation)",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1640x2360",
+      "sha256": "875c6fa11088f3b1c6955ecf37cb5c7a12f2273238e0a82759fb332a7f7b24ca"
+    },
+    {
+      "path": "ipad/publication-room-review.png",
+      "sourceResult": "/private/tmp/roomscan-slice6-final-clean-ipad-20260901.xcresult",
+      "sourceAttachment": "348D919D-2F3F-4CC7-BB0B-521C4654F883.png",
+      "deviceId": "FDDEC0DB-DB75-4FBA-8344-69E2A2819531",
+      "device": "iPad (10th generation)",
+      "platform": "iOS Simulator 26.3.1",
+      "pixels": "1640x2360",
+      "sha256": "b4b8ba98c378a65bf12daec6648e39a57b4621a19e485acda960efd00b7a87f7"
+    }
+  ]
+}

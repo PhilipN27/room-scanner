@@ -9,7 +9,8 @@
   "scripts": {
     "generate:migration-manifest": "node scripts/generate-migration-manifest.mjs",
     "build:service": "npm --prefix .. run build",
-    "build": "npm run generate:migration-manifest && tsc -p tsconfig.build.json",
+    "build:web": "npm --prefix ../web run build",
+    "build": "npm run build:web && npm run generate:migration-manifest && tsc -p tsconfig.build.json",
     "build:test": "npm run generate:migration-manifest && tsc -p tsconfig.test.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/run-offline-verify.mjs",

@@ -9,7 +9,7 @@ import {
 } from "../src/aws/runtime-credential-bootstrap.js";
 import type { DataApiClientPort, SqlResult } from "../src/aws/runtime-clients.js";
 
-const migrations = Object.freeze(Array.from({ length: 8 }, (_, index) => Object.freeze({
+const migrations = Object.freeze(Array.from({ length: 9 }, (_, index) => Object.freeze({
   version: String(index + 1).padStart(4, "0"),
   name: `migration_${index + 1}`,
   checksumSha256: String(index + 1).repeat(64).slice(0, 64),
@@ -52,7 +52,7 @@ class FakeSecretReader implements RuntimeCredentialSecretReader {
   }
 }
 
-test("credential bootstrap proves exact ledger before reading secrets and commits eight allowlisted SCRAM rotations", async () => {
+test("credential bootstrap proves exact ledger before reading secrets and commits ten allowlisted SCRAM rotations", async () => {
   const client = new FakeOwnerClient(); const secrets = new FakeSecretReader();
   let salt = 0;
   await initializeRuntimeRoleCredentials({
@@ -64,7 +64,7 @@ test("credential bootstrap proves exact ledger before reading secrets and commit
   assert.equal(client.sql[0], "SET LOCAL log_statement = 'none'");
   assert.equal(client.sql[1], "SET LOCAL log_min_duration_statement = '-1'");
   const alters = client.sql.filter((sql) => sql.startsWith("ALTER ROLE"));
-  assert.equal(alters.length, 8);
+  assert.equal(alters.length, 10);
   for (const [index, role] of RUNTIME_DATABASE_ROLES.entries()) {
     assert.match(alters[index]!, new RegExp(`^ALTER ROLE ${role} PASSWORD 'SCRAM-SHA-256\\$4096:`, "u"));
     assert.doesNotMatch(alters[index]!, /Password-/u);

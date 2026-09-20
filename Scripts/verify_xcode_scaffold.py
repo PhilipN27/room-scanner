@@ -292,13 +292,14 @@ def audited_professional_transport_errors(source: str) -> list[str]:
 def lazy_slice5_transport_reachability_is_exact(
     production_sources: dict[Path, str],
 ) -> bool:
-    """Allow only the default-off factory -> sync adapter -> audited transport edge.
+    """Allow only known default-off adapters to reach the audited transport.
 
-    Slice 5 necessarily links the already-audited transport into the protected
-    professional screen.  The path-level guest graph cannot model the factory's
-    runtime ``defaultOff`` state, so this exception is constrained to the one
-    concrete adapter predecessor.  A direct root/helper reference creates an
-    extra predecessor and remains a finding.
+    Slice 5 sync and Slice 6 publication necessarily link the already-audited
+    transport into the protected professional screen. The path-level guest
+    graph cannot model the factory's runtime ``defaultOff`` state, so this
+    exception is constrained to those two concrete adapter predecessors. A
+    direct root/helper reference creates an extra predecessor and remains a
+    finding.
     """
 
     target = ROOT / "RoomScanStudio" / "Professional" / "ProfessionalTransportBoundary.swift"
@@ -309,9 +310,23 @@ def lazy_slice5_transport_reachability_is_exact(
         / "ProfessionalSync"
         / "ProfessionalProjectSyncTransport.swift"
     )
-    if target not in production_sources or sync_adapter not in production_sources:
+    publication_adapter = (
+        ROOT
+        / "RoomScanStudio"
+        / "Infrastructure"
+        / "Publication"
+        / "RoomPublicationTransport.swift"
+    )
+    if (
+        target not in production_sources
+        or sync_adapter not in production_sources
+        or publication_adapter not in production_sources
+    ):
         return False
-    return guest_reachable_predecessors(production_sources, target) == {sync_adapter}
+    return guest_reachable_predecessors(production_sources, target) == {
+        sync_adapter,
+        publication_adapter,
+    }
 
 
 def guest_reachable_predecessors(
@@ -1105,7 +1120,7 @@ def slice3_ai_redesign_contract_errors(
         ("manifest/archive entry closure", "guard expectedPaths == actualPaths,", sources["archive"]),
         ("archive plan/ledger closure", "guard package.artifactPlan == package.artifacts.map(\\.slot) else", sources["archive"]),
         ("Concept Set contract", "public struct RoomConceptSet", sources["concept"]),
-        ("Concept exact source-revision binding", "guard sourceRevision == context.expectedSourceRevision else", sources["concept"]),
+        ("Concept exact source-revision binding", "guard sourceRevision == expectedSourceRevision else", sources["concept"]),
         ("Concept validated source-package authority", "public struct RoomConceptValidatedSourcePackage", sources["concept"]),
         ("Concept canonical-view authority closure", "guard canonicalViews.count == 6 else", sources["concept"]),
         ("Concept exact source-package binding", "let validatedSourcePackage = context.validatedSourceAIRoomPackage(", sources["concept"]),
@@ -2270,7 +2285,7 @@ def workflow_structure_errors(workflow: str) -> list[str]:
         "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "${{ runner.temp }}/RoomScanStudio-iPhone.xcresult",
         "${{ runner.temp }}/RoomScanStudio-iPad.xcresult",
-        "${{ runner.temp }}/RoomScanStudio-slice5-artifact-inspection.json",
+        "${{ runner.temp }}/RoomScanStudio-slice6-artifact-inspection.json",
         "if-no-files-found: warn",
         "retention-days: 7",
     ):
@@ -2464,17 +2479,41 @@ def verify_package(errors: list[str]) -> None:
     expect(bool(source_files), "RoomScanCore has no source files in declared target path", errors)
     expect(bool(test_files), "RoomScanCoreTests has no tests in declared target path", errors)
     allowed_source_imports = {"Foundation", "simd"}
+    apple_raster_source_imports = {
+        "RoomPublishedSnapshotContracts.swift": {
+            "CoreGraphics",
+            "ImageIO",
+            "UniformTypeIdentifiers",
+        },
+    }
     for source_path in source_files:
         imports = re.findall(r"(?m)^\s*import\s+([A-Za-z0-9_]+)", source_path.read_text(encoding="utf-8"))
+        allowed_imports = allowed_source_imports | apple_raster_source_imports.get(
+            source_path.name,
+            set(),
+        )
         expect(
-            set(imports).issubset(allowed_source_imports),
+            set(imports).issubset(allowed_imports),
             f"non-portable core imports in {source_path.relative_to(ROOT)}: {imports}",
             errors,
         )
+    apple_raster_test_imports = {
+        "RoomPublishedSnapshotTests.swift": {
+            "CoreGraphics",
+            "ImageIO",
+            "UniformTypeIdentifiers",
+        },
+    }
     for test_path in test_files:
         imports = re.findall(r"(?m)^\s*(?:@testable\s+)?import\s+([A-Za-z0-9_]+)", test_path.read_text(encoding="utf-8"))
+        allowed_imports = {
+            "Foundation",
+            "simd",
+            "XCTest",
+            "RoomScanCore",
+        } | apple_raster_test_imports.get(test_path.name, set())
         expect(
-            set(imports).issubset({"Foundation", "simd", "XCTest", "RoomScanCore"}),
+            set(imports).issubset(allowed_imports),
             f"non-portable core test imports in {test_path.relative_to(ROOT)}: {imports}",
             errors,
         )
@@ -4662,7 +4701,7 @@ def verify_memory_only_negative_controls(pbx: str, errors: list[str]) -> None:
         )
         expects_slice3_mutation(
             ROOT / "RoomScanCore" / "Sources" / "RoomScanCore" / "RoomConceptSet.swift",
-            "guard sourceRevision == context.expectedSourceRevision else",
+            "guard sourceRevision == expectedSourceRevision else",
             "guard true else",
             "a weakened Concept Set source-revision binding",
         )

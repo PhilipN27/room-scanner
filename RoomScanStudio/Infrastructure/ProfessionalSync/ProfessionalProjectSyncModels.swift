@@ -188,6 +188,7 @@ struct ProfessionalProjectSyncJournalRecord: Codable, Equatable, Sendable {
     static func isHostedUploadID(_ value: String) -> Bool {
         value.range(of: "^upl_[A-Za-z0-9_-]{16,128}$", options: .regularExpression) != nil
     }
+
 }
 
 struct ProfessionalProjectSyncRecovery: Equatable, Sendable {

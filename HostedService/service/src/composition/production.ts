@@ -121,6 +121,17 @@ export interface Slice4MagicDeliveryCompositionDependencies {
   readonly worker: Slice4MagicDeliveryWorkerPort;
 }
 
+/** Slice 6 keeps publication-feedback delivery in the same isolated email
+ * runtime pattern. A queue record is only a wake; its body is intentionally
+ * discarded before the worker makes its targetless database claim. */
+export interface Slice6FeedbackDeliveryWorkerPort {
+  handleRecord(record: Readonly<{ readonly messageId: string }>): Promise<boolean>;
+}
+
+export interface Slice6FeedbackDeliveryCompositionDependencies {
+  readonly worker: Slice6FeedbackDeliveryWorkerPort;
+}
+
 export interface Slice4LambdaCompositionDependencies {
   readonly api: Slice4ApiCompositionDependencies;
   readonly authorizer: Slice4AppAuthorizerCompositionDependencies;
@@ -286,6 +297,31 @@ export function createSlice4MagicDeliverySqsHandler(
     for (const record of validRecords(event)) {
       try {
         if (await input.worker.handleRecord(record) !== true) {
+          failures.push(Object.freeze({ itemIdentifier: record.messageId }));
+        }
+      } catch {
+        failures.push(Object.freeze({ itemIdentifier: record.messageId }));
+      }
+    }
+    return Object.freeze({ batchItemFailures: Object.freeze(failures) });
+  };
+}
+
+/** Separate Slice 6 email-lane root. It deliberately has no HTTP input,
+ * portal capability, storage access, or queue-body delivery selector. */
+export function createSlice6FeedbackDeliverySqsHandler(
+  input: Slice6FeedbackDeliveryCompositionDependencies,
+): (event: Slice4SqsEvent) => Promise<Slice4SqsBatchResponse> {
+  if (input === null || typeof input !== "object" || input.worker === null
+    || typeof input.worker !== "object" || typeof input.worker.handleRecord !== "function") {
+    throw new Slice4CompositionError("invalid_composition");
+  }
+  return async (event) => {
+    const failures: Array<Readonly<{ readonly itemIdentifier: string }>> = [];
+    for (const record of validRecords(event)) {
+      const wake = Object.freeze({ messageId: record.messageId });
+      try {
+        if (await input.worker.handleRecord(wake) !== true) {
           failures.push(Object.freeze({ itemIdentifier: record.messageId }));
         }
       } catch {

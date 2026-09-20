@@ -19,6 +19,26 @@ const runtimeRoles = [
   'roomscan_stripe_reconciliation_runtime',
 ];
 const privilegeRoles = [...runtimeRoles, 'roomscan_operator', 'roomscan_app'];
+const slice6SecurityDefinerReviewRoutines = [
+  'roomscan.cancel_feedback_delivery_v2(text, text, text, timestamp with time zone)',
+  'roomscan.cancel_feedback_delivery_v3(text, text, text, timestamp with time zone)',
+  'roomscan.claim_feedback_delivery_v2(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.claim_next_feedback_delivery_v2(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.claim_next_feedback_delivery_v3(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.complete_feedback_delivery_v2(text, text, timestamp with time zone)',
+  'roomscan.complete_feedback_delivery_v3(text, text, timestamp with time zone)',
+  'roomscan.portal_authorize_professional_asset_v1(bytea, timestamp with time zone, text, bytea, bigint, bigint)',
+  'roomscan.portal_finalize_professional_asset_delivery_v1(bytea, timestamp with time zone, text, bytea, bigint, bigint, text)',
+  'roomscan.portal_request_feedback_verification_v2(bytea, timestamp with time zone, bytea, bytea, bytea, text, bytea, bytea, bytea)',
+  'roomscan.portal_request_feedback_verification_v3(bytea, timestamp with time zone, bytea, bytea, bytea, text, bytea, bytea, bytea, bytea)',
+  'roomscan.professional_portal_asset_context_v1(bytea, timestamp with time zone)',
+  'roomscan.publication_feedback_delivery_live_v2(uuid, text, timestamp with time zone)',
+  'roomscan.publication_list_room_candidates_v1(text, bytea, timestamp with time zone, integer, text)',
+  'roomscan.release_feedback_delivery_v2(text, text, timestamp with time zone)',
+  'roomscan.release_feedback_delivery_v3(text, text, timestamp with time zone)',
+  'roomscan.validate_feedback_delivery_v2(text, text, timestamp with time zone)',
+  'roomscan.validate_feedback_delivery_v3(text, text, timestamp with time zone)',
+].sort();
 
 function catalogDigest(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -101,10 +121,12 @@ try {
   })}`);
 
   assert.deepEqual(digests, {
-    execute: '25905f7e9fd9fa1d463e954fdd0c3d4a68fe722fc94d0bd20c4e299760f1c188',
-    definers: '3be9b2af296380f89781e197aa3703bc9055c72cc5bfb24f28bb504abc84ecf5',
-    policyAcl: 'd25d7b52940a1cec1dca07d955b6e6839f48236bcb755e67a2cb2436bf68868a',
-    results: 'b92365af1175f86d7215bbf89e2f1dec6a7e0253976a3fd90a6ce786eefeb02c',
+    // Reviewed delta: one API-only room-candidate reader, with no policy/table
+    // grants or other role execute changes; result is only public ID + title.
+    execute: 'ea95813862d5fb9ac2ed0a8d6c330a7790bead7a20fd09aec95e845496a2182e',
+    definers: 'e38b05d53afaa901e573de1f9aaa857ea08c9fd0c1448a02abdf4152969600ed',
+    policyAcl: 'b9504936be780117f54de8e3bff46e54c0db7826508722ae3555ac41185bf95a',
+    results: 'dea5b58f056eaebeecc844b032e3c62b9c0e5efc298dc4ded7c1192796c4af63',
   });
 
   assert.equal(definerRows.every(({ owner }) => owner === 'roomscan_policy'), true);
@@ -113,6 +135,14 @@ try {
   assert.equal(definerRows.every(({ public_execute }) => public_execute === false), true);
   assert.equal(definerRows.every(({ review }) => typeof review === 'string' && review.length > 0), true);
   assert.equal(definerRows.every(({ dynamic_sql }) => dynamic_sql === false), true);
+  const reviewedSlice6Routines = definerRows
+    .filter(({ routine }) => slice6SecurityDefinerReviewRoutines.includes(routine))
+    .map(({ routine }) => routine)
+    .sort();
+  assert.deepEqual(reviewedSlice6Routines, slice6SecurityDefinerReviewRoutines);
+  assert.equal(definerRows
+    .filter(({ routine }) => slice6SecurityDefinerReviewRoutines.includes(routine))
+    .every(({ review }) => typeof review === 'string' && review.length > 0), true);
 
   const membershipEdges = (await pool.query(
     `SELECT granted.rolname AS granted_role, member.rolname AS member_role
@@ -171,7 +201,7 @@ try {
     `INTEGRATION_0007_CATALOG_SUMMARY runtime_roles=${runtimeRoles.length} `
       + `routine_acl_roles=${privilegeRoles.length} definers=${definerRows.length} `
       + `policy_acl_entries=${policyAcl.length} membership_edges=0 `
-      + 'stripe_account_registry_constraints=3 project_sync_worker_catalog=1 status=pass',
+      + 'stripe_account_registry_constraints=3 project_sync_worker_catalog=1 publication_portal_catalog=1 status=pass',
   );
 } finally {
   await pool.end();

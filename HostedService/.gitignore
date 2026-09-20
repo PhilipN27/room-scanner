@@ -2,3 +2,5 @@ node_modules/
 dist/
 .test-dist/
 *.tsbuildinfo
+web/test-results/
+web/playwright-report/

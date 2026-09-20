@@ -115,7 +115,7 @@ function assertConfiguration(input: Parameters<typeof initializeRuntimeRoleCrede
     || input.secretReader === null || typeof input.secretReader !== "object" || typeof input.secretReader.read !== "function"
     || typeof input.randomBytes !== "function"
     || input.secretArns === null || typeof input.secretArns !== "object"
-    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 8) {
+    || !Array.isArray(input.expectedMigrations) || input.expectedMigrations.length !== 9) {
     throw new DirectPostgresCredentialBootstrapError("invalid_configuration");
   }
   const keys = Object.keys(input.secretArns).sort();
@@ -126,8 +126,12 @@ function assertConfiguration(input: Parameters<typeof initializeRuntimeRoleCrede
   for (const [index, migration] of input.expectedMigrations.entries()) {
     if (migration?.version !== String(index + 1).padStart(4, "0")
       || !/^\d{4}_[a-z0-9_]+\.up\.sql$/u.test(migration.name)
-      || !/^[a-f0-9]{64}$/u.test(migration.checksumSha256)
-      || !secretArn(input.secretArns[RUNTIME_DATABASE_ROLES[index]!])) {
+      || !/^[a-f0-9]{64}$/u.test(migration.checksumSha256)) {
+      throw new DirectPostgresCredentialBootstrapError("invalid_configuration");
+    }
+  }
+  for (const role of RUNTIME_DATABASE_ROLES) {
+    if (!secretArn(input.secretArns[role])) {
       throw new DirectPostgresCredentialBootstrapError("invalid_configuration");
     }
   }

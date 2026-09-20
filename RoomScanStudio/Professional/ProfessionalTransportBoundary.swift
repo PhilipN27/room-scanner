@@ -170,7 +170,18 @@ final class FoundationProfessionalHTTPTransport:
         guard values.isRegularFile == true, values.isSymbolicLink != true else {
             throw ProfessionalSignedTransferError.invalidFile
         }
-        try boundary.observe(ProfessionalTransportAttempt(url: url, method: method))
+        var observedComponents = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        )
+        observedComponents?.query = nil
+        observedComponents?.fragment = nil
+        guard let observedURL = observedComponents?.url else {
+            throw ProfessionalSignedTransferError.insecureURL
+        }
+        try boundary.observe(
+            ProfessionalTransportAttempt(url: observedURL, method: method)
+        )
         var request = URLRequest(url: url)
         request.httpMethod = method
         for (header, value) in headers {

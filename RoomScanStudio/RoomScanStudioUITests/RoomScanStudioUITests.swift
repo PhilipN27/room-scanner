@@ -6,6 +6,22 @@ final class RoomScanStudioUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    override func tearDownWithError() throws {
+        // Retain bounded app-only failure evidence even when the CLI disables
+        // Xcode's much larger automatic simulator diagnostic collection.
+        guard let run = testRun, run.failureCount > 0 else { return }
+        let app = XCUIApplication()
+        guard app.state == .runningForeground else { return }
+        let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(50_000)))
+        hierarchy.name = "failed-ui-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "failed-ui-screen"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testHomeShowsBothPrimaryActions() {
         let app = launchIsolatedApp()
 
@@ -736,7 +752,7 @@ final class RoomScanStudioUITests: XCTestCase {
         app.buttons["capture.prepare"].tap()
         XCTAssertTrue(app.buttons["capture.start"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["capture.requestGPS"].waitForExistence(timeout: 5))
-        app.buttons["capture.requestGPS"].tap()
+        app.buttons["capture.requestGPS"].press(forDuration: 0.15)
         XCTAssertTrue(app.staticTexts["capture.gpsDenied"].waitForExistence(timeout: 5))
         app.buttons["capture.start"].tap()
         XCTAssertTrue(app.buttons["capture.stop"].waitForExistence(timeout: 5))
@@ -852,7 +868,7 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(accountStatus.waitForExistence(timeout: 5))
         let list = app.buttons["cloudBackup.list"]
         XCTAssertTrue(list.waitForExistence(timeout: 5))
-        scrollIntoView(list, in: settingsScroll, direction: .backward)
+        scrollIntoView(list, in: settingsScroll, direction: .forward)
         XCTAssertTrue(list.isHittable)
         list.tap()
         let listStatus = app.staticTexts["cloudBackup.listStatus"]
@@ -1150,9 +1166,11 @@ final class RoomScanStudioUITests: XCTestCase {
     }
 
     private func openSimulatedCapture(in app: XCUIApplication) {
-        app.buttons["home.newRoomScan"].tap()
+        // Recorded 50-ms simulator taps sometimes left these targets unchanged.
+        // Keep touch duration explicit, without retries or weaker assertions.
+        app.buttons["home.newRoomScan"].press(forDuration: 0.15)
         XCTAssertTrue(app.buttons["newScan.openCapture"].waitForExistence(timeout: 5))
-        app.buttons["newScan.openCapture"].tap()
+        app.buttons["newScan.openCapture"].press(forDuration: 0.15)
         XCTAssertTrue(app.staticTexts["capture.title"].waitForExistence(timeout: 5))
     }
 

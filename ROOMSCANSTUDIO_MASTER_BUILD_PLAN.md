@@ -627,3 +627,55 @@ Exact acceptance criteria and external gates live in
 `Docs/contracts/ai-redesign-service-contracts-v2.md`; the completed local
 matrix is recorded in
 `Docs/evidence/2026-08-29-ai-redesign-slice-5-verification.md`.
+
+---
+
+## 16. Formally closed local AI redesign Slice 6 — 2026-09-20
+
+Local Slice 6 acceptance is complete: all ten terminal clauses passed, both
+full native schemes passed 337/337 tests, and current Core, service, database,
+infrastructure, browser, artifact, mutation, and prior-slice compatibility
+evidence is bound in the closure record. The accompanying local commit closes
+the implementation and task ledger; nothing was pushed or deployed.
+
+The approved platform revision now includes the local Slice 6 publication
+boundary: a reviewed exact hosted revision can produce an immutable allowlisted
+room or curated-property snapshot and a high-entropy client link can open a
+responsive no-install presentation. The portal provides floor plan,
+3D/orientation, dimensions, warnings, original/concept comparison, independent
+room navigation, feedback, and bounded PDF/gallery/ZIP fallback. Constrained
+business/contact/accent branding retains visible RoomScanStudio attribution.
+
+Snapshots are new typed object graphs, never redacted private projects. Exact
+source, selection, approval, archive, and asset-ledger digests are independently
+validated before immutable promotion. Raw capture data, diagnostics, world
+maps, precise GPS, private notes, revision history, active documents, renamed
+private archives, and unapproved work have no public slot and fail closure
+validation. Property rooms remain independent; no alignment, connectivity, or
+combined reconstruction is inferred.
+
+The hosted boundary adds forward-only migration `0009`, a sealed 55-route
+Slice 6 manifest retaining the exact Slice 4/5 prefixes, dedicated publication
+worker and portal roles, private versioned derivative storage, hash-only links,
+controlled PIN/expiry/revocation, per-request asset authorization/accounting,
+immutable verified feedback, privacy-minimized history, and lightweight
+professional browser flows. The native app adds review/status/revoke/recovery
+entry points through a separate public-fact-only journal and the existing sole
+audited professional network boundary.
+
+Rollback is the global/workspace publication kill switch. It denies creation,
+link/session authorization, feedback, downloads, and every protected asset
+request—including active sessions—while guest/local work, private CloudKit,
+and Slice 5 sync/export/recovery remain available. Slice 7 trash/purge/backup
+expiry/cancellation grace, production pricing/load/release operations, custom
+domains, browser capture/editing, real-time collaboration, and continuous
+multi-room reconstruction remain excluded.
+
+The exact additive contract is
+`Docs/contracts/ai-redesign-service-contracts-v3.md`; local verification is
+recorded in `Docs/evidence/2026-09-20-ai-redesign-slice-6-closure.md`.
+The earlier `2026-08-31-ai-redesign-slice-6-verification.md` remains a
+superseded historical checkpoint, not current acceptance evidence.
+Physical-device, real-browser-provider, email, AWS/CDN/domain, credential,
+deployment, retention/legal, load, and production-release evidence remain
+separate authorized gates.

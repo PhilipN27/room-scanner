@@ -332,7 +332,7 @@ try {
       ? { migrationsDir: process.env.ROOMSCAN_TEST_MIGRATIONS_DIR }
       : {}),
   });
-  assert.equal(applied.applied.at(-1)?.version, '0008', 'forward 0008 project-sync migration must be applied');
+  assert.equal(applied.applied.at(-1)?.version, '0009', 'forward 0009 publication migration must preserve the 0008 project-sync contract');
   await seedCoreFixtures(bootstrapPool);
   await setHostedFlags(ids.workspaceA, 'slice5a', true);
   await setHostedFlags(ids.workspaceB, 'slice5b');

@@ -8,6 +8,13 @@ export interface HttpApiV2Response {
   readonly statusCode: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
+  /** HTTP API v2's explicit binary response envelope. Legacy Slice 4/5
+   * handlers continue returning JSON/string bodies without this field. */
+  readonly isBase64Encoded?: boolean;
+  /** HTTP API v2 emits these as distinct Set-Cookie fields. It is required for
+   * an atomic pending-PIN -> active-session rotation; comma-joining cookie
+   * attributes is ambiguous and unsafe. */
+  readonly cookies?: readonly string[];
 }
 
 const CANONICAL_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;

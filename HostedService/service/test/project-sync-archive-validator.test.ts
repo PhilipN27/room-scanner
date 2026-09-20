@@ -179,6 +179,12 @@ test("forbidden raw scanner is bounded and catches markers split across transpor
     encoder.encode("safe working companion"),
     encoder.encode(" manifest"),
   ]), false);
+  assert.equal(containsForbiddenRawByteChunks([
+    encoder.encode("prefix raw/world-map but not a path literal"),
+  ]), false, "an unquoted mid-stream substring is not a false-positive raw path");
+  assert.equal(containsForbiddenRawByteChunks([
+    encoder.encode("RAW/DEPTH at the beginning"),
+  ]), true, "the start-of-stream positive control remains ASCII-case-insensitive");
 
   // This archive reaches the public validator with a deliberately wrong
   // expected digest; size rejection must win without copying or hashing it.

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "review": {
+    "status": "PASS",
+    "method": "Coordinator visually inspected all six unedited named XCTest attachments from the passing full schemes.",
+    "observations": [
+      "Source and selection bindings, raster byte counts/digests, and review headings remain readable at both widths.",
+      "The property warning explicitly rejects shared coordinates, alignment, connectivity, and reconstruction.",
+      "The actual service-unavailable message, local-work assurance, disclosure confirmation, and recovery actions are visible in both failure captures.",
+      "Controls stack on iPhone and fit horizontally on iPad; reviewed critical text does not overlap the fixed toolbar or controls.",
+      "Viewport-edge clipping belongs to the normal scrollable content. Colored raster swatches and private revision canaries are synthetic owner-review fixtures."
+    ],
+    "limitations": "Bounded layout review, not physical-device touch, VoiceOver, every text size, WCAG certification, or real-room image-quality evidence. The full suites separately exercise largest-text accessibility flows."
+  },
+  "captures": [
+    {
+      "device": "iphone",
+      "path": "iphone/publication-failure.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/iphone-closure.xcresult",
+      "sha256": "7435178d5e8bebda86b9d7945714d10b60b337c9affff3c3214700fb8bd9ee0d"
+    },
+    {
+      "device": "iphone",
+      "path": "iphone/publication-property-warning.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/iphone-closure.xcresult",
+      "sha256": "c73a0c400a0e40f2b01b400adaddca2e1c0b11432bed3c3a884c624033683608"
+    },
+    {
+      "device": "iphone",
+      "path": "iphone/publication-room-review.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/iphone-closure.xcresult",
+      "sha256": "fbc38f6f250122ab73778259ef530c3316e35486fbb4f1ca98c883d21f716691"
+    },
+    {
+      "device": "ipad",
+      "path": "ipad/publication-failure.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/ipad-final.xcresult",
+      "sha256": "0194372c1b9980c9def4a463856f3898186da49f9d8dfe26d5ed754976522d54"
+    },
+    {
+      "device": "ipad",
+      "path": "ipad/publication-property-warning.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/ipad-final.xcresult",
+      "sha256": "f2e388b34f3c79a106d4a07500837c6011368a2028b634967293e66752eb6ba5"
+    },
+    {
+      "device": "ipad",
+      "path": "ipad/publication-room-review.png",
+      "sourceResult": "../../../.artifacts/slice6-closure-2026-09-20/ipad-final.xcresult",
+      "sha256": "c29c6000c2679cd95ce3e424acd22fc5f0ce501d03acf5cd1f1462ab53ae127e"
+    }
+  ]
+}

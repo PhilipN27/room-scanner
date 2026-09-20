@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outFile": ".test-dist/roomscan-web.js",
+    "sourceMap": false,
+    "declaration": false
+  },
+  "files": [
+    "src/shared/portal-security.ts",
+    "src/shared/dto.ts",
+    "src/shared/api-client.ts",
+    "src/shared/professional-client.ts",
+    "src/shared/dom.ts",
+    "src/shared/blob-url-registry.ts",
+    "src/portal/renderers.ts",
+    "src/portal/application.ts",
+    "src/professional/application.ts",
+    "src/test-export.ts"
+  ]
+}

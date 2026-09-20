@@ -5,4 +5,5 @@ export * from "./data-api.js";
 export * from "./operation-unit-of-work.js";
 export * from "./s3-quarantine.js";
 export * from "./s3-project-sync.js";
+export * from "./s3-publication.js";
 export * from "./ses-delivery.js";

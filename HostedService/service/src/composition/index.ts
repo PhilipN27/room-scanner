@@ -1,5 +1,6 @@
 export * from "./production.js";
 export * from "./project-sync-application.js";
+export * from "./publication-application.js";
 export * from "./apple-provider.js";
 export * from "./cognito-apple-challenge.js";
 export * from "./data-api-route-application.js";

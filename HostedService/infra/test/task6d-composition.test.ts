@@ -46,6 +46,32 @@ const EXPECTED_ROUTES = new Map<string, "NONE" | "CUSTOM">([
   ["POST /projects/edit-lease/release", "CUSTOM"],
   ["POST /projects/raw-archive/configure", "CUSTOM"],
   ["POST /projects/raw-archive/allocate", "CUSTOM"],
+  ["POST /professional/session/exchange", "NONE"],
+  ["POST /professional/session/logout", "NONE"],
+  ["POST /professional/properties/list", "NONE"],
+  ["POST /professional/properties/upsert", "NONE"],
+  ["POST /professional/concepts/list", "NONE"],
+  ["POST /professional/members/list", "NONE"],
+  ["POST /publications/snapshots/allocate", "NONE"],
+  ["POST /publications/snapshots/complete", "NONE"],
+  ["POST /publications/snapshots/status", "NONE"],
+  ["POST /publications/snapshots/list", "NONE"],
+  ["POST /publications/links/create", "NONE"],
+  ["POST /publications/links/update", "NONE"],
+  ["POST /publications/links/revoke", "NONE"],
+  ["POST /publications/links/list", "NONE"],
+  ["POST /publications/feedback/list", "NONE"],
+  ["POST /publications/access-history/list", "NONE"],
+  ["POST /publications/downloads/list", "NONE"],
+  ["POST /publications/assets/read", "NONE"],
+  ["GET /p", "NONE"],
+  ["POST /portal/link/exchange", "NONE"],
+  ["POST /portal/pin/verify", "NONE"],
+  ["POST /portal/snapshot", "NONE"],
+  ["POST /portal/asset", "NONE"],
+  ["POST /portal/feedback/verification/request", "NONE"],
+  ["POST /portal/feedback/verification/consume", "NONE"],
+  ["POST /portal/feedback", "NONE"],
 ]);
 
 const EXPECTED_RUNTIME_SECRETS = new Map<string, string>([
@@ -57,6 +83,8 @@ const EXPECTED_RUNTIME_SECRETS = new Map<string, string>([
   ["roomscan-dev-audit-exporter", "roomscan_audit_export_runtime"],
   ["roomscan-dev-email-delivery", "roomscan_email_delivery_runtime"],
   ["roomscan-dev-project-sync-validation", "roomscan_project_sync_runtime"],
+  ["roomscan-dev-publication-validation", "roomscan_publication_worker"],
+  ["roomscan-dev-portal-delivery", "roomscan_portal_runtime"],
 ]);
 
 let cached: Readonly<Record<string, Resource>> | undefined;
@@ -100,7 +128,7 @@ function environmentOf(resource: Resource): Readonly<Record<string, unknown>> {
   return environment?.Variables ?? {};
 }
 
-test("Task 6D preserves the canonical Slice 4 routes and appends exactly the protected Slice 5 project-sync routes with no proxy", () => {
+test("Slice 6 preserves the canonical private routes and appends exactly the professional and portal routes with no proxy", () => {
   const routes = ofType("AWS::ApiGatewayV2::Route").map(([, resource]) => resource);
   assert.equal(routes.length, EXPECTED_ROUTES.size);
   const actual = new Map(
@@ -167,7 +195,7 @@ test("Task 6D generates one attached database secret per runtime lane and isolat
     "roomscan_cluster_admin",
     ...EXPECTED_RUNTIME_SECRETS.values(),
   ]));
-  assert.equal(databaseUsernames.length, 9);
+  assert.equal(databaseUsernames.length, 11);
 
   for (const [functionName, username] of EXPECTED_RUNTIME_SECRETS) {
     const variables = environmentOf(functionByName(functionName));
@@ -205,7 +233,9 @@ test("Task 6D gives Stripe ingress durable Data API authority and confines API p
     "recovery always signs an exact persisted version and needs no current-object read");
   assert.match(apiPolicy, /ProjectSyncBucket/u);
   assert.match(apiPolicy, /server\/active\/v1\/\*\/professional-sync\/active\/working\/\*/u);
-  assert.doesNotMatch(apiPolicy, /ActiveBucket|PublishedDerivativeBucket|BackupBucket|s3:List|s3:Delete/u);
+  assert.match(apiPolicy, /PublishedDerivativeBucket/u);
+  assert.match(apiPolicy, /server\/published\/quarantine\/v1\/\*/u);
+  assert.doesNotMatch(apiPolicy, /ActiveBucket|BackupBucket|s3:List|s3:Delete|server\/published\/active\/v1/u);
 });
 
 test("Task 6D keeps refresh on API, Apple session issuance on challenge, and credential bootstrap owner-only", () => {
@@ -227,6 +257,8 @@ test("Task 6D keeps refresh on API, Apple session issuance on challenge, and cre
     "AuditExportDatabaseSecret",
     "EmailDeliveryDatabaseSecret",
     "ProjectSyncDatabaseSecret",
+    "PublicationWorkerDatabaseSecret",
+    "PortalDatabaseSecret",
   ]) assert.match(migrationPolicy, new RegExp(runtimePrefix, "u"));
 
   const migrationEnvironment = JSON.stringify(environmentOf(functionByName("roomscan-dev-migration-operator")));
@@ -234,6 +266,8 @@ test("Task 6D keeps refresh on API, Apple session issuance on challenge, and cre
   assert.match(migrationEnvironment, /RUNTIME_ROLE_SECRET_ARNS_JSON/u);
   assert.match(migrationEnvironment, /roomscan_email_delivery_runtime/u);
   assert.match(migrationEnvironment, /roomscan_project_sync_runtime/u);
+  assert.match(migrationEnvironment, /roomscan_publication_worker/u);
+  assert.match(migrationEnvironment, /roomscan_portal_runtime/u);
   assert.doesNotMatch(migrationEnvironment, /password|secretString|credentialValue/ui);
 });
 
@@ -322,14 +356,15 @@ test("Task 6D gives email delivery only its DB lane, envelope key, SES, and wake
   assert.doesNotMatch(policy, /s3:GetObject|ActiveBucket|PublishedDerivativeBucket|ApiDatabaseSecret/u);
 });
 
-test("Task 6D schedules durable reconciliation, audit, email, and targetless project-sync recovery in addition to CloudTrail monitoring", () => {
+test("Slice 6 schedules durable reconciliation, audit, email, and targetless validation recovery in addition to CloudTrail monitoring", () => {
   const rules = ofType("AWS::Events::Rule").map(([, resource]) => resource);
-  assert.equal(rules.length, 5);
+  assert.equal(rules.length, 6);
   const names = rules.map((rule) => String(rule.Properties?.Name));
   assert.ok(names.includes("roomscan-dev-stripe-reconciliation-recovery"));
   assert.ok(names.includes("roomscan-dev-audit-outbox-recovery"));
   assert.ok(names.includes("roomscan-dev-email-delivery-recovery"));
   assert.ok(names.includes("roomscan-dev-project-sync-validation-recovery"));
+  assert.ok(names.includes("roomscan-dev-publication-validation-recovery"));
   const recoveryRules = rules.filter((rule) => String(rule.Properties?.Name).includes("recovery"));
   assert.equal(recoveryRules.every((rule) => JSON.stringify(rule.Properties?.Targets).includes("Queue")), true);
 });

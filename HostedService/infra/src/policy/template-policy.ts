@@ -19,6 +19,7 @@ export function assertInfrastructurePolicy(template: Readonly<Record<string, unk
   assertNoLaterSliceResources(resources);
   assertS3Boundaries(resources);
   assertProjectSyncBoundary(template, resources);
+  assertPublicationBoundary(template, resources);
   assertLogBoundaries(resources);
   assertAuroraBoundary(resources);
   assertRuntimeDatabaseLanes(resources);
@@ -311,7 +312,7 @@ function assertProjectSyncBoundary(
     || !apiText.includes("server/active/v1/*/professional-sync/active/working/*")
     || !apiText.includes("s3:PutObject") || apiRecoveryRead === undefined
     || !sameStrings(strings(apiRecoveryRead.Action), new Set(["s3:GetObjectVersion"]))
-    || /s3:Delete|s3:List|PublishedDerivativeBucket|BackupBucket/u.test(apiText)) {
+    || /s3:Delete|s3:List|BackupBucket|ActiveBucket/u.test(apiText)) {
     throw new InfrastructurePolicyError("API project-sync authority must be exact upload/recovery only");
   }
   if (!workerText.includes("server/quarantine/v1/*") || !workerText.includes("server/active/v1/*")
@@ -322,6 +323,123 @@ function assertProjectSyncBoundary(
   if (!workerText.includes("ProjectSyncDatabaseSecret") || !workerText.includes("AssetsKey")
     || !workerText.includes("ProjectSyncQueuesKey")) {
     throw new InfrastructurePolicyError("project-sync worker requires its exact database and encrypted storage grants");
+  }
+}
+
+function assertPublicationBoundary(
+  template: Readonly<Record<string, unknown>>,
+  resources: Readonly<Record<string, CloudFormationResource>>,
+): void {
+  const bucketEntry = Object.entries(resources).find(
+    ([logicalId, resource]) => logicalId.startsWith("PublishedDerivativeBucket")
+      && resource.Type === "AWS::S3::Bucket",
+  );
+  if (bucketEntry === undefined) {
+    throw new InfrastructurePolicyError("Slice 6 requires one dedicated private published-derivative bucket");
+  }
+  const bucketPolicy = Object.values(resources).find((resource) =>
+    resource.Type === "AWS::S3::BucketPolicy"
+      && serialized(resource.Properties?.Bucket).includes(bucketEntry[0]),
+  );
+  const bucketPolicyText = serialized(bucketPolicy?.Properties?.PolicyDocument);
+  for (const marker of [
+    "server/published/quarantine/v1/",
+    "server/published/active/v1/",
+    "s3:DeleteObject",
+    "s3:DeleteObjectVersion",
+    "s3:DeleteBucket",
+  ]) {
+    if (!bucketPolicyText.includes(marker)) {
+      throw new InfrastructurePolicyError("published-derivative retention or namespace deny is incomplete");
+    }
+  }
+
+  const queues = Object.entries(resources).filter(([, resource]) => resource.Type === "AWS::SQS::Queue");
+  const validationQueue = queues.find(([logicalId]) => logicalId.startsWith("PublicationValidationQueue"));
+  const dlq = queues.find(([logicalId]) => logicalId.startsWith("PublicationValidationDlq"));
+  if (validationQueue === undefined || dlq === undefined) {
+    throw new InfrastructurePolicyError("publication validation queue and DLQ are required");
+  }
+  const queueProperties = validationQueue[1].Properties ?? {};
+  const worker = Object.entries(resources).find(([, resource]) =>
+    resource.Type === "AWS::Lambda::Function"
+      && typeof resource.Properties?.FunctionName === "string"
+      && resource.Properties.FunctionName.endsWith("-publication-validation"),
+  );
+  if (worker === undefined || worker[1].Properties?.Timeout !== 120
+    || worker[1].Properties?.ReservedConcurrentExecutions !== 1
+    || typeof queueProperties.VisibilityTimeout !== "number"
+    || queueProperties.VisibilityTimeout <= 120
+    || queueProperties.KmsMasterKeyId === undefined
+    || !serialized(queueProperties.RedrivePolicy).includes(dlq[0])
+    || !serialized(queueProperties.RedrivePolicy).includes("maxReceiveCount\":5")) {
+    throw new InfrastructurePolicyError("publication validation requires one bounded worker and a five-attempt encrypted queue");
+  }
+  const mapping = ofType(resources, "AWS::Lambda::EventSourceMapping").find((resource) =>
+    serialized(resource.Properties?.EventSourceArn).includes(validationQueue[0])
+      && serialized(resource.Properties?.FunctionName).includes("PublicationValidationLiveAlias"),
+  );
+  if (mapping === undefined || mapping.Properties?.BatchSize !== 1) {
+    throw new InfrastructurePolicyError("publication validation worker requires one-record queue delivery");
+  }
+  const schedule = ofType(resources, "AWS::Events::Rule").find((resource) =>
+    typeof resource.Properties?.Name === "string"
+      && resource.Properties.Name.endsWith("-publication-validation-recovery"),
+  );
+  if (schedule === undefined || schedule.Properties?.ScheduleExpression !== "rate(1 minute)"
+    || !serialized(schedule.Properties?.Targets).includes("roomscan-publication-validation-wake-v1")) {
+    throw new InfrastructurePolicyError("publication validation requires a fixed targetless recovery wake");
+  }
+  const configuredSourceAccount = projectSyncConfiguredSourceAccount(template, {
+    ...schedule,
+    Properties: {
+      ...schedule.Properties,
+      Name: String(schedule.Properties?.Name).replace("publication-validation", "project-sync-validation"),
+    },
+  });
+  const recoveryQueuePolicy = Object.values(resources).find((resource) =>
+    resource.Type === "AWS::SQS::QueuePolicy"
+      && serialized(resource.Properties?.Queues).includes(validationQueue[0]),
+  );
+  const recoveryProducer = recoveryQueuePolicy === undefined ? undefined : policyStatements(recoveryQueuePolicy).find((statement) =>
+    serialized(statement.Principal).includes("events.amazonaws.com"),
+  );
+  if (recoveryProducer === undefined
+    || !sameStrings(strings(recoveryProducer.Action), new Set(["sqs:SendMessage"]))
+    || exactStringEqualsCondition(recoveryProducer, "aws:SourceAccount") !== configuredSourceAccount
+    || !serialized(recoveryProducer.Condition).includes("PublicationValidationRecoverySchedule")
+    || serialized(recoveryQueuePolicy).includes("sqs:GetQueue")) {
+    throw new InfrastructurePolicyError("publication recovery schedule must have an exact EventBridge SendMessage queue policy");
+  }
+  const dlqAlarm = Object.entries(resources).find(([logicalId, resource]) =>
+    logicalId.startsWith("PublicationValidationDlqVisibleMessagesAlarm")
+      && resource.Type === "AWS::CloudWatch::Alarm",
+  );
+  if (dlqAlarm === undefined) {
+    throw new InfrastructurePolicyError("publication validation DLQ requires an operator alarm");
+  }
+
+  const apiText = serialized(policyByPrefix(resources, "PrivateApiPolicy").Properties?.PolicyDocument);
+  const portalText = serialized(policyByPrefix(resources, "PortalDeliveryPolicy").Properties?.PolicyDocument);
+  const workerText = serialized(policyByPrefix(resources, "PublicationValidationPolicy").Properties?.PolicyDocument);
+  if (!apiText.includes("server/published/quarantine/v1/*")
+    || !apiText.includes("s3:PutObject")
+    || apiText.includes("server/published/active/v1/")
+    || /s3:Delete|s3:List/u.test(apiText)) {
+    throw new InfrastructurePolicyError("private API publication authority must be quarantine-write only");
+  }
+  if (!portalText.includes("server/published/active/v1/*")
+    || !portalText.includes("s3:GetObjectVersion")
+    || portalText.includes("server/published/quarantine/v1/")
+    || /s3:PutObject|s3:Delete|s3:List/u.test(portalText)) {
+    throw new InfrastructurePolicyError("portal publication authority must be exact-version active-read only");
+  }
+  if (!workerText.includes("server/published/quarantine/v1/*")
+    || !workerText.includes("server/published/active/v1/*")
+    || !workerText.includes("s3:GetObjectVersion")
+    || !workerText.includes("s3:PutObject")
+    || /ProjectSyncBucket|ActiveBucket|BackupBucket|s3:Delete|s3:List/u.test(workerText)) {
+    throw new InfrastructurePolicyError("publication worker object authority must be exact and non-destructive");
   }
 }
 
@@ -501,6 +619,8 @@ function assertRuntimeDatabaseLanes(
     "roomscan_audit_export_runtime",
     "roomscan_email_delivery_runtime",
     "roomscan_project_sync_runtime",
+    "roomscan_publication_worker",
+    "roomscan_portal_runtime",
   ]);
   const usernames = ofType(resources, "AWS::SecretsManager::Secret").flatMap((secret) => {
     const generated = secret.Properties?.GenerateSecretString;
@@ -514,7 +634,7 @@ function assertRuntimeDatabaseLanes(
   });
   if (!sameStrings(usernames, expectedUsernames) || usernames.includes("roomscan_app")) {
     throw new InfrastructurePolicyError(
-      "database credentials require exactly eight separated runtime roles plus the owner",
+      "database credentials require exactly ten separated runtime roles plus the owner",
     );
   }
 
@@ -527,6 +647,8 @@ function assertRuntimeDatabaseLanes(
     ["-audit-exporter", ["roomscan_audit_export_runtime", "AuditExportDatabaseSecret"]],
     ["-email-delivery", ["roomscan_email_delivery_runtime", "EmailDeliveryDatabaseSecret"]],
     ["-project-sync-validation", ["roomscan_project_sync_runtime", "ProjectSyncDatabaseSecret"]],
+    ["-publication-validation", ["roomscan_publication_worker", "PublicationWorkerDatabaseSecret"]],
+    ["-portal-delivery", ["roomscan_portal_runtime", "PortalDatabaseSecret"]],
   ] as const);
   const functions = ofType(resources, "AWS::Lambda::Function");
   for (const [functionSuffix, [runtimeRole, secretMarker]] of expectedLanes) {
@@ -565,6 +687,8 @@ function assertRuntimeDatabaseLanes(
     migrationVariables.DB_NAME !== "roomscan" ||
     migrationVariables.MIGRATION_MANIFEST_SHA256 === undefined ||
     !serialized(migrationVariables.RUNTIME_ROLE_SECRET_ARNS_JSON).includes("roomscan_project_sync_runtime") ||
+    !serialized(migrationVariables.RUNTIME_ROLE_SECRET_ARNS_JSON).includes("roomscan_publication_worker") ||
+    !serialized(migrationVariables.RUNTIME_ROLE_SECRET_ARNS_JSON).includes("roomscan_portal_runtime") ||
     migrationVariables.DB_CLUSTER_ARN !== undefined ||
     migrationVariables.ROOMSCAN_DB_ROLE_SECRET_ARN !== undefined ||
     migrationVariables.DB_RUNTIME_SECRET_ARN !== undefined
@@ -580,7 +704,7 @@ function assertRuntimeDatabaseLanes(
   const stripePolicy = policyByPrefix(resources, "StripeIngressPolicy");
   const apiSerialized = serialized(apiPolicy.Properties?.PolicyDocument);
   const stripeSerialized = serialized(stripePolicy.Properties?.PolicyDocument);
-  if (/ActiveBucket|PublishedDerivativeBucket/u.test(apiSerialized)) {
+  if (/ActiveBucket/u.test(apiSerialized) || /s3:GetObject/u.test(apiSerialized.match(/PublishedDerivativeBucket[^}]+/u)?.[0] ?? "")) {
     throw new InfrastructurePolicyError("API must not read legacy active or published object storage");
   }
   for (const marker of [
@@ -598,8 +722,8 @@ function assertRuntimeDatabaseLanes(
 
 function assertLambdaBoundary(resources: Readonly<Record<string, CloudFormationResource>>): void {
   const functions = ofType(resources, "AWS::Lambda::Function");
-  if (functions.length !== 10) {
-    throw new InfrastructurePolicyError("exactly ten separated application Lambda functions are required");
+  if (functions.length !== 12) {
+    throw new InfrastructurePolicyError("exactly twelve separated application Lambda functions are required");
   }
   if (functions.some((fn) => fn.Properties?.Runtime !== "nodejs24.x")) {
     throw new InfrastructurePolicyError("every application Lambda must target nodejs24.x");
@@ -692,6 +816,8 @@ function assertKmsUsageBoundary(
     ["StripeReconciliationPolicy", ["QueuesKey", "arn:aws:kms:us-east-1:"]],
     ["AuditExporterPolicy", ["AuditKey"]],
     ["ProjectSyncValidationPolicy", ["AssetsKey", "ProjectSyncQueuesKey"]],
+    ["PublicationValidationPolicy", ["AssetsKey", "QueuesKey"]],
+    ["PortalDeliveryPolicy", ["AssetsKey", "QueuesKey"]],
   ] as const;
   for (const [logicalPrefix, keyReferences] of requiredPolicyReferences) {
     const entry = Object.entries(resources).find(
@@ -930,7 +1056,7 @@ function assertCognitoFederationBoundary(
 function assertHttpApi(resources: Readonly<Record<string, CloudFormationResource>>): void {
   const integrations = ofType(resources, "AWS::ApiGatewayV2::Integration");
   if (
-    integrations.length !== 2 ||
+    integrations.length !== 3 ||
     integrations.some((integration) => integration.Properties?.PayloadFormatVersion !== "2.0")
   ) {
     throw new InfrastructurePolicyError("HTTP API integrations must use payload format 2.0");
@@ -942,13 +1068,13 @@ function assertHttpApi(resources: Readonly<Record<string, CloudFormationResource
   }
   const routes = ofType(resources, "AWS::ApiGatewayV2::Route");
   const expected = new Map<string, "NONE" | "CUSTOM">(
-    SLICE5_ROUTE_MANIFEST.map((route) => [
+    SLICE6_ROUTE_MANIFEST.map((route) => [
       `${route.method} ${route.pathTemplate.replace(/:([A-Za-z][A-Za-z0-9_]*)/gu, "{$1}")}`,
-      route.authorization.kind === "public" ? "NONE" : "CUSTOM",
+      route.authorization.kind === "session" || route.authorization.kind === "workspace" ? "CUSTOM" : "NONE",
     ] as const),
   );
   if (routes.length !== expected.size) {
-    throw new InfrastructurePolicyError("HTTP API requires exactly the canonical Slice 5 route manifest");
+    throw new InfrastructurePolicyError("HTTP API requires exactly the canonical Slice 6 route manifest");
   }
   for (const route of routes) {
     const properties = route.Properties ?? {};
@@ -973,6 +1099,7 @@ function assertRecoverySchedules(resources: Readonly<Record<string, CloudFormati
     "audit-outbox-recovery",
     "email-delivery-recovery",
     "project-sync-validation-recovery",
+    "publication-validation-recovery",
   ] as const) {
     const rule = rules.find((candidate) =>
       typeof candidate.Properties?.Name === "string" && candidate.Properties.Name.endsWith(suffix));
@@ -1054,4 +1181,4 @@ function serialized(value: unknown): string {
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-import { SLICE5_ROUTE_MANIFEST } from "roomscan-studio-hosted-service/contracts";
+import { SLICE6_ROUTE_MANIFEST } from "roomscan-studio-hosted-service/contracts";

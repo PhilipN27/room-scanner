@@ -393,6 +393,45 @@ final class ProfessionalBoundaryTests: XCTestCase {
         )
     }
 
+    func testProductionProfessionalSignedUploadScrubsQueryBeforeObserverAndIO() async throws {
+        let observer = RecordingProfessionalTransportObserver(shouldBlock: true)
+        let configuration = URLSessionConfiguration.ephemeral
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let transport = FoundationProfessionalHTTPTransport(
+            session: session,
+            observerFactory: .observing(observer)
+        )
+        let uploadURL = try XCTUnwrap(
+            URL(string: "https://objects.invalid/publication/archive?X-Amz-Signature=upload-canary#fragment-canary")
+        )
+        let observedURL = try XCTUnwrap(
+            URL(string: "https://objects.invalid/publication/archive")
+        )
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "publication-upload-observer-\(UUID().uuidString).zip"
+        )
+        try Data("bounded-public-archive".utf8).write(to: fileURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        do {
+            _ = try await transport.uploadFile(
+                at: fileURL,
+                to: uploadURL,
+                method: "PUT",
+                headers: ["Content-Type": "application/zip"]
+            )
+            XCTFail("The injected observer must stop the upload before URLSession I/O.")
+        } catch is TestProfessionalTransportBlocked {
+            // Expected: observation occurs before I/O and contains no query capability.
+        }
+
+        XCTAssertEqual(
+            observer.attempts,
+            [ProfessionalTransportAttempt(url: observedURL, method: "PUT")]
+        )
+    }
+
     func testSuccessfulUnlockUsesEvaluationAfterPreflightAndFreshContextPerAttempt() async {
         let first = RecordingDeviceAuthenticationContext(
             preflight: .available,

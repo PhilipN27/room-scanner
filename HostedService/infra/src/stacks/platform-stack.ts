@@ -44,9 +44,10 @@ import type { Construct } from "constructs";
 
 import { assertPlatformConfigResourceArns, type PlatformConfig } from "../config.js";
 import {
-  SLICE5_ROUTE_MANIFEST,
-  type SealedRoute,
+  SLICE6_ROUTE_MANIFEST,
+  type Slice6ManifestRoute,
 } from "roomscan-studio-hosted-service/contracts";
+import { slice6RouteRootFor } from "roomscan-studio-hosted-service/publication";
 
 export interface RoomScanPlatformStackProps extends StackProps {
   readonly config: PlatformConfig;
@@ -83,6 +84,8 @@ interface QueueBoundary {
   readonly emailDeliveryDlq: sqs.Queue;
   readonly projectSyncValidation: sqs.Queue;
   readonly projectSyncValidationDlq: sqs.Queue;
+  readonly publicationValidation: sqs.Queue;
+  readonly publicationValidationDlq: sqs.Queue;
 }
 
 interface DatabaseBoundary {
@@ -99,12 +102,15 @@ interface DatabaseBoundary {
     auditExport: secretsmanager.ISecret;
     emailDelivery: secretsmanager.ISecret;
     projectSync: secretsmanager.ISecret;
+    publicationWorker: secretsmanager.ISecret;
+    portal: secretsmanager.ISecret;
   }>;
   readonly applicationSecrets: Readonly<{
     accessTokenDigest: secretsmanager.Secret;
     apiTokenDerivation: secretsmanager.Secret;
     authChallengeProof: secretsmanager.Secret;
     magicDeliveryEnvelope: secretsmanager.Secret;
+    publicationFeedbackEnvelope: secretsmanager.Secret;
   }>;
 }
 
@@ -216,6 +222,9 @@ export class RoomScanPlatformStack extends Stack {
         QUARANTINE_BUCKET_NAME: buckets.quarantine.bucketName,
         PROJECT_SYNC_BUCKET_NAME: buckets.projectSync.bucketName,
         PROJECT_SYNC_VALIDATION_QUEUE_URL: queues.projectSyncValidation.queueUrl,
+        PUBLISHED_BUCKET_NAME: buckets.published.bucketName,
+        PUBLICATION_VALIDATION_QUEUE_URL: queues.publicationValidation.queueUrl,
+        PORTAL_ORIGIN: `https://${config.serviceDomain}`,
         AUDIT_OUTBOX_QUEUE_URL: queues.auditOutbox.queueUrl,
         AUTH_POLICY_VERSION: "slice4-local-test-v1",
         MAGIC_POLICY_VERSION: "slice4-local-test-v1",
@@ -259,6 +268,13 @@ export class RoomScanPlatformStack extends Stack {
           resources: [buckets.projectSync.arnForObjects("server/quarantine/v1/*")],
         }),
         new iam.PolicyStatement({
+          // Publication allocation is write-only at this root. The worker
+          // captures the provider version and the portal root alone reads
+          // promoted bytes.
+          actions: ["s3:PutObject"],
+          resources: [buckets.published.arnForObjects("server/published/quarantine/v1/*")],
+        }),
+        new iam.PolicyStatement({
           // Exact-version recovery signer only. It cannot read quarantine,
           // list a prefix, select a current project object, or retrieve the
           // separately opted-in raw tier.
@@ -273,6 +289,7 @@ export class RoomScanPlatformStack extends Stack {
             queues.auditOutbox.queueArn,
             queues.emailDelivery.queueArn,
             queues.projectSyncValidation.queueArn,
+            queues.publicationValidation.queueArn,
           ]
         }),
         this.kmsUseStatement(keys.assets.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
@@ -430,11 +447,14 @@ export class RoomScanPlatformStack extends Stack {
         ROOMSCAN_DB_RUNTIME_ROLE: "roomscan_email_delivery_runtime",
         MAGIC_DELIVERY_ENVELOPE_SECRET_ARN: database.applicationSecrets.magicDeliveryEnvelope.secretArn,
         MAGIC_DELIVERY_KEY_ID: config.magicDeliveryKeyId,
+        PUBLICATION_FEEDBACK_ENVELOPE_SECRET_ARN: database.applicationSecrets.publicationFeedbackEnvelope.secretArn,
+        PUBLICATION_FEEDBACK_KEY_ID: "publication-feedback-v1",
         PUBLIC_BASE_URL: `https://${config.serviceDomain}`,
         SES_SENDER_ADDRESS: config.ses.senderAddress,
         SES_IDENTITY_ARN: config.ses.identityArn,
         SES_CONFIGURATION_SET_NAME: config.ses.configurationSetName,
-        SES_MAGIC_LINK_TEMPLATE_NAME: `roomscan-${config.stage}-magic-link`
+        SES_MAGIC_LINK_TEMPLATE_NAME: `roomscan-${config.stage}-magic-link`,
+        SES_FEEDBACK_TEMPLATE_NAME: `roomscan-${config.stage}-publication-feedback`,
       },
       [
         ...this.dataApiStatements(
@@ -448,12 +468,17 @@ export class RoomScanPlatformStack extends Stack {
           database.applicationSecrets.magicDeliveryEnvelope.secretArn,
           keys.secrets.keyArn,
         ),
+        ...this.secretReadStatements(
+          config,
+          database.applicationSecrets.publicationFeedbackEnvelope.secretArn,
+          keys.secrets.keyArn,
+        ),
         new iam.PolicyStatement({
           actions: ["ses:SendEmail"],
           resources: [config.ses.identityArn, this.sesConfigurationSetArn(config)]
         })
       ],
-      "Dedicated targetless magic-link delivery worker",
+      "Dedicated targetless magic-link and verified-feedback delivery worker",
     );
     emailDeliveryUnit.fn.node.addDependency(sesConfigurationSet);
 
@@ -501,6 +526,108 @@ export class RoomScanPlatformStack extends Stack {
       {
         timeout: Duration.seconds(30),
         memorySize: 1_024,
+        reservedConcurrentExecutions: 1,
+      },
+    );
+
+    const portalDeliveryUnit = this.createFunction(
+      config,
+      keys.logs,
+      keys.secrets,
+      alarmTopic,
+      "PortalDelivery",
+      "portal-delivery",
+      "portal-delivery.ts",
+      {
+        DB_CLUSTER_ARN: database.cluster.clusterArn,
+        ROOMSCAN_DB_ROLE_SECRET_ARN: database.runtimeSecrets.portal.secretArn,
+        ROOMSCAN_DB_RUNTIME_ROLE: "roomscan_portal_runtime",
+        ACCESS_TOKEN_HMAC_SECRET_ARN: database.applicationSecrets.accessTokenDigest.secretArn,
+        PUBLICATION_FEEDBACK_ENVELOPE_SECRET_ARN: database.applicationSecrets.publicationFeedbackEnvelope.secretArn,
+        PUBLICATION_FEEDBACK_KEY_ID: "publication-feedback-v1",
+        PUBLISHED_BUCKET_NAME: buckets.published.bucketName,
+        MAGIC_DELIVERY_QUEUE_URL: queues.emailDelivery.queueUrl,
+        PORTAL_ORIGIN: `https://${config.serviceDomain}`,
+        PORTAL_ASSET_DIRECTORY: "/var/task/portal-assets",
+      },
+      [
+        ...this.dataApiStatements(
+          config,
+          database.cluster,
+          database.runtimeSecrets.portal,
+          keys.secrets,
+        ),
+        ...this.secretReadStatements(
+          config,
+          database.applicationSecrets.accessTokenDigest.secretArn,
+          keys.secrets.keyArn,
+        ),
+        ...this.secretReadStatements(
+          config,
+          database.applicationSecrets.publicationFeedbackEnvelope.secretArn,
+          keys.secrets.keyArn,
+        ),
+        new iam.PolicyStatement({
+          // Only database-authorized exact versions beneath the active
+          // publication prefix can be streamed. There is no current-object,
+          // quarantine, list, write, delete, or presign authority.
+          actions: ["s3:GetObjectVersion"],
+          resources: [buckets.published.arnForObjects("server/published/active/v1/*")],
+        }),
+        new iam.PolicyStatement({
+          actions: ["sqs:SendMessage"],
+          resources: [queues.emailDelivery.queueArn],
+        }),
+        this.kmsUseStatement(keys.assets.keyArn, ["kms:Decrypt"]),
+        this.kmsUseStatement(keys.queues.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
+      ],
+      "Revocation-aware private portal shell, capability routes, and exact-version byte delivery",
+      {
+        timeout: Duration.seconds(30),
+        memorySize: 1_024,
+        commandHooks: this.portalBundleCommandHooks(),
+      },
+    );
+
+    const publicationValidationUnit = this.createFunction(
+      config,
+      keys.logs,
+      keys.secrets,
+      alarmTopic,
+      "PublicationValidation",
+      "publication-validation",
+      "publication-validation.ts",
+      {
+        DB_CLUSTER_ARN: database.cluster.clusterArn,
+        ROOMSCAN_DB_ROLE_SECRET_ARN: database.runtimeSecrets.publicationWorker.secretArn,
+        ROOMSCAN_DB_RUNTIME_ROLE: "roomscan_publication_worker",
+        PUBLISHED_BUCKET_NAME: buckets.published.bucketName,
+      },
+      [
+        ...this.dataApiStatements(
+          config,
+          database.cluster,
+          database.runtimeSecrets.publicationWorker,
+          keys.secrets,
+        ),
+        new iam.PolicyStatement({
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [
+            buckets.published.arnForObjects("server/published/quarantine/v1/*"),
+            buckets.published.arnForObjects("server/published/active/v1/*"),
+          ],
+        }),
+        new iam.PolicyStatement({
+          actions: ["s3:PutObject"],
+          resources: [buckets.published.arnForObjects("server/published/active/v1/*")],
+        }),
+        this.kmsUseStatement(keys.assets.keyArn, ["kms:Decrypt", "kms:GenerateDataKey"]),
+        this.kmsUseStatement(keys.queues.keyArn, ["kms:Decrypt"]),
+      ],
+      "Targetless immutable publication validation and allowlisted derivative promotion worker",
+      {
+        timeout: Duration.seconds(120),
+        memorySize: 2_048,
         reservedConcurrentExecutions: 1,
       },
     );
@@ -573,6 +700,8 @@ export class RoomScanPlatformStack extends Stack {
           roomscan_audit_export_runtime: database.runtimeSecrets.auditExport.secretArn,
           roomscan_email_delivery_runtime: database.runtimeSecrets.emailDelivery.secretArn,
           roomscan_project_sync_runtime: database.runtimeSecrets.projectSync.secretArn,
+          roomscan_publication_worker: database.runtimeSecrets.publicationWorker.secretArn,
+          roomscan_portal_runtime: database.runtimeSecrets.portal.secretArn,
         })
       },
       [
@@ -643,8 +772,10 @@ export class RoomScanPlatformStack extends Stack {
     this.attachQueueConsumer(auditExporterUnit, queues.auditOutbox);
     this.attachQueueConsumer(emailDeliveryUnit, queues.emailDelivery);
     this.attachQueueConsumer(projectSyncValidationUnit, queues.projectSyncValidation, { batchSize: 1 });
+    this.attachQueueConsumer(publicationValidationUnit, queues.publicationValidation, { batchSize: 1 });
     this.createQueueRecoverySchedules(config, queues);
     this.createProjectSyncValidationSchedule(config, queues.projectSyncValidation);
+    this.createPublicationValidationSchedule(config, queues.publicationValidation);
     const identity = this.createIdentityBoundary(config, authChallengeUnit.alias);
     apiUnit.fn.addEnvironment("COGNITO_USER_POOL_ID", identity.userPool.userPoolId);
     apiUnit.fn.addEnvironment("COGNITO_SERVER_CLIENT_ID", identity.customAuthClient.userPoolClientId);
@@ -664,6 +795,7 @@ export class RoomScanPlatformStack extends Stack {
       alarmTopic,
       authorizerUnit.alias,
       apiUnit.alias,
+      portalDeliveryUnit.alias,
       stripeIngressUnit.alias,
     );
 
@@ -671,6 +803,7 @@ export class RoomScanPlatformStack extends Stack {
     this.createQueueAlarm("AuditOutboxDlq", queues.auditOutboxDlq, alarmTopic);
     this.createQueueAlarm("EmailDeliveryDlq", queues.emailDeliveryDlq, alarmTopic);
     this.createQueueAlarm("ProjectSyncValidationDlq", queues.projectSyncValidationDlq, alarmTopic);
+    this.createQueueAlarm("PublicationValidationDlq", queues.publicationValidationDlq, alarmTopic);
     this.createDatabaseAlarm(database.cluster, alarmTopic);
     this.createOutputs(config, buckets, database, queues);
   }
@@ -791,6 +924,15 @@ export class RoomScanPlatformStack extends Stack {
     // source-account binding prevents another account from using this CMK.
     keys.projectSyncQueues.addToResourcePolicy(new iam.PolicyStatement({
       sid: "AllowProjectSyncValidationEventBridgeEncryption",
+      principals: [new iam.ServicePrincipal("events.amazonaws.com")],
+      actions: ["kms:Decrypt", "kms:GenerateDataKey"],
+      resources: ["*"],
+      conditions: {
+        StringEquals: { "aws:SourceAccount": config.accountId },
+      },
+    }));
+    keys.queues.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "AllowPublicationValidationEventBridgeEncryption",
       principals: [new iam.ServicePrincipal("events.amazonaws.com")],
       actions: ["kms:Decrypt", "kms:GenerateDataKey"],
       resources: ["*"],
@@ -938,6 +1080,30 @@ export class RoomScanPlatformStack extends Stack {
       "server/published/",
       keys.assets,
     );
+    published.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyPublishedWritesOutsideImmutableNamespaces",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:PutObject"],
+      notResources: [
+        published.arnForObjects("server/published/quarantine/v1/*"),
+        published.arnForObjects("server/published/active/v1/*"),
+      ],
+    }));
+    published.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyPublishedDerivativeObjectDeletion",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:DeleteObject", "s3:DeleteObjectVersion"],
+      resources: [published.arnForObjects("*")],
+    }));
+    published.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "DenyPublishedDerivativeBucketDeletion",
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      actions: ["s3:DeleteBucket"],
+      resources: [published.bucketArn],
+    }));
     const backup = create("BackupBucket", "backup", "server/backup/", keys.database);
     const audit = create(
       "AuditBucket",
@@ -1110,6 +1276,12 @@ export class RoomScanPlatformStack extends Stack {
       projectSync: this.generatedDatabaseSecret(
         "ProjectSyncDatabaseSecret", "roomscan_project_sync_runtime", config, keys.secrets,
       ),
+      publicationWorker: this.generatedDatabaseSecret(
+        "PublicationWorkerDatabaseSecret", "roomscan_publication_worker", config, keys.secrets,
+      ),
+      portal: this.generatedDatabaseSecret(
+        "PortalDatabaseSecret", "roomscan_portal_runtime", config, keys.secrets,
+      ),
     } as const;
     const applicationSecrets = {
       accessTokenDigest: this.generatedApplicationSecret(
@@ -1135,7 +1307,13 @@ export class RoomScanPlatformStack extends Stack {
         "magic-delivery-aes-256-gcm-v1",
         config,
         keys.secrets,
-      )
+      ),
+      publicationFeedbackEnvelope: this.generatedApplicationSecret(
+        "PublicationFeedbackEnvelopeSecret",
+        "publication-feedback-aes-256-gcm-v1",
+        config,
+        keys.secrets,
+      ),
     } as const;
 
     const clusterIdentifier = `roomscan-${config.stage}`;
@@ -1185,6 +1363,8 @@ export class RoomScanPlatformStack extends Stack {
       auditExport: runtimeSecrets.auditExport.attach(cluster),
       emailDelivery: runtimeSecrets.emailDelivery.attach(cluster),
       projectSync: runtimeSecrets.projectSync.attach(cluster),
+      publicationWorker: runtimeSecrets.publicationWorker.attach(cluster),
+      portal: runtimeSecrets.portal.attach(cluster),
     } as const;
     return {
       vpc,
@@ -1321,6 +1501,24 @@ export class RoomScanPlatformStack extends Stack {
       deadLetterQueue: { queue: projectSyncValidationDlq, maxReceiveCount: 5 },
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    const publicationValidationDlq = new sqs.Queue(this, "PublicationValidationDlq", {
+      queueName: `roomscan-${config.stage}-publication-validation-dlq`,
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: encryptionKey,
+      enforceSSL: true,
+      retentionPeriod: Duration.days(14),
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    const publicationValidation = new sqs.Queue(this, "PublicationValidationQueue", {
+      queueName: `roomscan-${config.stage}-publication-validation`,
+      encryption: sqs.QueueEncryption.KMS,
+      encryptionMasterKey: encryptionKey,
+      enforceSSL: true,
+      retentionPeriod: Duration.days(4),
+      visibilityTimeout: Duration.seconds(180),
+      deadLetterQueue: { queue: publicationValidationDlq, maxReceiveCount: 5 },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
     return {
       reconciliation,
       reconciliationDlq,
@@ -1330,6 +1528,8 @@ export class RoomScanPlatformStack extends Stack {
       emailDeliveryDlq,
       projectSyncValidation,
       projectSyncValidationDlq,
+      publicationValidation,
+      publicationValidationDlq,
     };
   }
 
@@ -1402,6 +1602,32 @@ export class RoomScanPlatformStack extends Stack {
     }));
   }
 
+  private createPublicationValidationSchedule(config: PlatformConfig, queue: sqs.Queue): void {
+    const rule = new events.Rule(this, "PublicationValidationRecoverySchedule", {
+      ruleName: `roomscan-${config.stage}-publication-validation-recovery`,
+      description: "Targetless immutable publication-validation wake; PostgreSQL claims remain authoritative",
+      enabled: true,
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+    });
+    rule.addTarget({
+      bind: () => ({
+        arn: queue.queueArn,
+        input: events.RuleTargetInput.fromText("roomscan-publication-validation-wake-v1"),
+        targetResource: queue,
+      }),
+    });
+    queue.addToResourcePolicy(new iam.PolicyStatement({
+      sid: "AllowExactPublicationValidationRecoveryWake",
+      principals: [new iam.ServicePrincipal("events.amazonaws.com")],
+      actions: ["sqs:SendMessage"],
+      resources: [queue.queueArn],
+      conditions: {
+        ArnEquals: { "aws:SourceArn": rule.ruleArn },
+        StringEquals: { "aws:SourceAccount": config.accountId },
+      },
+    }));
+  }
+
   private createSesBoundary(config: PlatformConfig, notificationTopic: sns.Topic): ses.CfnConfigurationSet {
     const configurationSet = new ses.CfnConfigurationSet(this, "SesConfigurationSet", {
       name: config.ses.configurationSetName,
@@ -1442,6 +1668,24 @@ export class RoomScanPlatformStack extends Stack {
       resourceName: config.ses.configurationSetName,
       arnFormat: ArnFormat.SLASH_RESOURCE_NAME
     });
+  }
+
+  private portalBundleCommandHooks(): ICommandHooks {
+    const webOutput = resolve(process.cwd(), "../web/dist");
+    const assetNames = ["asset-manifest.json", "portal.css", "portal.js"] as const;
+    for (const name of assetNames) readFileSync(resolve(webOutput, name));
+    return {
+      beforeInstall: () => [],
+      beforeBundling: () => [],
+      afterBundling: (_inputDirectory, outputDirectory) => {
+        const destination = `${outputDirectory}/portal-assets`;
+        return [
+          `mkdir -p ${shellQuote(destination)}`,
+          ...assetNames.map((name) =>
+            `cp ${shellQuote(resolve(webOutput, name))} ${shellQuote(`${destination}/${name}`)}`),
+        ];
+      },
+    };
   }
 
   private migrationBundleCommandHooks(): ICommandHooks {
@@ -1761,6 +2005,7 @@ export class RoomScanPlatformStack extends Stack {
     alarmTopic: sns.ITopic,
     authorizerAlias: lambda.IAlias,
     apiAlias: lambda.IAlias,
+    portalAlias: lambda.IAlias,
     stripeAlias: lambda.IAlias,
   ): void {
     const accessLogGroup = this.createEncryptedLogGroup(
@@ -1816,15 +2061,25 @@ export class RoomScanPlatformStack extends Stack {
         timeout: Duration.seconds(15)
       },
     );
-    for (const route of SLICE5_ROUTE_MANIFEST) {
-      const isStripe = route.id === "stripe.webhook";
+    const portalIntegration = new apigatewayv2Integrations.HttpLambdaIntegration(
+      "PortalDeliveryIntegration",
+      portalAlias,
+      {
+        payloadFormatVersion: apigatewayv2.PayloadFormatVersion.VERSION_2_0,
+        timeout: Duration.seconds(29),
+      },
+    );
+    for (const route of SLICE6_ROUTE_MANIFEST) {
+      const root = slice6RouteRootFor(route.id);
+      const usesLegacyAuthorizer = route.authorization.kind === "session"
+        || route.authorization.kind === "workspace";
       httpApi.addRoutes({
         path: this.httpApiPath(route),
         methods: [route.method === "GET" ? apigatewayv2.HttpMethod.GET : apigatewayv2.HttpMethod.POST],
-        integration: isStripe ? stripeIntegration : apiIntegration,
-        authorizer: route.authorization.kind === "public"
-          ? new apigatewayv2.HttpNoneAuthorizer()
-          : authorizer
+        integration: root === "stripe" ? stripeIntegration
+          : root === "portal-delivery" ? portalIntegration
+            : apiIntegration,
+        authorizer: usesLegacyAuthorizer ? authorizer : new apigatewayv2.HttpNoneAuthorizer(),
       });
     }
 
@@ -1844,7 +2099,7 @@ export class RoomScanPlatformStack extends Stack {
     });
   }
 
-  private httpApiPath(route: SealedRoute): string {
+  private httpApiPath(route: Slice6ManifestRoute): string {
     return route.pathTemplate.replace(/:([A-Za-z][A-Za-z0-9_]*)/gu, "{$1}");
   }
 
@@ -1937,10 +2192,13 @@ export class RoomScanPlatformStack extends Stack {
       ["AuditExportDatabaseSecretArn", database.runtimeSecrets.auditExport.secretArn],
       ["EmailDeliveryDatabaseSecretArn", database.runtimeSecrets.emailDelivery.secretArn],
       ["ProjectSyncDatabaseSecretArn", database.runtimeSecrets.projectSync.secretArn],
+      ["PublicationWorkerDatabaseSecretArn", database.runtimeSecrets.publicationWorker.secretArn],
+      ["PortalDatabaseSecretArn", database.runtimeSecrets.portal.secretArn],
       ["StripeReconciliationQueueArn", queues.reconciliation.queueArn],
       ["AuditOutboxQueueArn", queues.auditOutbox.queueArn],
       ["EmailDeliveryQueueArn", queues.emailDelivery.queueArn],
       ["ProjectSyncValidationQueueArn", queues.projectSyncValidation.queueArn],
+      ["PublicationValidationQueueArn", queues.publicationValidation.queueArn],
     ] as const) {
       new CfnOutput(this, name, { value });
     }
@@ -1960,8 +2218,8 @@ function expectedMigrationLedger(): readonly Readonly<{
   const names = readdirSync(directory)
     .filter((name) => /^\d{4}_[a-z0-9_]+\.up\.sql$/u.test(name))
     .sort();
-  if (names.length !== 8 || names.some((name, index) => name.slice(0, 4) !== String(index + 1).padStart(4, "0"))) {
-    throw new Error("expected the exact forward-only 0001-0008 migration set");
+  if (names.length !== 9 || names.some((name, index) => name.slice(0, 4) !== String(index + 1).padStart(4, "0"))) {
+    throw new Error("expected the exact forward-only 0001-0009 migration set");
   }
   return Object.freeze(names.map((name) => Object.freeze({
     version: name.slice(0, 4),

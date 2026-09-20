@@ -74,6 +74,13 @@ struct ProfessionalLocalConfiguration: Equatable, Sendable {
 struct ProfessionalLocalProjectAccess {
     let libraryController: RoomLibraryController
     let aiRedesignModelFactory: RoomAIRedesignModelFactory
+    /// This URL is inert until an explicitly entered, signed-in, locally
+    /// unlocked publication review asks for it. Guest launch never opens the
+    /// journal or constructs a hosted publication transport.
+    let professionalSyncJournalRoot: URL
+    /// Separate from the frozen Slice 5 journal. It remains inert until a
+    /// signed-in owner explicitly enters publication review.
+    let publicationOperationJournalRoot: URL
 }
 
 @MainActor
@@ -82,6 +89,7 @@ struct ProfessionalProjectSyncWorkspaceDependencies {
     let libraryController: RoomLibraryController
     let actionContext: ProfessionalProjectSyncActionContext
     let isSessionUnlocked: @MainActor () -> Bool
+    let makePublicationReviewModel: @MainActor (String) async throws -> RoomPublicationReviewModel
 }
 
 /// Configured builds install this closure without invoking it. It is the sole
@@ -91,6 +99,22 @@ struct ProfessionalProjectSyncWorkspaceDependencies {
 typealias ProfessionalProjectSyncServiceBuilder = @MainActor (
     ProfessionalLocalProjectAccess
 ) throws -> ProfessionalProjectSyncService
+
+/// This builder is intentionally separate from project sync. It is invoked
+/// only after explicit professional entry, committed sign-in, local unlock,
+/// and a later publication-sensitive confirmation. Guest/default-off launch
+/// never constructs its hosted transport.
+typealias ProfessionalPublicationServiceBuilder = @MainActor (
+    ProfessionalLocalProjectAccess,
+    any PublicationSourceIdentityResolving
+) throws -> any RoomPublicationServicing
+
+@MainActor
+struct ProfessionalPublicationWorkspaceDependencies {
+    let service: any RoomPublicationServicing
+    let inputFactory: RoomPublicationInputFactory
+    let confirmSensitiveAction: RoomPublicationReviewModel.SensitiveActionConfirmation
+}
 
 enum ProfessionalEntryState: Equatable, Sendable {
     case notEntered
@@ -119,7 +143,10 @@ final class ProfessionalEnvironment {
     let magicLinkCompletion: MagicLinkCompletionCoordinator?
     let projectSyncActionContext: ProfessionalProjectSyncActionContext?
     private let makeProjectSyncService: ProfessionalProjectSyncServiceBuilder?
+    private let makePublicationService: ProfessionalPublicationServiceBuilder?
     private var projectSyncService: ProfessionalProjectSyncService?
+    private var publicationService: (any RoomPublicationServicing)?
+    private var publicationIdentityResolver: (any PublicationSourceIdentityResolving)?
 
     init(
         availabilityClient: any ProfessionalAvailabilityClient,
@@ -130,7 +157,8 @@ final class ProfessionalEnvironment {
         remoteConfigurationClient: (any ProfessionalRemoteConfigurationClient)? = nil,
         magicLinkCompletion: MagicLinkCompletionCoordinator? = nil,
         projectSyncActionContext: ProfessionalProjectSyncActionContext? = nil,
-        makeProjectSyncService: ProfessionalProjectSyncServiceBuilder? = nil
+        makeProjectSyncService: ProfessionalProjectSyncServiceBuilder? = nil,
+        makePublicationService: ProfessionalPublicationServiceBuilder? = nil
     ) {
         self.availabilityClient = availabilityClient
         self.sessionClient = sessionClient
@@ -141,6 +169,7 @@ final class ProfessionalEnvironment {
         self.magicLinkCompletion = magicLinkCompletion
         self.projectSyncActionContext = projectSyncActionContext
         self.makeProjectSyncService = makeProjectSyncService
+        self.makePublicationService = makePublicationService
     }
 
     func handleLifecycle(_ event: ProfessionalLifecycleEvent) {
@@ -150,6 +179,10 @@ final class ProfessionalEnvironment {
 
     var hasConstructedProjectSyncService: Bool {
         projectSyncService != nil
+    }
+
+    var hasConstructedPublicationService: Bool {
+        publicationService != nil
     }
 
     func professionalProjectSyncService(
@@ -162,6 +195,45 @@ final class ProfessionalEnvironment {
         let created = try makeProjectSyncService(access)
         projectSyncService = created
         return created
+    }
+
+    func professionalPublicationService(
+        access: ProfessionalLocalProjectAccess
+    ) throws -> any RoomPublicationServicing {
+        if let publicationService { return publicationService }
+        guard let makePublicationService else {
+            throw RoomPublicationTransportError.unavailable
+        }
+        let resolver = try publicationSourceIdentityResolver(access: access)
+        let created = try makePublicationService(access, resolver)
+        publicationService = created
+        return created
+    }
+
+    func publicationSourceIdentityResolver(
+        access: ProfessionalLocalProjectAccess
+    ) throws -> any PublicationSourceIdentityResolving {
+        let resolver: any PublicationSourceIdentityResolving
+        if let publicationIdentityResolver {
+            resolver = publicationIdentityResolver
+        } else {
+            let journal = try ProfessionalProjectSyncJournal(
+                rootURL: access.professionalSyncJournalRoot
+            )
+            let created = PublicationSourceIdentityResolver(
+                journal: journal,
+                currentSource: { projectID in
+                    let package = try await access.libraryController.loadPackage(projectID: projectID)
+                    return try await access.libraryController.redesignSourceBinding(
+                        projectID: projectID,
+                        revisionID: package.manifest.headRevisionID
+                    )
+                }
+            )
+            publicationIdentityResolver = created
+            resolver = created
+        }
+        return resolver
     }
 }
 
@@ -191,6 +263,7 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
     private var activeSignInID: UUID?
     private var activeSignInTask: Task<ProfessionalPreparedSession, Error>?
     private var activeMagicOperationID: UUID?
+    private var hasCommittedProfessionalSession = false
 
     init(
         localConfiguration: ProfessionalLocalConfiguration,
@@ -221,6 +294,10 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
 
     var hasConstructedProjectSyncService: Bool {
         environment?.hasConstructedProjectSyncService ?? false
+    }
+
+    var hasConstructedPublicationService: Bool {
+        environment?.hasConstructedPublicationService ?? false
     }
 
     /// App composition may supply already-created offline stores. This is not
@@ -260,7 +337,70 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
             actionContext: actionContext,
             isSessionUnlocked: { [weak self] in
                 self?.refreshProtectedState() == true
+            },
+            makePublicationReviewModel: { [weak self] projectID in
+                guard let self else { throw RoomPublicationTransportError.unavailable }
+                return try await self.makePublicationReviewModel(projectID: projectID)
             }
+        )
+    }
+
+    /// Produces the native review model only from a professional session that
+    /// was explicitly entered, signed in, and locally unlocked. The input
+    /// factory owns the public-only derivation and has no hosted mutation or
+    /// feedback capability.
+    func makePublicationReviewModel(
+        projectID: String
+    ) async throws -> RoomPublicationReviewModel {
+        guard case .available = state,
+              !isProtectedUIObscured,
+              hasCommittedProfessionalSession,
+              let environment,
+              let localProjectAccess
+        else { throw RoomPublicationTransportError.unavailable }
+        // Opening the publication review itself is a sensitive action. This
+        // is intentionally distinct from an ordinary workspace unlock and is
+        // repeated again for publish/revoke rather than becoming a durable
+        // capability.
+        guard case .success = await requestLocalUnlock(purpose: .sensitiveAction),
+              case .available = state,
+              !isProtectedUIObscured,
+              hasCommittedProfessionalSession
+        else { throw RoomPublicationTransportError.unavailable }
+        let dependencies = ProfessionalPublicationWorkspaceDependencies(
+            service: try environment.professionalPublicationService(
+                access: localProjectAccess
+            ),
+            inputFactory: .init(
+                controller: localProjectAccess.libraryController,
+                aiRedesignModelFactory: localProjectAccess.aiRedesignModelFactory,
+                sourceIdentityResolver: try environment.publicationSourceIdentityResolver(
+                    access: localProjectAccess
+                ),
+                // This is a local read-only capability over an already
+                // finalized AI-ready archive; it cannot construct a hosted
+                // client or make the guest/default-off path eager.
+                aiReadyPackageProvider: localProjectAccess.aiRedesignModelFactory
+            ),
+            confirmSensitiveAction: { [weak self] in
+                guard let self else { return false }
+                if case .success = await self.requestLocalUnlock(
+                    purpose: .sensitiveAction
+                ) {
+                    return true
+                }
+                return false
+            }
+        )
+        return RoomPublicationReviewModel(
+            inputProvider: { options in
+                try await dependencies.inputFactory.makeInput(
+                    projectID: projectID,
+                    options: options
+                )
+            },
+            service: dependencies.service,
+            confirmSensitiveAction: dependencies.confirmSensitiveAction
         )
     }
 
@@ -423,6 +563,7 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
                 plaintext: preparedSession.plaintextMaterial,
                 wrapped: preparedSession.wrappedMaterial
             )
+            hasCommittedProfessionalSession = true
             return .started
         } catch {
             environment.sessionClient.discardPreparedSession(
@@ -485,6 +626,7 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
                 plaintext: prepared.plaintextMaterial,
                 wrapped: prepared.wrappedMaterial
             )
+            hasCommittedProfessionalSession = true
             do {
                 try completion.acknowledgeCommittedCompletion()
             } catch {
@@ -526,6 +668,7 @@ final class ProfessionalEnvironmentFactory: ObservableObject {
         invalidateActiveSignIn(in: environment, advanceEpoch: advanceEpoch)
         environment.sessionClient.clearCommittedSessionMaterial()
         environment.deviceAuthentication.clearProfessionalMaterialAndRequireUnlock()
+        hasCommittedProfessionalSession = false
         isProtectedUIObscured = true
     }
 

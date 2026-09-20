@@ -346,3 +346,81 @@ data events, alarm delivery, quota reconciliation, and alias/flag rollback.
 Physical-device Face ID/passcode and background-transfer behavior are separate.
 No local test or synthesized template is live provider, deployment, credential,
 retention, billing, or release evidence.
+
+## Slice 6 publication and portal operations addendum — 2026-08-31
+
+This is a pre-provisioning procedure. It does not authorize deployment,
+provider configuration, real email, DNS/CDN work, credentials, or customer
+data.
+
+### Normal state and signals
+
+Publication is default off until a separately authorized release gate. When
+enabled, monitor allocation age/state, targetless validation queue and DLQ,
+worker claim/reap/rejection counts, immutable promotion/finalization failures,
+link exchange/PIN cooldown outcomes, active-session denial, protected chunk
+bytes and portal quota, feedback outbox age/cancel/send outcomes, and coarse
+access-history volume. Logs and alarms must never contain link/PIN/session/CSRF/
+verification/email secrets, share or signed URLs, raw IP/user agent, comments,
+room names, filenames, object keys/versions, archive paths, request bodies, or
+content bytes.
+
+### Publication incident containment
+
+For suspected disclosure, validator escape, link leak, revocation failure,
+cross-tenant access, injection, feedback abuse, quota drift, or provider
+inconsistency:
+
+1. Set `publication_enabled=false` globally. Apply the workspace flag as an
+   additional tenant containment boundary when appropriate; do not rely on UI
+   hiding or short object-URL expiry.
+2. Confirm that snapshot allocation/completion, link exchange/PIN, snapshot
+   reads, feedback verification/append, downloads, professional asset reads,
+   and every portal asset chunk now deny. Reuse an already-open synthetic
+   session and previously valid asset request as the immediate-revocation
+   positive control.
+3. Confirm guest scan/save/view/edit/export/import, private CloudKit behavior,
+   and authorized Slice 5 private sync/export/recovery still work. Do not set
+   `hosted_operations_enabled=false` unless the private hosted lane is also
+   implicated.
+4. Disable the publication validation event source and targetless schedule if
+   worker processing is implicated. Preserve database rows, queue/DLQ messages,
+   immutable object versions, reservations, access history, and audit evidence.
+5. Inspect only public IDs, bounded state/rejection codes, digests, and provider
+   inventory through approved privacy-safe tooling. Never download quarantine
+   bytes into an ordinary support workstation or serve quarantine as active.
+6. Restore only after same-tenant allow/cross-tenant deny, injected-forbidden
+   closure, live revoke, kill-during-publication, protected post-read finalizer,
+   feedback capability, stored-injection, quota, and exact IAM namespace
+   controls pass on the candidate artifact.
+
+Do not roll back migration `0009`, edit a snapshot/asset/link/feedback row by
+hand, delete object versions, reuse a link generation, clear the native journal,
+or replay a queue message with client-selected coordinates. Forward correction,
+flags, worker disablement, and alias rollback are the safe rollback points.
+
+### Interrupted publication and recovery
+
+- `allocated` without upload/complete: reconcile the exact `pua_` and server
+  expiry; do not allocate under changed source/selection/approval input.
+- completion acknowledged but wake lost: the targetless scheduled worker may
+  claim the durable pending row. API messages never contain object coordinates.
+- expired validation lease: reclaim under database server order and rebind the
+  exact quarantine version before reading.
+- active copies before finalization or lost response after finalization: retry
+  the same operation identity; immutable writes and finalizer are idempotent.
+- native interruption before/after property, allocation, snapshot, link, or
+  revoke response: retain the marker-owned publication sidecar, rebuild the
+  deterministic archive from the same current reviewed input, and resume the
+  exact public ID/idempotency key. Any source or selection drift fails closed.
+
+### External evidence still required
+
+Before enablement, extend the authorized non-production packet with synthetic
+live Data API/RLS/contention, S3 version/namespace/delete-deny, KMS, SQS/Lambda
+redrive and targetless recovery, API Gateway cookie/header/binary behavior,
+email pre-send revocation, CloudTrail data events, alarm delivery, and global/
+workspace flag rollback. A physical iPhone/iPad must cover local unlock and
+background/resume. A real-browser provider should repeat desktop/mobile
+accessibility and revocation. No production price, load, retention cleanup, or
+Slice 7 lifecycle claim belongs in this gate.

@@ -84,7 +84,85 @@ const slice5Routes: readonly SealedRoute[] = deepFreeze([
 ]);
 export const SLICE5_ROUTE_SET_VERSION = "roomscan-slice5-routes-v1" as const;
 export const SLICE5_ROUTE_MANIFEST: readonly SealedRoute[] = slice5Routes;
-export function routeKey(route: Pick<SealedRoute, "method" | "pathTemplate">): string { return `${route.method} ${route.pathTemplate}`; }
+
+/** Slice 6 deliberately has a separate capability vocabulary.  Keeping it out
+ * of `RouteAuthorization` prevents the frozen Slice 4/5 normalizer from ever
+ * treating a browser cookie or a portal grant as an app bearer. */
+export type Slice6RouteAuthorization =
+  | Readonly<{ readonly kind: "public" }>
+  | Readonly<{ readonly kind: "app-bearer" }>
+  | Readonly<{ readonly kind: "professional"; readonly csrf: boolean; readonly action?: AuthorizationAction }>
+  /** Browser-only delivery privilege. It deliberately has no app-bearer
+   * alternative, because this route is served by the PortalDelivery root. */
+  | Readonly<{ readonly kind: "professional-cookie"; readonly action: AuthorizationAction }>
+  | Readonly<{ readonly kind: "portal-link" }>
+  | Readonly<{ readonly kind: "portal-pending-pin" }>
+  | Readonly<{ readonly kind: "portal-session" }>
+  | Readonly<{ readonly kind: "feedback-verification" }>;
+
+export interface Slice6Route {
+  readonly id: string;
+  readonly method: "GET" | "POST";
+  readonly pathTemplate: string;
+  readonly authorization: Slice6RouteAuthorization;
+  /**
+   * Slice 6 has intentionally no `fields` member.  The pre-Slice-6
+   * normalizer only understands flat scalar request fields and must remain
+   * unable to interpret browser cookies, a portal grant, or the nested
+   * immutable source-binding proof.  The publication entrypoint owns this
+   * small, closed JSON vocabulary instead.
+   */
+  readonly request: Readonly<{ readonly body: "none" | "json"; readonly maximumBytes: number }>;
+  readonly responseKind: "json" | "portal-html" | "binary";
+}
+export type Slice6ManifestRoute = SealedRoute | Slice6Route;
+
+const slice6None = deepFreeze({ body: "none", maximumBytes: 0 } as const);
+const slice6Json = (maximumBytes = 16_384) => deepFreeze({ body: "json", maximumBytes } as const);
+const publicationRoutes: readonly Slice6Route[] = deepFreeze([
+  { id: "professional.session.exchange", method: "POST", pathTemplate: "/professional/session/exchange", authorization: { kind: "app-bearer" }, request: slice6None, responseKind: "json" },
+  { id: "professional.session.logout", method: "POST", pathTemplate: "/professional/session/logout", authorization: { kind: "professional", csrf: true }, request: slice6None, responseKind: "json" },
+  { id: "professional.properties.list", method: "POST", pathTemplate: "/professional/properties/list", authorization: { kind: "professional", csrf: false, action: "project.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "professional.properties.upsert", method: "POST", pathTemplate: "/professional/properties/upsert", authorization: { kind: "professional", csrf: true, action: "project.revise" }, request: slice6Json(32_768), responseKind: "json" },
+  { id: "professional.concepts.list", method: "POST", pathTemplate: "/professional/concepts/list", authorization: { kind: "professional", csrf: false, action: "project.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "professional.members.list", method: "POST", pathTemplate: "/professional/members/list", authorization: { kind: "professional", csrf: false, action: "member.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.snapshot.allocate", method: "POST", pathTemplate: "/publications/snapshots/allocate", authorization: { kind: "professional", csrf: true, action: "publication.create" }, request: slice6Json(131_072), responseKind: "json" },
+  { id: "publication.snapshot.complete", method: "POST", pathTemplate: "/publications/snapshots/complete", authorization: { kind: "professional", csrf: true, action: "publication.create" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.snapshot.status", method: "POST", pathTemplate: "/publications/snapshots/status", authorization: { kind: "professional", csrf: false, action: "publication.record.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.snapshot.list", method: "POST", pathTemplate: "/publications/snapshots/list", authorization: { kind: "professional", csrf: false, action: "publication.record.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.link.create", method: "POST", pathTemplate: "/publications/links/create", authorization: { kind: "professional", csrf: true, action: "publication.update" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.link.update", method: "POST", pathTemplate: "/publications/links/update", authorization: { kind: "professional", csrf: true, action: "publication.update" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.link.revoke", method: "POST", pathTemplate: "/publications/links/revoke", authorization: { kind: "professional", csrf: true, action: "publication.revoke" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.link.list", method: "POST", pathTemplate: "/publications/links/list", authorization: { kind: "professional", csrf: false, action: "publication.record.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.feedback.list", method: "POST", pathTemplate: "/publications/feedback/list", authorization: { kind: "professional", csrf: false, action: "publication.record.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.access-history.list", method: "POST", pathTemplate: "/publications/access-history/list", authorization: { kind: "professional", csrf: false, action: "access_history.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.downloads.list", method: "POST", pathTemplate: "/publications/downloads/list", authorization: { kind: "professional", csrf: false, action: "publication.record.read" }, request: slice6Json(), responseKind: "json" },
+  { id: "publication.asset.read", method: "POST", pathTemplate: "/publications/assets/read", authorization: { kind: "professional-cookie", action: "publication.record.read" }, request: slice6Json(), responseKind: "binary" },
+  { id: "portal.shell.get", method: "GET", pathTemplate: "/p", authorization: { kind: "public" }, request: slice6None, responseKind: "portal-html" },
+  { id: "portal.link.exchange", method: "POST", pathTemplate: "/portal/link/exchange", authorization: { kind: "portal-link" }, request: slice6None, responseKind: "json" },
+  { id: "portal.pin.verify", method: "POST", pathTemplate: "/portal/pin/verify", authorization: { kind: "portal-pending-pin" }, request: slice6Json(), responseKind: "json" },
+  { id: "portal.snapshot.get", method: "POST", pathTemplate: "/portal/snapshot", authorization: { kind: "portal-session" }, request: slice6None, responseKind: "json" },
+  { id: "portal.asset.read", method: "POST", pathTemplate: "/portal/asset", authorization: { kind: "portal-session" }, request: slice6Json(), responseKind: "binary" },
+  { id: "portal.feedback.verification.request", method: "POST", pathTemplate: "/portal/feedback/verification/request", authorization: { kind: "portal-session" }, request: slice6Json(), responseKind: "json" },
+  { id: "portal.feedback.verification.consume", method: "POST", pathTemplate: "/portal/feedback/verification/consume", authorization: { kind: "portal-session" }, request: slice6Json(), responseKind: "json" },
+  { id: "portal.feedback.create", method: "POST", pathTemplate: "/portal/feedback", authorization: { kind: "feedback-verification" }, request: slice6Json(), responseKind: "json" },
+]);
+export const SLICE6_ROUTE_SET_VERSION = "roomscan-slice6-routes-v1" as const;
+/** Append-only: the first 29 objects are the exact frozen Slice 5 objects. */
+export const SLICE6_ROUTE_MANIFEST: readonly Slice6ManifestRoute[] = deepFreeze([...SLICE5_ROUTE_MANIFEST, ...publicationRoutes]);
+
+export function assertSealedSlice6Manifest(): void {
+  assertSealedSlice5Manifest();
+  if (SLICE6_ROUTE_MANIFEST.length !== 55 || SLICE6_ROUTE_MANIFEST.slice(0, 29).some((route, index) => route !== SLICE5_ROUTE_MANIFEST[index])) throw new Error("unsealed_route");
+  const ids = new Set<string>(); const keys = new Set<string>();
+  for (const route of SLICE6_ROUTE_MANIFEST) {
+    if (ids.has(route.id) || keys.has(routeKey(route))) throw new Error("unsealed_route");
+    ids.add(route.id); keys.add(routeKey(route));
+  }
+  const required = ["professional.session.exchange", "publication.snapshot.allocate", "publication.link.revoke", "publication.asset.read", "portal.shell.get", "portal.link.exchange", "portal.asset.read", "portal.feedback.create"];
+  if (required.some((id) => !ids.has(id))) throw new Error("unsealed_route");
+}
+export function routeKey(route: Pick<SealedRoute | Slice6Route, "method" | "pathTemplate">): string { return `${route.method} ${route.pathTemplate}`; }
 export function assertSealedManifest(): void {
   const ids = new Set<string>(); const keys = new Set<string>();
   for (const route of SLICE4_ROUTE_MANIFEST) { if (ids.has(route.id) || keys.has(routeKey(route))) throw new Error("duplicate_route"); ids.add(route.id); keys.add(routeKey(route)); if (route.authorization.kind === "workspace" && route.authorization.action === "member.read" && route.authorization.resourceResolver === "none") throw new Error("unsealed_route"); if (route.id === "apple.finish" && route.executionLane !== "apple-api-exchange-cognito-challenge-session") throw new Error("unsealed_route"); if (route.id === "session.refresh" && route.executionLane !== "session-refresh-hash-rotation") throw new Error("unsealed_route"); }

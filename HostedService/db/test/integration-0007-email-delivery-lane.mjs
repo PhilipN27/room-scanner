@@ -21,7 +21,7 @@ const deliveryRoutines = [
   'roomscan.cancel_magic_delivery(text,text,text,timestamp with time zone)',
   'roomscan.release_magic_delivery(text,text,timestamp with time zone)',
 ];
-const expectedEmailExecute = [
+const expectedSlice5EmailExecute = [
   'roomscan.accept_provider_audit_event(text, text, text, text, timestamp with time zone)',
   'roomscan.cancel_magic_delivery(text, text, text, timestamp with time zone)',
   'roomscan.claim_magic_delivery(text, text, timestamp with time zone, timestamp with time zone)',
@@ -30,6 +30,27 @@ const expectedEmailExecute = [
   'roomscan.release_magic_delivery(text, text, timestamp with time zone)',
   'roomscan.validate_magic_delivery(text, text, timestamp with time zone)',
 ];
+const feedbackV3DeliveryRoutines = [
+  'roomscan.cancel_feedback_delivery_v3(text, text, text, timestamp with time zone)',
+  'roomscan.claim_next_feedback_delivery_v3(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.complete_feedback_delivery_v3(text, text, timestamp with time zone)',
+  'roomscan.release_feedback_delivery_v3(text, text, timestamp with time zone)',
+  'roomscan.validate_feedback_delivery_v3(text, text, timestamp with time zone)',
+];
+const feedbackDeliveryRuntimeGuard =
+  'roomscan.publication_require_feedback_delivery_runtime_v2()';
+const supersededFeedbackRuntimeRoutines = [
+  'roomscan.claim_next_feedback_delivery_v2(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.claim_feedback_delivery_v2(text, timestamp with time zone, timestamp with time zone)',
+  'roomscan.validate_feedback_delivery_v2(text, text, timestamp with time zone)',
+  'roomscan.complete_feedback_delivery_v2(text, text, timestamp with time zone)',
+  'roomscan.cancel_feedback_delivery_v2(text, text, text, timestamp with time zone)',
+  'roomscan.release_feedback_delivery_v2(text, text, timestamp with time zone)',
+];
+const expectedEmailExecute = [
+  ...expectedSlice5EmailExecute,
+  ...feedbackV3DeliveryRoutines,
+].sort();
 
 let selectorSequence = 0;
 async function insertDelivery({
@@ -209,6 +230,18 @@ try {
       ORDER BY routine`,
   )).rows.map(({ routine }) => routine);
   assert.deepEqual(emailExecute, expectedEmailExecute);
+  assert.deepEqual(
+    emailExecute.filter((routine) => expectedSlice5EmailExecute.includes(routine)),
+    expectedSlice5EmailExecute,
+    'Slice 6 feedback delivery must not displace any frozen Slice 5 email capability',
+  );
+  assert.deepEqual(
+    emailExecute.filter((routine) => feedbackV3DeliveryRoutines.includes(routine)),
+    feedbackV3DeliveryRoutines,
+    'the only additive email reducers are the sealed Slice 6 v3 lifecycle',
+  );
+  assert.equal(emailExecute.includes(feedbackDeliveryRuntimeGuard), false,
+    'the email role reaches the identity guard only inside policy-owned lifecycle reducers');
 
   const directPrivileges = Number((await bootstrapPool.query(
     `SELECT count(*)::integer AS count
@@ -219,7 +252,7 @@ try {
   )).rows[0].count);
   assert.equal(directPrivileges, 0);
 
-  for (const routine of deliveryRoutines) {
+  for (const routine of [...deliveryRoutines, ...feedbackV3DeliveryRoutines]) {
     for (const roleName of [
       'roomscan_api_runtime', 'roomscan_authorizer_runtime',
       'roomscan_auth_challenge_runtime', 'roomscan_stripe_ingress_runtime',
@@ -231,6 +264,33 @@ try {
         [roleName, routine],
       )).rows[0].allowed, false, `${roleName} can execute ${routine}`);
     }
+  }
+
+  for (const routine of supersededFeedbackRuntimeRoutines) {
+    assert.equal((await bootstrapPool.query(
+      `SELECT to_regprocedure($1) IS NOT NULL AS exists`, [routine],
+    )).rows[0].exists, true, `missing superseded routine ${routine}`);
+    for (const roleName of [
+      'roomscan_email_delivery_runtime', 'roomscan_api_runtime',
+      'roomscan_portal_runtime', 'roomscan_publication_worker', 'roomscan_app',
+    ]) {
+      assert.equal((await bootstrapPool.query(
+        `SELECT has_function_privilege($1, $2, 'EXECUTE') AS allowed`,
+        [roleName, routine],
+      )).rows[0].allowed, false,
+      `${roleName} can execute superseded feedback reducer ${routine}`);
+    }
+  }
+
+  // The v2-named helper is an internal identity guard used only by
+  // policy-owned lifecycle reducers. No runtime can invoke it directly;
+  // session_user still identifies the email runtime inside the definer call.
+  for (const [label, pool] of [['api', apiPool], ['email', emailPool]]) {
+    await assert.rejects(
+      () => pool.query(`SELECT roomscan.publication_require_feedback_delivery_runtime_v2()`),
+      (error) => error?.code === '42501',
+      `${label} runtime must not execute the internal feedback identity guard directly`,
+    );
   }
 
   await assert.rejects(
@@ -552,7 +612,10 @@ try {
 
   console.log(
     'INTEGRATION_0007_EMAIL_DELIVERY_SUMMARY dirty_role_rejected=1 role_controls=9 '
-      + 'exact_execute_routines=7 exclusive_delivery_acl_pairs=48 runtime_denials=2 '
+      + 'slice5_execute_routines=7 slice6_v3_execute_routines=5 '
+      + 'internal_runtime_guard=1 exact_execute_routines=12 '
+      + 'exclusive_delivery_acl_pairs=88 superseded_runtime_denials=30 '
+      + 'guard_rejections=1 runtime_denials=2 '
       + 'wake_loss_recovery=1 claim_next_race_winners=1 claim_next_race_losers=1 '
       + 'lease_validation_controls=4 lease_takeover_controls=4 '
       + 'expired_cleanup=1 presend_expiry_controls=3 release_cancel_controls=4 '

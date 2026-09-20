@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SLICE5_ROUTE_MANIFEST, type FieldRule } from "roomscan-studio-hosted-service/contracts";
+import { SLICE5_ROUTE_MANIFEST, SLICE6_ROUTE_MANIFEST, type FieldRule } from "roomscan-studio-hosted-service/contracts";
 
 import {
   LambdaRuntimeConfigurationError,
@@ -54,14 +54,20 @@ function environment(role: string, extra: Readonly<NodeJS.ProcessEnv> = {}): Nod
     AUDIT_OUTBOX_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-audit-outbox`,
     MAGIC_DELIVERY_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-email-delivery`,
     PROJECT_SYNC_VALIDATION_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-project-sync-validation`,
+    PUBLICATION_VALIDATION_QUEUE_URL: `https://sqs.us-east-1.amazonaws.com/${account}/roomscan-dev-publication-validation`,
     PROJECT_SYNC_BUCKET_NAME: "roomscan-dev-project-sync-111111111111",
+    PUBLISHED_BUCKET_NAME: "roomscan-dev-published-111111111111",
     AUDIT_BUCKET_NAME: "roomscan-dev-audit-111111111111",
     MAGIC_DELIVERY_KEY_ID: "magic-envelope-local-test-v1",
+    PUBLICATION_FEEDBACK_ENVELOPE_SECRET_ARN: secret("roomscan-publication-feedback-envelope"),
+    PUBLICATION_FEEDBACK_KEY_ID: "publication-feedback-local-test-v1",
     PUBLIC_BASE_URL: "https://api.example.invalid",
+    PORTAL_ORIGIN: "https://api.example.invalid",
     SES_SENDER_ADDRESS: "professional@example.invalid",
     SES_IDENTITY_ARN: `arn:aws:ses:us-east-1:${account}:identity/example.invalid`,
     SES_CONFIGURATION_SET_NAME: "roomscan-transactional-dev",
     SES_MAGIC_LINK_TEMPLATE_NAME: "roomscan-dev-magic-link",
+    SES_FEEDBACK_TEMPLATE_NAME: "roomscan-dev-publication-feedback",
     QUARANTINE_BUCKET_NAME: "roomscan-dev-quarantine-111111111111",
     ...extra,
   };
@@ -94,6 +100,7 @@ function fakeRuntime(observed: { readonly roles: string[]; readonly secrets: Arr
     reconciliationWorker: () => ({ runOnce: async () => ({ status: "retry" as const, reason: "ambiguous_current_state" as const }) }),
     auditExporterWorker: () => ({ handleRecord: async (record) => record.messageId !== "audit-fail" }),
     magicDeliveryWorker: () => ({ handleRecord: async (record) => record.messageId !== "email-fail" }),
+    feedbackDeliveryWorker: () => ({ handleRecord: async () => true }),
     wake: () => ({ notify: async () => undefined }),
   };
 }
@@ -171,7 +178,7 @@ test("reconciliation accepts synthetic price plans only for dev and validates th
   assert.deepEqual(adapterObserved.roles, ["roomscan_stripe_reconciliation_runtime"]);
 });
 
-test("API root composes the frozen Slice 4 handler with every protected Slice 5 project-sync route on the API lane", async () => {
+test("API root composes the frozen Slice 4 handler with every protected Slice 5 and private Slice 6 route on the API lane", async () => {
   const observed = { roles: [] as string[], secrets: [] as Array<readonly [string, string]> };
   const handler = await createApiRoot(environment("roomscan_api_runtime"), fakeRuntime(observed));
   const response = await handler({
@@ -194,6 +201,17 @@ test("API root composes the frozen Slice 4 handler with every protected Slice 5 
     // A valid request reaches the Slice 5 protected-route authorization
     // boundary. A legacy-only root would return 404 before it reaches 401.
     assert.equal(response.statusCode, 401, route.id);
+  }
+  for (const route of SLICE6_ROUTE_MANIFEST.slice(29, 45)) {
+    const response = await handler({
+      version: "2.0",
+      rawPath: route.pathTemplate,
+      rawQueryString: "",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+      requestContext: { http: { method: route.method } },
+    });
+    assert.ok([400, 401, 403].includes(response.statusCode), `${route.id}: ${response.statusCode}`);
   }
   assert.deepEqual(observed.roles, ["roomscan_api_runtime"]);
   assert.deepEqual(observed.secrets, [
@@ -272,5 +290,8 @@ test("Stripe, reconciliation, audit, and email roots use their exact lanes and p
     batchItemFailures: [{ itemIdentifier: "email-fail" }],
   });
   assert.deepEqual(emailObserved.roles, ["roomscan_email_delivery_runtime"]);
-  assert.deepEqual(emailObserved.secrets, [[secret("roomscan-magic-envelope"), "key"]]);
+  assert.deepEqual(emailObserved.secrets, [
+    [secret("roomscan-magic-envelope"), "key"],
+    [secret("roomscan-publication-feedback-envelope"), "key"],
+  ]);
 });

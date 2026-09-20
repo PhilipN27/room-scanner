@@ -16,8 +16,26 @@ const assetsManifest = JSON.parse(assetsManifestBytes.toString("utf8"));
 const lambdaAssets = Object.values(assetsManifest.files)
   .filter((file) => file.source.packaging === "zip")
   .sort((left, right) => left.displayName.localeCompare(right.displayName));
-if (lambdaAssets.length !== 10) {
-  throw new Error(`expected exactly ten Lambda assets, found ${lambdaAssets.length}`);
+const expectedLambdaAssetNames = [
+  "AppAuthorizationFunction/Code",
+  "AuditExporterFunction/Code",
+  "AuthChallengesFunction/Code",
+  "CloudTrailStatusMonitorFunction/Code",
+  "EmailDeliveryFunction/Code",
+  "MigrationOperatorFunction/Code",
+  "PortalDeliveryFunction/Code",
+  "PrivateApiFunction/Code",
+  "ProjectSyncValidationFunction/Code",
+  "PublicationValidationFunction/Code",
+  "StripeIngressFunction/Code",
+  "StripeReconciliationFunction/Code"
+];
+const actualLambdaAssetNames = lambdaAssets.map((asset) => asset.displayName);
+if (JSON.stringify(actualLambdaAssetNames) !== JSON.stringify(expectedLambdaAssetNames)) {
+  throw new Error(
+    `Lambda asset closure diverged: expected=${expectedLambdaAssetNames.join(",")}; `
+      + `actual=${actualLambdaAssetNames.join(",") || "none"}`,
+  );
 }
 const manifestAssetDirectories = lambdaAssets.map((asset) => asset.source.path).sort();
 const outputAssetEntries = readdirSync(outputDirectory, { withFileTypes: true })
@@ -49,7 +67,8 @@ const migrationNames = [
   "0005_hardened_reducers.up.sql",
   "0006_auth_persistence.up.sql",
   "0007_policy_billing_integration.up.sql",
-  "0008_professional_project_sync.up.sql"
+  "0008_professional_project_sync.up.sql",
+  "0009_publication_portal.up.sql"
 ];
 const migrationAssetFiles = [
   "index.mjs",
@@ -58,6 +77,13 @@ const migrationAssetFiles = [
   "migration-assets/migration-manifest.json",
   ...migrationNames.map((name) => `migration-assets/migrations/${name}`),
   "migration-assets/rds-global-bundle.pem"
+].sort();
+const portalAssetFiles = [
+  "index.mjs",
+  "index.mjs.map",
+  "portal-assets/asset-manifest.json",
+  "portal-assets/portal.css",
+  "portal-assets/portal.js"
 ].sort();
 
 const forbiddenPatterns = [
@@ -83,13 +109,17 @@ const artifacts = [
 let inspectedCloudTrailStatusMonitor = false;
 let inspectedMigrationOperator = false;
 let inspectedProjectSyncValidation = false;
-let inspectedSlice5Api = false;
+let inspectedPublicationValidation = false;
+let inspectedPortalDelivery = false;
+let inspectedPrivateApi = false;
 for (const asset of lambdaAssets) {
   const directory = join(outputDirectory, asset.source.path);
   const files = recursiveFiles(directory);
   const expectedFiles = asset.displayName === "MigrationOperatorFunction/Code"
     ? migrationAssetFiles
-    : ["index.mjs", "index.mjs.map"];
+    : asset.displayName === "PortalDeliveryFunction/Code"
+      ? portalAssetFiles
+      : ["index.mjs", "index.mjs.map"];
   if (
     JSON.stringify(files) !== JSON.stringify(expectedFiles) ||
     files.some((file) => file.includes("test"))
@@ -159,7 +189,9 @@ for (const asset of lambdaAssets) {
       "SecretsManagerClient",
       "maxUses: 1",
       "rejectUnauthorized: true",
-      "roomscan_project_sync_runtime"
+      "roomscan_project_sync_runtime",
+      "roomscan_publication_worker",
+      "roomscan_portal_runtime"
     ]) {
       if (!bundle.includes(symbol)) {
         throw new Error(`migration operator bundle lost required behavior: ${symbol}`);
@@ -167,16 +199,18 @@ for (const asset of lambdaAssets) {
     }
   }
   if (asset.displayName === "PrivateApiFunction/Code") {
-    inspectedSlice5Api = true;
+    inspectedPrivateApi = true;
     for (const symbol of [
       "createSlice5DataApiProjectSyncHandler",
       "slice5.project-sync-lease-hmac.v1",
       "PROJECT_SYNC_VALIDATION_QUEUE_URL",
       "roomscan-project-validation-wake-v1",
-      "presignExactDownload"
+      "presignExactDownload",
+      "createSlice6DataApiPublicationHandler",
+      "publication-validation-wake-v1"
     ]) {
       if (!bundle.includes(symbol)) {
-        throw new Error(`Slice 5 API bundle lost required project-sync behavior: ${symbol}`);
+        throw new Error(`Slice 5/6 private API bundle lost required behavior: ${symbol}`);
       }
     }
   }
@@ -205,6 +239,39 @@ for (const asset of lambdaAssets) {
       throw new Error("project-sync validation bundle must not log object, version, or queue payload data");
     }
   }
+  if (asset.displayName === "PublicationValidationFunction/Code") {
+    inspectedPublicationValidation = true;
+    for (const symbol of [
+      "createSlice6PublicationWorker",
+      "PublicationObjectAdapter",
+      "roomscan_publication_worker",
+      "roomscan-publication-validation-wake-v1"
+    ]) {
+      if (!bundle.includes(symbol)) {
+        throw new Error(`publication validation bundle lost required behavior: ${symbol}`);
+      }
+    }
+    if (/console\.(?:debug|error|info|log|warn)\(/u.test(bundle)) {
+      throw new Error("publication validation bundle must not log object, version, or queue payload data");
+    }
+  }
+  if (asset.displayName === "PortalDeliveryFunction/Code") {
+    inspectedPortalDelivery = true;
+    verifyPortalAssetBytes(directory);
+    for (const symbol of [
+      "createSlice6DataApiPortalDeliveryHandler",
+      "PublicationObjectAdapter",
+      "roomscan_portal_runtime",
+      "publication-feedback-delivery-wake-v1"
+    ]) {
+      if (!bundle.includes(symbol)) {
+        throw new Error(`portal delivery bundle lost required behavior: ${symbol}`);
+      }
+    }
+    if (/console\.(?:debug|error|info|log|warn)\(/u.test(bundle)) {
+      throw new Error("portal delivery bundle must not log link, session, feedback, or object data");
+    }
+  }
 }
 if (!inspectedCloudTrailStatusMonitor) {
   throw new Error("CloudTrail status monitor bundle was not present in the synthesized assets");
@@ -215,8 +282,14 @@ if (!inspectedMigrationOperator) {
 if (!inspectedProjectSyncValidation) {
   throw new Error("project-sync validation bundle was not present in the synthesized assets");
 }
-if (!inspectedSlice5Api) {
-  throw new Error("Slice 5 API bundle was not present in the synthesized assets");
+if (!inspectedPublicationValidation) {
+  throw new Error("publication validation bundle was not present in the synthesized assets");
+}
+if (!inspectedPortalDelivery) {
+  throw new Error("portal delivery bundle was not present in the synthesized assets");
+}
+if (!inspectedPrivateApi) {
+  throw new Error("Slice 5/6 private API bundle was not present in the synthesized assets");
 }
 
 const templateText = templateBytes.toString("utf8");
@@ -271,9 +344,11 @@ const inspection = {
   stripeRawEnvelopeBundle: "PASS",
   cloudTrailStatusMonitorBundle: "PASS",
   migrationOperatorBundle: "PASS",
-  migration0008AssetAndRuntimeRole: "PASS",
-  slice5ApiBundle: "PASS",
+  migration0009AssetAndRuntimeRoles: "PASS",
+  slice5And6PrivateApiBundle: "PASS",
   projectSyncValidationBundle: "PASS",
+  publicationValidationBundle: "PASS",
+  portalDeliveryBundle: "PASS",
   projectSyncOutputsNonSensitive: "PASS",
   artifacts
 };
@@ -321,7 +396,7 @@ function verifyMigrationAssetBytes(directory, synthesizedTemplate) {
     || parsedManifest.migrationRunner?.checksumSha256 !== createHash("sha256").update(sourceRunner).digest("hex")
     || !Array.isArray(parsedManifest.migrations)
     || parsedManifest.migrations.length !== migrationNames.length) {
-    throw new Error("migration manifest does not pin the exact runner and eight-file schema");
+    throw new Error("migration manifest does not pin the exact runner and nine-file schema");
   }
   for (const [index, name] of migrationNames.entries()) {
     const source = readFileSync(resolve("../db/migrations", name));
@@ -339,6 +414,14 @@ function verifyMigrationAssetBytes(directory, synthesizedTemplate) {
   assertEqualBytes("RDS CA bundle", bundledCa, sourceCa);
   if (createHash("sha256").update(sourceCa).digest("hex") !== "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3") {
     throw new Error("RDS CA bundle diverged from the pinned runtime hash");
+  }
+}
+
+function verifyPortalAssetBytes(directory) {
+  for (const name of ["asset-manifest.json", "portal.css", "portal.js"]) {
+    const source = readFileSync(resolve("../web/dist", name));
+    const bundled = readFileSync(join(directory, "portal-assets", name));
+    assertEqualBytes(`portal asset ${name}`, bundled, source);
   }
 }
 

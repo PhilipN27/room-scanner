@@ -497,3 +497,33 @@ screenshots, and call `verify_slice5_sync.py --finalize` last. See the
 [integrated verification record](Docs/evidence/2026-08-29-ai-redesign-slice-5-verification.md)
 binds the final commands, counts, mutations, screenshots, limitations, and
 rollback state.
+
+## Slice 6: reviewed publications and client portal
+
+Slice 6 adds explicit native review and recovery for immutable room and curated
+property publications. The no-install portal shows floor plans, room-local 3D
+orientation, dimensions, warnings, original/concept comparisons, and approved
+PDF/gallery/ZIP downloads. Property rooms remain spatially independent.
+
+Snapshots are built from a typed public allowlist with exact source, selection,
+approval, and archive bindings. Private notes, precise GPS, revision history,
+raw captures, diagnostics, and world maps are excluded. Client links support
+expiry, optional PINs, revocation, and verified accountless feedback. Every
+protected asset request rechecks live authorization. The professional browser
+provides property, concept, feedback, link, role, billing, history, and download
+management without capture or spatial editing.
+
+The service retains the exact Slice 4/5 route contracts and adds migration
+`0009` and a sealed 55-route Slice 6 surface. Publication is default-off and
+separate from guest/local workflows, private CloudKit backup, and professional
+project synchronization. Global and workspace publication switches deny new
+publication and active portal access when disabled.
+
+See the [Slice 6 plan](Docs/superpowers/plans/2026-08-30-ai-redesign-platform-slice-6.md),
+[v3 service contract](Docs/contracts/ai-redesign-service-contracts-v3.md), and
+[current closure record](Docs/evidence/2026-09-20-ai-redesign-slice-6-closure.md).
+Slice 6 is locally verified and formally closed as of 2026-09-20: all ten
+acceptance clauses pass, including 337/337 tests on each full native scheme.
+Local verification does not establish physical-device, mobile Safari,
+live-provider, deployment, or production-release behavior. Slice 7 lifecycle
+and release work remains separate.

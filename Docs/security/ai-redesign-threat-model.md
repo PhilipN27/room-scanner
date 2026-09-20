@@ -266,3 +266,42 @@ with restored passing controls. This is source/Simulator/disposable PostgreSQL
 background transfer and provider IAM/KMS/S3/SQS/Lambda/Data API/CloudTrail/
 alarm behavior remain explicit external gates. Publication and lifecycle
 threats remain Slice 6 and Slice 7 work respectively.
+
+## 2026-08-31 Slice 6 control-evidence addendum
+
+Slice 6 implements the publication threats in the table while leaving Slice 7
+deletion/retention work open. Production snapshot construction starts with an
+empty typed graph. Swift and TypeScript closure tests inject every forbidden
+field/artifact class; archive/media controls recompute real identities so raw
+archives, SVG/HTML, polyglots, EXIF GPS, private XMP, trailing data, renamed
+private material, and unledgered entries reach the live validator before being
+rejected. Checked room/property golden archives provide the allowed controls.
+
+PostgreSQL 16 controlled-clock and mutation suites cover same-tenant allow,
+cross-tenant denial, exact approval/source binding, expiry, correct and wrong
+PINs, brute-force cooldown/reset, hash-only credentials, active-session revoke,
+post-read asset finalization, portal quota, immutable feedback scope, feedback
+runtime ACLs, concurrent publication/flag locking, and the global/workspace
+publication kill switch. Feedback and portal runtime roles expose no project,
+revision, concept, membership, or geometry mutation capability.
+
+The service keeps PrivateApi and PortalDelivery as disjoint sealed roots. Link,
+session, PIN, CSRF, verification, email, signed-object, and free-form canaries
+are absent from structured audit/log/crash fixtures. A live post-read finalizer
+was temporarily removed and its focused test failed before restoration,
+demonstrating immediate revocation depends on that guard. Browser fragment
+scrubbing was likewise neutralized, observed red, restored, and rerun green.
+Infrastructure mutations enforce immutable published-object namespaces,
+delete/overwrite denial, exact runtime lanes, redrive policy, KMS path, and
+kill-switch wiring.
+
+Desktop/mobile browser interaction and screenshot evidence covers responsive
+floor plan, 3D/orientation, dimensions, warnings, comparison, property
+navigation, static fallback, Blob URL cleanup, keyboard/focus behavior, and
+stored-injection canaries. Native static controls caught and removed a second
+direct `URLSession`; publication now reuses the sole audited professional
+transport, which strips signed upload query credentials before observer/log
+seams. This is local synthetic/Simulator/disposable PostgreSQL evidence, not an
+independent audit or live provider assessment. Physical device, hosted browser
+provider, email, AWS/CDN/domain, credential, deployment, load, and release gates
+remain open.

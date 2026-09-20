@@ -140,7 +140,12 @@ class CommandPlanTests(unittest.TestCase):
                 "hosted service typecheck",
                 "hosted service security tests",
                 "hosted service build",
+                "professional web typecheck",
+                "professional web tests",
+                "professional web build",
+                "professional web integration",
                 "PostgreSQL 16 role and RLS integration",
+                "Slice 6 composed publication system chain",
                 "infrastructure typecheck",
                 "infrastructure assertions",
                 "infrastructure mutation controls",
@@ -159,6 +164,9 @@ class CommandPlanTests(unittest.TestCase):
             controls_step.command,
             ("python3", "-B", "Scripts/verify_slice4_static_controls.py"),
         )
+        web_steps = [step for step in plan if step.label.startswith("professional web")]
+        self.assertEqual({step.cwd for step in web_steps}, {ROOT / "HostedService" / "web"})
+        self.assertIn(("npm", "run", "test:integration"), [step.command for step in web_steps])
         self.assertNotIn(
             ("python3", "-B", "Scripts/verify_xcode_scaffold.py"),
             [step.command for step in plan],
@@ -195,6 +203,8 @@ class VerificationOrchestrationTests(unittest.TestCase):
             generated = [
                 root / "HostedService" / "dist",
                 root / "HostedService" / ".test-dist",
+                root / "HostedService" / "web" / "dist",
+                root / "HostedService" / "web" / ".test-dist",
                 root / "HostedService" / "infra" / "dist",
                 root / "HostedService" / "infra" / ".test-dist",
                 root / "HostedService" / "infra" / "cdk.out",

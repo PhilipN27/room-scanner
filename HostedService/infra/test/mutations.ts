@@ -406,6 +406,70 @@ const mutations: readonly {
       assert.ok(recovery !== undefined);
       recovery.Action = ["s3:GetObject", "s3:GetObjectVersion"];
     }
+  },
+  {
+    name: "published-derivative immutable object deletion deny removed",
+    expected: /published-derivative retention or namespace deny/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::S3::BucketPolicy", "PublishedDerivativeBucketPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: Array<Record<string, unknown>> };
+      document.Statement = document.Statement.filter(
+        (statement) => statement.Sid !== "DenyPublishedDerivativeObjectDeletion",
+      );
+    }
+  },
+  {
+    name: "private API gains published active-object read authority",
+    expected: /private API publication authority must be quarantine-write only/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::IAM::Policy", "PrivateApiPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: unknown[] };
+      document.Statement.push({
+        Action: "s3:GetObjectVersion",
+        Effect: "Allow",
+        Resource: {
+          "Fn::Join": ["", [{ "Fn::GetAtt": ["PublishedDerivativeBucketMutant", "Arn"] }, "/server/published/active/v1/*"]],
+        },
+      });
+    }
+  },
+  {
+    name: "portal delivery gains published write authority",
+    expected: /portal publication authority must be exact-version active-read only/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::IAM::Policy", "PortalDeliveryPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: unknown[] };
+      document.Statement.push({
+        Action: "s3:PutObject",
+        Effect: "Allow",
+        Resource: {
+          "Fn::Join": ["", [{ "Fn::GetAtt": ["PublishedDerivativeBucketMutant", "Arn"] }, "/server/published/active/v1/*"]],
+        },
+      });
+    }
+  },
+  {
+    name: "publication validation worker gains bucket discovery",
+    expected: /publication worker object authority must be exact and non-destructive/u,
+    mutate(template) {
+      const [, policy] = resourceEntry(template, "AWS::IAM::Policy", "PublicationValidationPolicy");
+      const document = policy.Properties!.PolicyDocument as { Statement: unknown[] };
+      document.Statement.push({
+        Action: "s3:ListBucket",
+        Effect: "Allow",
+        Resource: { "Fn::GetAtt": ["PublishedDerivativeBucketMutant", "Arn"] },
+      });
+    }
+  },
+  {
+    name: "publication validation queue redrive count weakened",
+    expected: /publication validation requires one bounded worker and a five-attempt encrypted queue/u,
+    mutate(template) {
+      const [, queue] = resourceEntry(template, "AWS::SQS::Queue", "PublicationValidationQueue");
+      const redrive = queue.Properties!.RedrivePolicy as Record<string, unknown>;
+      assert.ok(redrive !== null && typeof redrive === "object");
+      redrive.maxReceiveCount = 4;
+    }
   }
 ];
 

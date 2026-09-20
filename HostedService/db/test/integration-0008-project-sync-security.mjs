@@ -144,7 +144,7 @@ try {
       ? { migrationsDir: process.env.ROOMSCAN_TEST_MIGRATIONS_DIR }
       : {}),
   });
-  assert.equal(applied.applied.at(-1)?.version, '0008', 'security coverage needs the 0008 migration');
+  assert.equal(applied.applied.at(-1)?.version, '0009', 'security coverage needs the current additive 0009 migration chain');
   await seedCoreFixtures(bootstrapPool);
   await enableWorkspace(ids.workspaceA, 'a', true);
   await enableWorkspace(ids.workspaceB, 'b');

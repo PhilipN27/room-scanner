@@ -259,19 +259,24 @@ local drafts. Vendor adapters can be replaced behind app-owned contracts.
 **Outcome:** Deliver no-install interactive room/property presentations through
 privacy-minimized immutable snapshots.
 
-- [ ] Build snapshots from a schema allowlist and web-optimized bounded assets.
-- [ ] Support room-level and curated property-level portals without cross-room
+**Local status (2026-09-20): closed.** All ten acceptance clauses pass in the
+[formal closure record](../../evidence/2026-09-20-ai-redesign-slice-6-closure.md).
+Physical-device, live-provider, deployment, and release gates remain separate;
+publication stays default-off and Slice 7 has not started.
+
+- [x] Build snapshots from a schema allowlist and web-optimized bounded assets.
+- [x] Support room-level and curated property-level portals without cross-room
   spatial claims.
-- [ ] Implement interactive floor plan, 3D/orientation views, dimensions,
+- [x] Implement interactive floor plan, 3D/orientation views, dimensions,
   quality warnings, original/concept comparison, and static PDF/gallery/ZIP
   fallback.
-- [ ] Add 30-day default bearer links, owner-adjustable expiry, optional PIN,
+- [x] Add 30-day default bearer links, owner-adjustable expiry, optional PIN,
   immediate revocation, access history, and per-link AI-package download.
-- [ ] Add constrained logo/business/contact/accent branding with visible
+- [x] Add constrained logo/business/contact/accent branding with visible
   RoomScanStudio attribution.
-- [ ] Add verified accountless comments, Approve, and Request Changes as
+- [x] Add verified accountless comments, Approve, and Request Changes as
   audited feedback records that cannot mutate project truth.
-- [ ] Build lightweight professional web flows for properties, concepts,
+- [x] Build lightweight professional web flows for properties, concepts,
   feedback, links, roles, billing, history, and downloads.
 
 **Oracle:** Snapshot closure/allowlist tests prove raw frames, world maps,

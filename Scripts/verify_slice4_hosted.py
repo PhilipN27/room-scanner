@@ -32,6 +32,8 @@ SECRET_CANARY = "roomscan-secret-canary"
 GENERATED_OUTPUT_PATHS: tuple[tuple[str, ...], ...] = (
     ("HostedService", "dist"),
     ("HostedService", ".test-dist"),
+    ("HostedService", "web", "dist"),
+    ("HostedService", "web", ".test-dist"),
     ("HostedService", "infra", "dist"),
     ("HostedService", "infra", ".test-dist"),
     ("HostedService", "infra", "cdk.out"),
@@ -148,6 +150,7 @@ def command_plan(root: Path, evidence_directory: Path, *, install: bool) -> list
     service = root / "HostedService"
     database = service / "db"
     infrastructure = service / "infra"
+    web = service / "web"
     steps: list[CommandStep] = [
         CommandStep(
             "Task 7 orchestration self-tests",
@@ -162,8 +165,11 @@ def command_plan(root: Path, evidence_directory: Path, *, install: bool) -> list
                 "Scripts/test_inspect_ios_artifact.py",
                 "Scripts/test_slice4_ci_contract.py",
                 "Scripts/test_inspect_slice5_ios_artifact.py",
+                "Scripts/test_inspect_slice6_ios_artifact.py",
                 "Scripts/test_verify_slice5_mutation_controls.py",
                 "Scripts/test_verify_slice5_sync.py",
+                "Scripts/test_verify_slice6_mutation_controls.py",
+                "Scripts/test_verify_slice6_publication.py",
             ),
         )
     ]
@@ -173,6 +179,7 @@ def command_plan(root: Path, evidence_directory: Path, *, install: bool) -> list
                 CommandStep("hosted service lockfile install", service, ("npm", "ci")),
                 CommandStep("database lockfile install", database, ("npm", "ci")),
                 CommandStep("infrastructure lockfile install", infrastructure, ("npm", "ci")),
+                CommandStep("professional web lockfile install", web, ("npm", "ci")),
             ]
         )
     steps.extend(
@@ -180,7 +187,20 @@ def command_plan(root: Path, evidence_directory: Path, *, install: bool) -> list
             CommandStep("hosted service typecheck", service, ("npm", "run", "typecheck")),
             CommandStep("hosted service security tests", service, ("npm", "test")),
             CommandStep("hosted service build", service, ("npm", "run", "build")),
+            CommandStep("professional web typecheck", web, ("npm", "run", "typecheck")),
+            CommandStep("professional web tests", web, ("npm", "test")),
+            CommandStep("professional web build", web, ("npm", "run", "build")),
+            CommandStep(
+                "professional web integration",
+                web,
+                ("npm", "run", "test:integration"),
+            ),
             CommandStep("PostgreSQL 16 role and RLS integration", database, ("npm", "test")),
+            CommandStep(
+                "Slice 6 composed publication system chain",
+                database,
+                ("node", "test/integration-0009-system-chain.mjs"),
+            ),
             CommandStep("infrastructure typecheck", infrastructure, ("npm", "run", "typecheck")),
             CommandStep("infrastructure assertions", infrastructure, ("npm", "test")),
             CommandStep("infrastructure mutation controls", infrastructure, ("npm", "run", "test:mutations")),
@@ -563,10 +583,12 @@ def write_generated_evidence(root: Path, evidence_directory: Path) -> dict[str, 
 
     service = root / "HostedService"
     infrastructure = service / "infra"
-    inventory = dependency_inventory([service, service / "db", infrastructure])
+    web = service / "web"
+    inventory = dependency_inventory([service, service / "db", infrastructure, web])
     _write_private(evidence_directory / "sbom.cdx.json", json.dumps(inventory, indent=2) + "\n")
     artifact_roots = [
         service / "dist",
+        web / "dist",
         infrastructure / "cdk.out",
         infrastructure / "evidence" / "artifact-inspection.json",
     ]

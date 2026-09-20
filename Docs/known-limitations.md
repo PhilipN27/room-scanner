@@ -21,10 +21,12 @@
   synchronization. The local 512 MiB safety bound does not prove CloudKit asset
   acceptance; development-container recovery remains untested.
 - Guest/local workflows have no background sync, required account, analytics,
-  or automatic upload path. Slice 4 now contains an optional, default-off
-  professional account/service foundation and local infrastructure definitions,
-  but no endpoint/provider account is deployed and no project synchronization,
-  collaboration, public link, or portal behavior is implemented.
+  or automatic upload path. The optional, default-off professional service now
+  includes Slice 5 immutable project synchronization and Slice 6 publications,
+  client links, verified feedback, and the professional web. These are local
+  implementations with synthetic provider verification; no endpoint/provider
+  account is deployed. Real-time collaboration and browser spatial editing
+  remain excluded.
 - Slice 0 defines vendor-neutral AI-redesign, sync, hosted-resource, and portal
   contracts but does not build AI package archives, upload anything, create an
   account, provision AWS, publish a portal, charge a subscription, or establish
@@ -106,9 +108,10 @@
   account/region topology, on-call/alert ownership, break-glass drill, privacy
   disclosures, provisioning, deployment, and release approval remain pending.
   Checked-in quota values are test-only.
-- Immediate portal-link/protected-asset revocation belongs to Slice 6. Full
-  production deletion, restore, backup expiry, load/pricing, and release
-  lifecycle belong to Slice 7; neither is implied by Slice 4.
+- Slice 6 implements immediate portal-link/protected-asset revocation, with
+  local service, database, and browser tests. Live-provider revocation remains
+  unverified. Production deletion, restore, backup expiry, load/pricing, and
+  release lifecycle belong to Slice 7.
 
 ## 2026-08-21 status reconciliation
 

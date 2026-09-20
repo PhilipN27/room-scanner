@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import RoomScanCore
 import SwiftUI
 
@@ -338,6 +339,23 @@ final class ProfessionalProjectSyncViewModel: ObservableObject, Identifiable {
         }
     }
 
+    /// Publication is a separate, read-only review route from working-set
+    /// sync. The model exposes no project, concept, membership, or feedback
+    /// mutation capability through this entry point.
+    func makePublicationReviewModel() async throws -> RoomPublicationReviewModel {
+        guard let projectID = selectedProjectID else {
+            throw RoomPublicationTransportError.unavailable
+        }
+        if let live {
+            return try await live.makePublicationReviewModel(projectID)
+        }
+#if DEBUG
+        return .fixture(arguments: ProcessInfo.processInfo.arguments)
+#else
+        throw RoomPublicationTransportError.unavailable
+#endif
+    }
+
     func resumeRecovery() async {
         guard let live, let projectID = selectedProjectID else { return }
         await perform("Resuming the durable package-first recovery…") {
@@ -552,6 +570,9 @@ final class ProfessionalProjectSyncViewModel: ObservableObject, Identifiable {
 struct ProfessionalProjectSyncView: View {
     @StateObject private var model: ProfessionalProjectSyncViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var publicationModel: RoomPublicationReviewModel?
+    @State private var showingPublicationReview = false
+    @State private var publicationEntryMessage: String?
 
     init(model: @autoclosure @escaping () -> ProfessionalProjectSyncViewModel) {
         _model = StateObject(wrappedValue: model())
@@ -566,6 +587,7 @@ struct ProfessionalProjectSyncView: View {
                     storageTiers
                     notices
                     stateContent
+                    publicationEntry
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, 22)
@@ -586,6 +608,13 @@ struct ProfessionalProjectSyncView: View {
         .tint(AppPalette.blueprint)
         .task { await model.load() }
         .onDisappear { model.discardPreview() }
+        .sheet(isPresented: $showingPublicationReview, onDismiss: {
+            publicationModel = nil
+        }) {
+            if let publicationModel {
+                RoomPublicationReviewView(model: publicationModel)
+            }
+        }
     }
 
     private var masthead: some View {
@@ -736,6 +765,39 @@ struct ProfessionalProjectSyncView: View {
             }
         case .rawReview:
             rawReviewSection
+        }
+    }
+
+    private var publicationEntry: some View {
+        ruledSection("CLIENT PORTAL") {
+            Text("Review a privacy-minimized immutable room or curated property snapshot. Publication never edits this project, the working head, or feedback records.")
+                .font(AppTypography.body)
+                .foregroundStyle(AppPalette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Review client portal publication") {
+                Task { await openPublicationReview() }
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .secondary))
+            .disabled(model.selectedProjectID == nil || model.isWorking)
+            .accessibilityIdentifier("professional.publicationReview")
+            .accessibilityHint("Opens a separate public-only review; publishing requires another sensitive action confirmation.")
+            if let publicationEntryMessage {
+                Label(publicationEntryMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.callout)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("professional.publicationError")
+            }
+        }
+    }
+
+    private func openPublicationReview() async {
+        do {
+            publicationModel = try await model.makePublicationReviewModel()
+            publicationEntryMessage = nil
+            showingPublicationReview = true
+        } catch {
+            publicationModel = nil
+            publicationEntryMessage = "Professional publication is unavailable until the configured workspace is signed in and unlocked."
         }
     }
 

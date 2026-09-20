@@ -53,17 +53,40 @@ class Slice4CIContractTests(unittest.TestCase):
             "Scripts/test_inspect_ios_artifact.py",
             "Scripts/test_slice4_ci_contract.py",
             "Scripts/test_inspect_slice5_ios_artifact.py",
+            "Scripts/test_inspect_slice6_ios_artifact.py",
             "Scripts/test_verify_slice5_mutation_controls.py",
             "Scripts/test_verify_slice5_sync.py",
+            "Scripts/test_verify_slice6_mutation_controls.py",
+            "Scripts/test_verify_slice6_publication.py",
         ):
             self.assertIn(test_module, verifier)
 
-    def test_existing_ios_build_emits_and_inspects_a_compiled_bundle(self) -> None:
+    def test_existing_ios_build_emits_and_inspects_a_slice6_compiled_bundle(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("-derivedDataPath \"$RUNNER_TEMP/RoomScanStudio-build-derived\"", workflow)
-        self.assertIn("Scripts/inspect_slice5_ios_artifact.py", workflow)
-        self.assertIn("RoomScanStudio-slice5-artifact-inspection.json", workflow)
+        self.assertIn("Scripts/inspect_slice6_ios_artifact.py", workflow)
+        self.assertIn("RoomScanStudio-slice6-artifact-inspection.json", workflow)
+
+    def test_slice6_web_job_runs_unit_build_and_real_browser_oracles(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("  web-verification:", workflow)
+        web_start = workflow.index("  web-verification:")
+        web = workflow[web_start:]
+        self.assertIn("runs-on: ubuntu-24.04", web)
+        self.assertIn("node-version: '24.15.0'", web)
+        self.assertIn("working-directory: HostedService", web)
+        self.assertIn("working-directory: HostedService/web", web)
+        self.assertIn("run: npm ci", web)
+        self.assertIn("run: npx playwright install --with-deps chromium", web)
+        for command in ("npm run typecheck", "npm test", "npm run build", "npm run test:e2e"):
+            self.assertIn(f"run: {command}", web)
+        self.assertIn("- name: Upload web screenshots and interaction evidence", web)
+        self.assertIn("if: always()", web)
+        self.assertIn("${{ github.workspace }}/HostedService/web/screenshots", web)
+        self.assertIn("${{ github.workspace }}/HostedService/web/test-results", web)
+        self.assertIn("if-no-files-found: error", web)
 
     def test_legacy_scanner_scopes_xctest_upload_contract_to_its_named_step(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")

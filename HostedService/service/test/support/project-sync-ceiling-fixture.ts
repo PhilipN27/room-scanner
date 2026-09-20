@@ -187,11 +187,22 @@ function u16(input: Uint8Array, offset: number): number { return input[offset]! 
 function u32(input: Uint8Array, offset: number): number { return (input[offset]! | (input[offset + 1]! << 8) | (input[offset + 2]! << 16) | (input[offset + 3]! << 24)) >>> 0; }
 function isRecord(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
 
+// The ceiling oracle rebuilds a 64 MiB stored ZIP, potentially more than once
+// while its metadata lengths converge. Match the production validator's
+// table-driven CRC32 so fixture construction stays outside the worker's
+// measured thirty-second envelope without changing any generated ZIP bytes.
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) value = (value & 1) === 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
 function crc32(bytes: Uint8Array): number {
   let value = 0xffffffff;
-  for (const byte of bytes) {
-    value ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ ((value & 1) === 0 ? 0 : 0xedb88320);
-  }
+  for (const byte of bytes) value = (CRC_TABLE[(value ^ byte) & 0xff] ?? 0) ^ (value >>> 8);
   return (value ^ 0xffffffff) >>> 0;
 }

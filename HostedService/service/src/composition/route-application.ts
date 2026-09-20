@@ -140,7 +140,7 @@ const SCANNER_CONFIRMATION_SCRIPT = `"use strict";
       const payload = await response.json();
       if (payload === null || typeof payload !== "object" || payload.confirmed !== true || !/^[0-9A-HJKMNP-TV-Z]{8}$/.test(payload.transferCode ?? "")) throw new Error("confirmation_failed");
       const result = document.getElementById("magic-link-result");
-      if (result !== null) result.textContent = "Enter this code only in the RoomScan Studio app that requested this email: " + payload.transferCode.slice(0, 4) + "-" + payload.transferCode.slice(4);
+      if (result !== null) result.textContent = "Enter this code in the RoomScan Studio app or browser workspace that requested this email: " + payload.transferCode.slice(0, 4) + "-" + payload.transferCode.slice(4);
     } catch {
       button.removeAttribute("disabled");
     }

@@ -44,6 +44,11 @@
       "version": "0008",
       "name": "0008_professional_project_sync.up.sql",
       "checksumSha256": "a35f9ec814667a1bbdaaada3a3fc3ebb8cd2977f9e101884d540bcbd7a8ae2e5"
+    },
+    {
+      "version": "0009",
+      "name": "0009_publication_portal.up.sql",
+      "checksumSha256": "edc88213cba91c18b879388f1d96e26ebb14e35304be8e81baba640290a1a171"
     }
   ]
 }

@@ -1,0 +1,22 @@
+{
+  "name": "roomscan-studio-published-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test:focused": "node --test test/portal-security.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test test/*.test.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/build-assets.mjs",
+    "test:integration": "npm run build && npm --prefix .. run build && node scripts/run-integration.mjs",
+    "test:e2e": "npm run test:integration && node scripts/run-playwright.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3"
+  }
+}

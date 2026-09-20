@@ -183,7 +183,182 @@ try {
     api_execute: false,
     public_execute: false,
   });
-  console.log(`STAGED_UPGRADE_SUMMARY legacy_migrations=4 hardened_migrations=1 auth_migrations=1 policy_migrations=1 project_sync_migrations=1 legacy_app_execute=12 hardened_app_execute=10 auth_app_execute=${expectedAuth.length} forced_rls_tables=5 recovery_storage_acl_controls=3 worker_claim_controls=4 status=pass`);
+
+  await copyFile(
+    path.join(currentMigrationsDir, '0009_publication_portal.up.sql'),
+    path.join(fullDir, '0009_publication_portal.up.sql'),
+  );
+  const publication = await applyMigrations({ pool, migrationsDir: fullDir });
+  assert.equal(publication.applied.length, 1);
+  assert.equal(publication.applied[0].name, '0009_publication_portal.up.sql');
+  assert.deepEqual((await pool.query(
+    `SELECT rolname, rolcanlogin, rolinherit, rolsuper, rolbypassrls
+       FROM pg_roles
+      WHERE rolname = ANY($1::text[])
+      ORDER BY rolname`,
+    [['roomscan_portal_runtime', 'roomscan_publication_worker']],
+  )).rows, [
+    {
+      rolname: 'roomscan_portal_runtime',
+      rolcanlogin: true,
+      rolinherit: false,
+      rolsuper: false,
+      rolbypassrls: false,
+    },
+    {
+      rolname: 'roomscan_publication_worker',
+      rolcanlogin: true,
+      rolinherit: false,
+      rolsuper: false,
+      rolbypassrls: false,
+    },
+  ]);
+  assert.equal((await pool.query(
+    `SELECT count(*)::integer AS count
+       FROM pg_class
+      WHERE oid = ANY(ARRAY[
+        'roomscan.publication_properties'::regclass,
+        'roomscan.publication_property_rooms'::regclass,
+        'roomscan.publication_snapshot_rooms'::regclass,
+        'roomscan.publication_allocation_source_bindings'::regclass,
+        'roomscan.publication_allocations'::regclass,
+        'roomscan.publication_sources'::regclass,
+        'roomscan.publication_approvals'::regclass,
+        'roomscan.publication_jobs'::regclass,
+        'roomscan.publication_snapshots'::regclass,
+        'roomscan.publication_assets'::regclass,
+        'roomscan.publication_links'::regclass,
+        'roomscan.professional_web_sessions'::regclass,
+        'roomscan.portal_sessions'::regclass,
+        'roomscan.portal_pin_throttles'::regclass,
+        'roomscan.portal_feedback_challenges'::regclass,
+        'roomscan.publication_feedback'::regclass,
+        'roomscan.publication_access_events'::regclass,
+        'roomscan.portal_delivery_receipts'::regclass,
+        'roomscan.portal_asset_reservations'::regclass,
+        'roomscan.portal_feedback_delivery_outbox'::regclass,
+        'roomscan.portal_feedback_request_throttles'::regclass,
+        'roomscan.professional_asset_reservations'::regclass,
+        'roomscan.professional_asset_delivery_receipts'::regclass
+      ]) AND relforcerowsecurity`,
+  )).rows[0].count, 23, 'staged 0009 upgrade must force RLS on every publication/portal table');
+  const publicationAllocationRoutine =
+    'roomscan.publication_allocate_v1(text,bytea,timestamp with time zone,text,text,bytea,bytea,bytea,bytea,text,text,text,jsonb,bytea,bytea,bytea,bigint,bytea)';
+  const portalSnapshotRoutine =
+    'roomscan.portal_get_snapshot_v1(bytea,timestamp with time zone)';
+  const portalSnapshotCapabilitiesRoutine =
+    'roomscan.portal_get_snapshot_v2(bytea,timestamp with time zone)';
+  assert.deepEqual((await pool.query(
+    `SELECT has_function_privilege('roomscan_api_runtime', $1, 'EXECUTE') AS api_execute,
+            has_function_privilege('roomscan_publication_worker', $1, 'EXECUTE') AS worker_execute,
+            has_function_privilege('roomscan_portal_runtime', $1, 'EXECUTE') AS portal_execute,
+            has_function_privilege('public', $1, 'EXECUTE') AS public_execute`,
+    [publicationAllocationRoutine],
+  )).rows[0], {
+    api_execute: true,
+    worker_execute: false,
+    portal_execute: false,
+    public_execute: false,
+  }, 'staged 0009 allocation must remain API-only');
+  assert.deepEqual((await pool.query(
+    `SELECT has_function_privilege('roomscan_api_runtime', $1, 'EXECUTE') AS api_execute,
+            has_function_privilege('roomscan_publication_worker', $1, 'EXECUTE') AS worker_execute,
+            has_function_privilege('roomscan_portal_runtime', $1, 'EXECUTE') AS portal_execute,
+            has_function_privilege('public', $1, 'EXECUTE') AS public_execute`,
+    [portalSnapshotRoutine],
+  )).rows[0], {
+    api_execute: false,
+    worker_execute: false,
+    portal_execute: true,
+    public_execute: false,
+  }, 'staged 0009 snapshot authorization must remain portal-runtime-only');
+  assert.deepEqual((await pool.query(
+    `SELECT has_function_privilege('roomscan_api_runtime', $1, 'EXECUTE') AS api_execute,
+            has_function_privilege('roomscan_publication_worker', $1, 'EXECUTE') AS worker_execute,
+            has_function_privilege('roomscan_portal_runtime', $1, 'EXECUTE') AS portal_execute,
+            has_function_privilege('public', $1, 'EXECUTE') AS public_execute`,
+    [portalSnapshotCapabilitiesRoutine],
+  )).rows[0], {
+    api_execute: false,
+    worker_execute: false,
+    portal_execute: true,
+    public_execute: false,
+  }, 'staged 0009 additive snapshot capabilities must remain portal-runtime-only');
+  const propertyRoomComposite = (await pool.query(
+    `SELECT pg_get_constraintdef(constraint_row.oid) AS definition
+       FROM pg_constraint AS constraint_row
+      WHERE constraint_row.conname = 'publication_property_rooms_workspace_id_room_project_id_fkey'
+        AND constraint_row.conrelid = 'roomscan.publication_property_rooms'::regclass`,
+  )).rows[0];
+  assert.match(
+    propertyRoomComposite.definition,
+    /FOREIGN KEY \(workspace_id, room_project_id\).*professional_projects\(workspace_id, project_id\)/u,
+    'staged 0009 upgrade must bind mutable property curation to a same-tenant hosted project',
+  );
+  const allocationBindingComposites = (await pool.query(
+    `SELECT pg_get_constraintdef(constraint_row.oid) AS definition
+       FROM pg_constraint AS constraint_row
+      WHERE constraint_row.contype = 'f'
+        AND constraint_row.conrelid = 'roomscan.publication_allocation_source_bindings'::regclass`,
+  )).rows;
+  assert.equal(
+    allocationBindingComposites.some(({ definition }) =>
+      /FOREIGN KEY \(workspace_id, source_revision_id, room_project_id\).*project_revisions\(workspace_id, id, project_id\)/u.test(definition)),
+    true,
+    'staged 0009 upgrade must retain exact same-tenant revision/project binding for every Core source-binding row',
+  );
+  const snapshotRoomComposites = (await pool.query(
+    `SELECT pg_get_constraintdef(constraint_row.oid) AS definition
+       FROM pg_constraint AS constraint_row
+      WHERE constraint_row.contype = 'f'
+        AND constraint_row.conrelid = 'roomscan.publication_snapshot_rooms'::regclass`,
+  )).rows;
+  assert.equal(
+    snapshotRoomComposites.some(({ definition }) =>
+      /FOREIGN KEY \(workspace_id, source_revision_id, room_project_id\).*project_revisions\(workspace_id, id, project_id\)/u.test(definition)),
+    true,
+    'staged 0009 upgrade must retain frozen property-room source provenance as a composite FK',
+  );
+  const presentationLookupRoutine =
+    'roomscan.portal_lookup_presentation_asset_v1(bytea,timestamp with time zone)';
+  assert.deepEqual((await pool.query(
+    `SELECT has_function_privilege('roomscan_api_runtime', $1, 'EXECUTE') AS api_execute,
+            has_function_privilege('roomscan_publication_worker', $1, 'EXECUTE') AS worker_execute,
+            has_function_privilege('roomscan_portal_runtime', $1, 'EXECUTE') AS portal_execute,
+            has_function_privilege('public', $1, 'EXECUTE') AS public_execute`,
+    [presentationLookupRoutine],
+  )).rows[0], {
+    api_execute: false,
+    worker_execute: false,
+    portal_execute: true,
+    public_execute: false,
+  }, 'staged 0009 presentation lookup must remain a portal-runtime-only metadata capability');
+  const targetlessCompletionRoutine =
+    'roomscan.publication_complete_v2(text,bytea,timestamp with time zone,text,bytea,bytea,bigint)';
+  const bindQuarantineRoutine =
+    'roomscan.publication_bind_quarantine_version_v1(uuid,text,timestamp with time zone,text)';
+  const feedbackIssueRoutine =
+    'roomscan.portal_request_feedback_verification_v3(bytea,timestamp with time zone,bytea,bytea,bytea,text,bytea,bytea,bytea,bytea)';
+  const professionalAssetRoutine =
+    'roomscan.portal_authorize_professional_asset_v1(bytea,timestamp with time zone,text,bytea,bigint,bigint)';
+  const stagedCapabilityRows = (await pool.query(
+    `SELECT routine,
+            has_function_privilege('roomscan_api_runtime', routine::regprocedure, 'EXECUTE') AS api_execute,
+            has_function_privilege('roomscan_publication_worker', routine::regprocedure, 'EXECUTE') AS worker_execute,
+            has_function_privilege('roomscan_portal_runtime', routine::regprocedure, 'EXECUTE') AS portal_execute,
+            has_function_privilege('roomscan_email_delivery_runtime', routine::regprocedure, 'EXECUTE') AS email_execute,
+            has_function_privilege('public', routine::regprocedure, 'EXECUTE') AS public_execute
+       FROM unnest($1::text[]) AS capability(routine)
+      ORDER BY routine`,
+    [[targetlessCompletionRoutine, bindQuarantineRoutine, feedbackIssueRoutine, professionalAssetRoutine]],
+  )).rows;
+  assert.deepEqual(stagedCapabilityRows, [
+    { routine: professionalAssetRoutine, api_execute: false, worker_execute: false, portal_execute: true, email_execute: false, public_execute: false },
+    { routine: feedbackIssueRoutine, api_execute: false, worker_execute: false, portal_execute: true, email_execute: false, public_execute: false },
+    { routine: bindQuarantineRoutine, api_execute: false, worker_execute: true, portal_execute: false, email_execute: false, public_execute: false },
+    { routine: targetlessCompletionRoutine, api_execute: true, worker_execute: false, portal_execute: false, email_execute: false, public_execute: false },
+  ], 'staged 0009 correction reducers must retain one narrow runtime capability each');
+  console.log(`STAGED_UPGRADE_SUMMARY legacy_migrations=4 hardened_migrations=1 auth_migrations=1 policy_migrations=1 project_sync_migrations=1 publication_migrations=1 legacy_app_execute=12 hardened_app_execute=10 auth_app_execute=${expectedAuth.length} project_sync_forced_rls_tables=5 publication_forced_rls_tables=23 recovery_storage_acl_controls=3 worker_claim_controls=4 publication_acl_controls=16 property_composite_fk=3 status=pass`);
 } finally {
   await pool.end();
   console.error(`CLEANUP ${JSON.stringify(await cluster.stop())}`);

@@ -247,7 +247,13 @@ final class AppEnvironment: ObservableObject {
         self.professionalEnvironmentFactory.attachLocalProjectAccess(
             .init(
                 libraryController: libraryController,
-                aiRedesignModelFactory: aiRedesignModelFactory
+                aiRedesignModelFactory: aiRedesignModelFactory,
+                professionalSyncJournalRoot: localExtensionRoots.redesign
+                    .deletingLastPathComponent()
+                    .appendingPathComponent("ProfessionalSyncJournal", isDirectory: true),
+                publicationOperationJournalRoot: localExtensionRoots.redesign
+                    .deletingLastPathComponent()
+                    .appendingPathComponent("PublicationOperationJournal", isDirectory: true)
             )
         )
         let usesFakeCloudBackup = arguments.contains("--use-fake-cloud-backup")

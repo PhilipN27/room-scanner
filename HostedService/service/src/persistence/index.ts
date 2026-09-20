@@ -7,5 +7,7 @@ export * from "./operation-port.js";
 export * from "./policy-composites.js";
 export * from "./project-sync-capabilities.js";
 export * from "./project-sync-worker-store.js";
+export * from "./publication-feedback-delivery.js";
+export * from "./publication-worker-store.js";
 export * from "./runtime-repositories.js";
 export * from "./transaction-runner.js";

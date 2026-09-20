@@ -101,7 +101,7 @@ test("security and observability synthesize rotating KMS keys, encrypted retaine
   assert.equal(keys.every((key) => key.Properties?.EnableKeyRotation === true), true);
   assert.equal(keys.every((key) => key.DeletionPolicy === "Retain"), true);
   const logGroups = resourcesOfType(resources, "AWS::Logs::LogGroup");
-  assert.equal(logGroups.length, 13);
+  assert.equal(logGroups.length, 15);
   assert.equal(
     logGroups.every((group) =>
       typeof group.Properties?.RetentionInDays === "number" &&
@@ -125,7 +125,7 @@ test("every Lambda log group uses LogsKey and the regional Logs service has the 
     typeof group.Properties?.LogGroupName === "string" &&
     group.Properties.LogGroupName.startsWith("/aws/lambda/")
   );
-  assert.equal(lambdaLogGroups.length, 10);
+  assert.equal(lambdaLogGroups.length, 12);
   for (const group of lambdaLogGroups) {
     const keyReference = JSON.stringify(group.Properties?.KmsKeyId);
     assert.match(keyReference, /LogsKey/u);
@@ -257,7 +257,7 @@ test("every bucket allows default or its exact CMK headers and denies AES256, aw
   }
 });
 
-test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking, KMS, TLS enforcement, and eight separated runtime secrets", () => {
+test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking, KMS, TLS enforcement, and ten separated runtime secrets", () => {
   const { template, resources } = synthesize();
   const clusters = resourcesOfType(resources, "AWS::RDS::DBCluster");
   assert.equal(clusters.length, 1);
@@ -274,7 +274,7 @@ test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking,
   assert.equal(resourcesOfType(resources, "AWS::RDS::DBInstance")[0]?.Properties?.PubliclyAccessible, false);
   assert.equal(resourcesOfType(resources, "AWS::EC2::NatGateway").length, 0);
   assert.equal(resourcesOfType(resources, "AWS::EC2::InternetGateway").length, 0);
-  assert.equal(resourcesOfType(resources, "AWS::SecretsManager::Secret").length, 13);
+  assert.equal(resourcesOfType(resources, "AWS::SecretsManager::Secret").length, 16);
   assert.match(JSON.stringify(template), /rds\.force_ssl/u);
   assert.match(JSON.stringify(template), /roomscan_cluster_admin/u);
   for (const username of [
@@ -285,7 +285,9 @@ test("Aurora is PostgreSQL 16.8 Serverless v2 with Data API, private networking,
     "roomscan_stripe_reconciliation_runtime",
     "roomscan_audit_export_runtime",
     "roomscan_email_delivery_runtime",
-    "roomscan_project_sync_runtime"
+    "roomscan_project_sync_runtime",
+    "roomscan_publication_worker",
+    "roomscan_portal_runtime"
   ]) assert.match(JSON.stringify(template), new RegExp(username, "u"));
   assert.doesNotMatch(JSON.stringify(template), /"username":"roomscan_app"/u);
   assert.doesNotMatch(JSON.stringify(template), /"username":"roomscan_owner"/u);
@@ -402,18 +404,18 @@ test("full synthesis rejects invalid external resource ARN grammar even when cal
   }
 });
 
-test("HTTP API v2 exposes the exact 29-route Slice 5 manifest, authorizes twenty protected routes, and keeps Stripe dedicated and unmapped", () => {
+test("HTTP API v2 exposes the exact 55-route Slice 6 manifest, keeps legacy authorizer routes fixed, and seals three integrations", () => {
   const { resources } = synthesize();
   const integrations = resourcesOfType(resources, "AWS::ApiGatewayV2::Integration");
-  assert.equal(integrations.length, 2);
+  assert.equal(integrations.length, 3);
   for (const integration of integrations) {
     assert.equal(integration.Properties?.PayloadFormatVersion, "2.0");
     assert.equal("RequestParameters" in (integration.Properties ?? {}), false);
   }
   const routes = resourcesOfType(resources, "AWS::ApiGatewayV2::Route");
-  assert.equal(routes.length, 29);
+  assert.equal(routes.length, 55);
   assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "CUSTOM").length, 20);
-  assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "NONE").length, 9);
+  assert.equal(routes.filter((route) => route.Properties?.AuthorizationType === "NONE").length, 35);
   assert.equal(routes.some((route) => /ANY|proxy/u.test(String(route.Properties?.RouteKey))), false);
   const stripeRoute = routes.find(
     (route) => route.Properties?.RouteKey === "POST /billing/stripe/webhook",
@@ -422,17 +424,17 @@ test("HTTP API v2 exposes the exact 29-route Slice 5 manifest, authorizes twenty
   assert.equal("AuthorizerId" in (stripeRoute?.Properties ?? {}), false);
 });
 
-test("Stripe reconciliation, audit outbox, email, and project-sync validation queues have KMS, bounded retention, retry/DLQ controls, consumers, and alarms", () => {
+test("Stripe reconciliation, audit outbox, email, project-sync, and publication validation queues have KMS, bounded retry/DLQ controls, consumers, and alarms", () => {
   const { resources } = synthesize();
   const queues = resourcesOfType(resources, "AWS::SQS::Queue");
-  assert.equal(queues.length, 8);
-  assert.equal(queues.filter((queue) => queue.Properties?.RedrivePolicy !== undefined).length, 4);
+  assert.equal(queues.length, 10);
+  assert.equal(queues.filter((queue) => queue.Properties?.RedrivePolicy !== undefined).length, 5);
   for (const queue of queues) {
     assert.ok(queue.Properties?.KmsMasterKeyId !== undefined);
     assert.ok(Number(queue.Properties?.MessageRetentionPeriod) <= 1_209_600);
     assert.equal(queue.DeletionPolicy, "Retain");
   }
-  assert.equal(resourcesOfType(resources, "AWS::Lambda::EventSourceMapping").length, 4);
+  assert.equal(resourcesOfType(resources, "AWS::Lambda::EventSourceMapping").length, 5);
   assert.ok(resourcesOfType(resources, "AWS::CloudWatch::Alarm").length >= 17);
 });
 
@@ -500,7 +502,7 @@ test("operator topic admits only account-bounded CloudWatch alarms and the confi
 test("function roles are separated and wildcard resources are limited to metrics and exact Lambda VPC interface actions", () => {
   const { resources } = synthesize();
   const functions = resourcesOfType(resources, "AWS::Lambda::Function");
-  assert.equal(functions.length, 10);
+  assert.equal(functions.length, 12);
   const roleReferences = functions.map((fn) => JSON.stringify(fn.Properties?.Role));
   assert.equal(new Set(roleReferences).size, functions.length);
   const policies = resourcesOfType(resources, "AWS::IAM::Policy");
@@ -677,7 +679,7 @@ test("a scheduled Node.js 24 monitor converts GetTrailStatus into bounded health
 test("every application Lambda is Node.js 24 with an immutable version, live alias, retained encrypted log group, error/throttle alarms, and rollback outputs", () => {
   const { template, resources } = synthesize();
   const functions = resourcesOfType(resources, "AWS::Lambda::Function");
-  assert.equal(functions.length, 10);
+  assert.equal(functions.length, 12);
   assert.equal(functions.every((fn) => fn.Properties?.Runtime === "nodejs24.x"), true);
   assert.equal(resourcesOfType(resources, "AWS::Lambda::Version").length, functions.length);
   assert.equal(resourcesOfType(resources, "AWS::Lambda::Alias").length, functions.length);
@@ -713,7 +715,7 @@ test("the configured magic-delivery key ID reaches exactly API and email and pro
   );
 });
 
-test("the template records account topology ownership and contains no portal, CDN, public identity pool, or production commercial policy", () => {
+test("the template records account topology ownership and contains no CDN, public identity pool, or production commercial policy", () => {
   const { template, resources } = synthesize();
   const serialized = JSON.stringify(template);
   assert.match(serialized, /roomscan-platform-owner/u);

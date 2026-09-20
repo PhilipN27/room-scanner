@@ -707,3 +707,51 @@ The exact contract is documented in
 Slice 6 publication/portal and Slice 7 lifecycle/resources remain absent. Local
 synthetic verification does not establish physical-device background behavior
 or live AWS, provider, credential, alarm, deployment, or release evidence.
+
+## Slice 6 publication architecture reconciliation — 2026-08-31
+
+Slice 6 adds an immutable public-presentation graph without changing local
+project truth, private CloudKit backup, or Slice 5 sync/recovery. Core accepts a
+new typed public draft rather than a private project/package. It canonicalizes
+room-v2 or property-v1 presentation data, source bindings, selected-derivative
+manifest, disclosure approval, and an exact asset ledger into a deterministic
+archive. Unknown fields and unledgered bytes fail closed. Property presentations
+retain ordered independent rooms but have no shared coordinate, transform,
+alignment, connectivity, or reconstruction model.
+
+The forward-only PostgreSQL `0009_publication_portal` migration owns property
+curation, allocation/worker state, immutable snapshots/assets, link generations,
+PIN throttling, portal sessions, protected range accounting, feedback
+verification/records/outbox, and privacy-minimized access history under forced
+RLS. Publication API, publication worker, portal delivery, and feedback email
+roles are separate capabilities. The API writes quarantine and wakes targetless
+validation; the worker alone binds an exact quarantine version and promotes
+active immutable objects; PortalDelivery alone reads one authorized active
+version/range. Slice 4/5 sync roles have no publication namespace or reducer
+authority.
+
+`roomscan-slice6-routes-v1` is a separate sealed 55-route export whose first 29
+objects are the exact Slice 5 manifest. One API has three integrations: 45
+private API routes, 9 sealed PortalDelivery routes, and the existing Stripe
+webhook. Static portal CSS/JavaScript is bundled into the private Lambda
+artifact and injected into one request-independent `/p` document with exact CSP
+hashes; there is no public asset bucket, CDN, third-party script, service worker,
+or reusable object URL. Protected browser bytes remain behind live database
+authorization before and after each exact-version read.
+
+Native publication review and recovery use a separate marker-owned v1 operation
+journal containing public IDs, idempotency keys, digests, byte count, phase, and
+ordered room mappings only. The configured publication adapter reuses the sole
+audited professional HTTP/file-transfer boundary; guest/default-off composition
+cannot construct it. The web portal renders floor plan, orientation/3D,
+dimensions, warnings, comparisons, navigation, feedback, and bounded static
+fallbacks. The lightweight professional web covers approved management/read
+flows and explicitly exposes no capture or full spatial editor.
+
+The additive contract is documented in
+[`ai-redesign-service-contracts-v3.md`](contracts/ai-redesign-service-contracts-v3.md).
+Rollback sets the global or workspace publication flag false, which invalidates
+new and existing public grants at snapshot, link, feedback, download, and every
+asset boundary. Guest/local workflows and private sync/export/recovery remain
+usable. Local synthetic evidence is not live AWS, email, CDN, credential,
+physical-device, deployment, or release evidence.

@@ -23,8 +23,13 @@ import {
   createSlice4StripeIngressHandler,
   createSlice4StripeReconciliationWorker,
   createSlice5DataApiProjectSyncHandler,
+  createSlice6DataApiPublicationHandler,
+  createSlice6FeedbackDeliveryWorker,
 } from "roomscan-studio-hosted-service/composition";
-import { ProjectSyncObjectAdapter } from "roomscan-studio-hosted-service/adapters";
+import {
+  ProjectSyncObjectAdapter,
+  PublicationObjectAdapter,
+} from "roomscan-studio-hosted-service/adapters";
 import {
   DataApiAppAuthorizer,
   DataApiCapabilityOperationPort,
@@ -42,6 +47,11 @@ import {
 } from "../aws/runtime-clients.js";
 import { AwsProjectSyncObjectProvider } from "../aws/project-sync-object-provider.js";
 import { AwsProjectSyncValidationWakePort } from "../aws/project-sync-wake.js";
+import { AwsPublicationObjectProvider } from "../aws/publication-object-provider.js";
+import {
+  AwsPublicationFeedbackDeliveryProviderPort,
+  AwsPublicationValidationWakePort,
+} from "../aws/publication-runtime-clients.js";
 import {
   LambdaRuntimeConfigurationError,
   deriveKey,
@@ -54,7 +64,7 @@ import {
 } from "./runtime-support.js";
 
 type DataApiClient = Parameters<typeof createSlice4DataApiRouteApplications>[0]["apiClient"];
-type ApiHandler = ReturnType<typeof createSlice5DataApiProjectSyncHandler>;
+type ApiHandler = ReturnType<typeof createSlice6DataApiPublicationHandler>;
 type AuthorizerHandler = ReturnType<typeof createSlice4AppAuthorizer>;
 type CognitoHandler = ReturnType<typeof createSlice4CognitoChallengeHandler>;
 type StripeHandler = ReturnType<typeof createSlice4StripeIngressHandler>;
@@ -68,6 +78,7 @@ type ReconciliationWorker = Parameters<typeof createSlice4ReconciliationSqsHandl
 type CurrentSubscriptions = Parameters<typeof createSlice4StripeReconciliationWorker>[0]["currentSubscriptions"];
 type AuditExporterWorker = Parameters<typeof createSlice4AuditExporterSqsHandler>[0]["worker"];
 type MagicDeliveryWorker = Parameters<typeof createSlice4MagicDeliverySqsHandler>[0]["worker"];
+type FeedbackDeliveryWorker = Pick<ReturnType<typeof createSlice6FeedbackDeliveryWorker>, "handleRecord">;
 
 export type Slice4RuntimeRole =
   | "roomscan_api_runtime"
@@ -116,6 +127,15 @@ export interface Slice4RootRuntimeDependencies {
     readonly configurationSetName: string;
     readonly templateName: string;
   }>) => MagicDeliveryWorker;
+  readonly feedbackDeliveryWorker?: (input: Readonly<{
+    readonly client: DataApiClient;
+    readonly keyId: string;
+    readonly envelopeKey: Uint8Array;
+    readonly senderAddress: string;
+    readonly identityArn: string;
+    readonly configurationSetName: string;
+    readonly templateName: string;
+  }>) => FeedbackDeliveryWorker;
   readonly wake?: (input: Readonly<{ readonly queueUrl: string; readonly messageKind: string }>) => StripeWakePort;
 }
 
@@ -144,6 +164,9 @@ export async function createApiRoot(
   const magicDeliveryQueueUrl = requiredQueueUrl(environment, "MAGIC_DELIVERY_QUEUE_URL");
   const projectSyncValidationQueueUrl = requiredQueueUrl(environment, "PROJECT_SYNC_VALIDATION_QUEUE_URL");
   const projectSyncBucketName = requiredBucketName(environment, "PROJECT_SYNC_BUCKET_NAME");
+  const publicationValidationQueueUrl = requiredQueueUrl(environment, "PUBLICATION_VALIDATION_QUEUE_URL");
+  const publishedBucketName = requiredBucketName(environment, "PUBLISHED_BUCKET_NAME");
+  const portalOrigin = requiredHttpsUrl(environment, "PORTAL_ORIGIN");
   const magicDeliveryKeyId = requiredIdentifier(environment, "MAGIC_DELIVERY_KEY_ID", 3, 64, /^[A-Za-z0-9._-]+$/u);
   const authVersion = requiredVersion(environment, "AUTH_POLICY_VERSION");
   const magicVersion = requiredVersion(environment, "MAGIC_POLICY_VERSION");
@@ -248,7 +271,7 @@ export async function createApiRoot(
       clock: Object.freeze({ now: () => new Date(systemClock.nowMs()) }),
     }),
   });
-  return createSlice5DataApiProjectSyncHandler({
+  const projectSync = createSlice5DataApiProjectSyncHandler({
     legacy,
     apiClient: client,
     clock: Object.freeze({ now: () => new Date(systemClock.nowMs()) }),
@@ -262,6 +285,32 @@ export async function createApiRoot(
       sender: new SQSClient({ region: "us-east-1" }),
       queueUrl: projectSyncValidationQueueUrl,
     }),
+  });
+  return createSlice6DataApiPublicationHandler({
+    legacy: projectSync,
+    client,
+    clock: Object.freeze({ now: () => new Date(systemClock.nowMs()) }),
+    accessTokenHmacKey,
+    storage: new PublicationObjectAdapter(new AwsPublicationObjectProvider({
+      sender: new S3Client({ region: "us-east-1" }),
+      bucketName: publishedBucketName,
+    })),
+    validationWake: new AwsPublicationValidationWakePort({
+      wake: new AwsSqsWakePort({
+        sender: new SQSClient({ region: "us-east-1" }),
+        queueUrl: publicationValidationQueueUrl,
+        messageKind: "publication-validation-wake-v1",
+      }),
+    }),
+    // The private root owns no feedback-request route. These structurally
+    // required ports fail closed and carry no secret, queue, or provider.
+    feedbackEnvelopeSealer: Object.freeze({
+      seal: () => { throw new Error("unavailable_capability"); },
+    }),
+    feedbackDeliveryWake: Object.freeze({
+      notifyFeedbackDeliveryWake: async () => { throw new Error("unavailable_capability"); },
+    }),
+    portalOrigin,
   });
 }
 
@@ -401,14 +450,23 @@ export async function createEmailDeliveryRoot(
 ): Promise<MagicDeliveryHandler> {
   const lane = laneConfiguration(environment, "roomscan_email_delivery_runtime");
   const envelopeSecretArn = requiredSecretArn(environment, "MAGIC_DELIVERY_ENVELOPE_SECRET_ARN");
+  const feedbackEnvelopeSecretArn = requiredSecretArn(environment, "PUBLICATION_FEEDBACK_ENVELOPE_SECRET_ARN");
   const keyId = requiredIdentifier(environment, "MAGIC_DELIVERY_KEY_ID", 3, 64, /^[A-Za-z0-9._-]+$/u);
+  const feedbackKeyId = requiredIdentifier(environment, "PUBLICATION_FEEDBACK_KEY_ID", 3, 64, /^[A-Za-z0-9._-]+$/u);
   const publicBaseUrl = requiredHttpsUrl(environment, "PUBLIC_BASE_URL");
   const senderAddress = requiredEmail(environment, "SES_SENDER_ADDRESS");
   const identityArn = requiredSesIdentityArn(environment, "SES_IDENTITY_ARN");
   const configurationSetName = requiredIdentifier(environment, "SES_CONFIGURATION_SET_NAME", 1, 64, /^[A-Za-z0-9_-]+$/u);
   const templateName = requiredIdentifier(environment, "SES_MAGIC_LINK_TEMPLATE_NAME", 1, 128, /^[A-Za-z0-9_-]+$/u);
-  const envelopeKey = key(await secret(dependencies, envelopeSecretArn, "key"), "slice4.magic-delivery-envelope.aes-256-gcm.v1");
+  const feedbackTemplateName = requiredIdentifier(environment, "SES_FEEDBACK_TEMPLATE_NAME", 1, 128, /^[A-Za-z0-9_-]+$/u);
+  const [envelopeRoot, feedbackEnvelopeRoot] = await Promise.all([
+    secret(dependencies, envelopeSecretArn, "key"),
+    secret(dependencies, feedbackEnvelopeSecretArn, "key"),
+  ]);
+  const envelopeKey = key(envelopeRoot, "slice4.magic-delivery-envelope.aes-256-gcm.v1");
+  const feedbackEnvelopeKey = key(feedbackEnvelopeRoot, "slice6.publication-feedback-envelope.aes-256-gcm.v1");
   const client = dataClient(dependencies, lane.role);
+  const ses = new AwsSesV2Port(new SESv2Client({ region: "us-east-1" }));
   const worker = dependencies.magicDeliveryWorker?.({
     client,
     keyId,
@@ -426,7 +484,7 @@ export async function createEmailDeliveryRoot(
       resolve: async (requestedKeyId: string) => requestedKeyId === keyId ? Uint8Array.from(envelopeKey) : undefined,
     }),
     delivery: new AwsMagicDeliveryProviderPort({
-      ses: new AwsSesV2Port(new SESv2Client({ region: "us-east-1" })),
+      ses,
       fromEmailAddress: senderAddress,
       identityArn,
       configurationSetName,
@@ -435,7 +493,44 @@ export async function createEmailDeliveryRoot(
     publicBaseUrl,
     leaseMs: 60_000,
   });
-  return createSlice4MagicDeliverySqsHandler({ worker });
+  const feedbackWorker = dependencies.feedbackDeliveryWorker?.({
+    client,
+    keyId: feedbackKeyId,
+    envelopeKey: feedbackEnvelopeKey,
+    senderAddress,
+    identityArn,
+    configurationSetName,
+    templateName: feedbackTemplateName,
+  }) ?? createSlice6FeedbackDeliveryWorker({
+    client,
+    clock: systemClock,
+    random: systemRandom,
+    decryptionKeys: Object.freeze({
+      resolve: async (requestedKeyId: string) => requestedKeyId === feedbackKeyId
+        ? Uint8Array.from(feedbackEnvelopeKey)
+        : undefined,
+    }),
+    delivery: new AwsPublicationFeedbackDeliveryProviderPort({
+      ses,
+      fromEmailAddress: senderAddress,
+      identityArn,
+      configurationSetName,
+      templateName: feedbackTemplateName,
+    }),
+    leaseMs: 60_000,
+  });
+  return createSlice4MagicDeliverySqsHandler({
+    worker: Object.freeze({
+      handleRecord: async (record: Readonly<{ readonly messageId: string; readonly body?: string }>) => {
+        const [magicResult, feedbackResult] = await Promise.allSettled([
+          worker.handleRecord(record),
+          feedbackWorker.handleRecord(Object.freeze({ messageId: record.messageId })),
+        ]);
+        return magicResult.status === "fulfilled" && magicResult.value === true
+          && feedbackResult.status === "fulfilled" && feedbackResult.value === true;
+      },
+    }),
+  });
 }
 
 /** No provider client, secret reader, or database client is constructed at

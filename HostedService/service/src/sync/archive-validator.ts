@@ -227,43 +227,50 @@ const FORBIDDEN_RAW_SCANNER_WINDOW = Math.max(
   FORBIDDEN_RAW_LITERAL.byteLength,
   ...FORBIDDEN_RAW_PATH_MARKERS.map((marker) => marker.byteLength),
 ) + 1;
+const FORBIDDEN_RAW_SCAN_CHUNK_BYTES = 1_048_576;
 
 class ForbiddenRawByteScanner {
-  readonly #window = new Uint8Array(FORBIDDEN_RAW_SCANNER_WINDOW);
-  #write = 0;
+  #tail = new Uint8Array(0);
   #seen = 0;
   detected = false;
 
   push(chunk: Uint8Array): void {
-    for (const source of chunk) {
-      this.#window[this.#write] = asciiLower(source);
-      this.#write = (this.#write + 1) % this.#window.byteLength;
-      this.#seen += 1;
-      if (this.#matches(FORBIDDEN_RAW_LITERAL)
-        || FORBIDDEN_RAW_PATH_MARKERS.some((marker) => this.#matchesRawPath(marker))) {
-        this.detected = true;
-        return;
+    // Lower a bounded input window once, then use Node's native byte search.
+    // The previous implementation compared every marker at every byte, which
+    // made a valid exact-ceiling archive spend most of its worker envelope in
+    // the preflight. Retaining the longest marker plus its quote sentinel
+    // preserves split-marker detection without retaining archive content.
+    for (let offset = 0; offset < chunk.byteLength && !this.detected; offset += FORBIDDEN_RAW_SCAN_CHUNK_BYTES) {
+      this.#scan(chunk.subarray(offset, Math.min(chunk.byteLength, offset + FORBIDDEN_RAW_SCAN_CHUNK_BYTES)));
+    }
+  }
+
+  #scan(chunk: Uint8Array): void {
+    const input = new Uint8Array(this.#tail.byteLength + chunk.byteLength);
+    input.set(this.#tail);
+    for (let index = 0; index < chunk.byteLength; index += 1) input[this.#tail.byteLength + index] = asciiLower(chunk[index]!);
+    const baseOffset = this.#seen - this.#tail.byteLength;
+    const candidate = Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+    if (candidate.indexOf(FORBIDDEN_RAW_LITERAL) >= 0) {
+      this.detected = true;
+      return;
+    }
+    for (const marker of FORBIDDEN_RAW_PATH_MARKERS) {
+      let index = candidate.indexOf(marker);
+      while (index >= 0) {
+        const absoluteStart = baseOffset + index;
+        const preceding = index > 0 ? candidate[index - 1] : undefined;
+        if (absoluteStart === 0 || preceding === 0x22 || preceding === 0x27) {
+          this.detected = true;
+          return;
+        }
+        index = candidate.indexOf(marker, index + 1);
       }
     }
-  }
-
-  #matchesRawPath(marker: Uint8Array): boolean {
-    if (!this.#matches(marker)) return false;
-    if (this.#seen === marker.byteLength) return true;
-    const preceding = this.#fromEnd(marker.byteLength);
-    return preceding === 0x22 || preceding === 0x27;
-  }
-
-  #matches(marker: Uint8Array): boolean {
-    if (this.#seen < marker.byteLength) return false;
-    for (let index = 0; index < marker.byteLength; index += 1) {
-      if (this.#fromEnd(marker.byteLength - 1 - index) !== marker[index]) return false;
-    }
-    return true;
-  }
-
-  #fromEnd(distance: number): number {
-    return this.#window[(this.#write - 1 - distance + this.#window.byteLength) % this.#window.byteLength]!;
+    this.#seen += chunk.byteLength;
+    this.#tail = input.byteLength <= FORBIDDEN_RAW_SCANNER_WINDOW
+      ? Uint8Array.from(input)
+      : Uint8Array.from(input.subarray(input.byteLength - FORBIDDEN_RAW_SCANNER_WINDOW));
   }
 }
 

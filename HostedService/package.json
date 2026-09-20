@@ -9,6 +9,7 @@
     "./contracts": "./dist/service/src/contracts/index.js",
     "./handlers": "./dist/service/src/handlers/index.js",
     "./persistence": "./dist/service/src/persistence/index.js",
+    "./publication": "./dist/service/src/publication/index.js",
     "./sync": "./dist/service/src/sync/index.js"
   },
   "engines": {

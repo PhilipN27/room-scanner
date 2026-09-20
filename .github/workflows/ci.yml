@@ -51,11 +51,11 @@ jobs:
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           build
 
-      - name: Inspect compiled iOS Slice 5 professional-sync artifact
+      - name: Inspect compiled iOS Slice 6 publication artifact
         run: >-
-          python3 -B Scripts/inspect_slice5_ios_artifact.py
+          python3 -B Scripts/inspect_slice6_ios_artifact.py
           --app "$RUNNER_TEMP/RoomScanStudio-build-derived/Build/Products/Debug-iphoneos/RoomScanStudio.app"
-          --output "$RUNNER_TEMP/RoomScanStudio-slice5-artifact-inspection.json"
+          --output "$RUNNER_TEMP/RoomScanStudio-slice6-artifact-inspection.json"
 
       - name: Select available iPhone and iPad simulators
         id: simulators
@@ -87,7 +87,7 @@ jobs:
           path: |
             ${{ runner.temp }}/RoomScanStudio-iPhone.xcresult
             ${{ runner.temp }}/RoomScanStudio-iPad.xcresult
-            ${{ runner.temp }}/RoomScanStudio-slice5-artifact-inspection.json
+            ${{ runner.temp }}/RoomScanStudio-slice6-artifact-inspection.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -128,5 +128,59 @@ jobs:
         with:
           name: RoomScanStudio-slice4-hosted-verification
           path: ${{ runner.temp }}/roomscan-slice4-hosted
+          if-no-files-found: error
+          retention-days: 7
+
+  web-verification:
+    name: Professional web unit, build, browser, screenshot, and accessibility proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source without retaining a GitHub credential
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Node.js 24 runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.15.0'
+
+      - name: Install hosted service dependencies from the lockfile
+        working-directory: HostedService
+        run: npm ci
+
+      - name: Install professional web dependencies from the lockfile
+        working-directory: HostedService/web
+        run: npm ci
+
+      - name: Install the bounded Chromium browser runtime
+        working-directory: HostedService/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Type-check the professional web
+        working-directory: HostedService/web
+        run: npm run typecheck
+
+      - name: Run professional web unit tests
+        working-directory: HostedService/web
+        run: npm test
+
+      - name: Build the professional web production assets
+        working-directory: HostedService/web
+        run: npm run build
+
+      - name: Run desktop and mobile browser interaction and accessibility tests
+        working-directory: HostedService/web
+        run: npm run test:e2e
+
+      - name: Upload web screenshots and interaction evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: RoomScanStudio-slice6-web-verification
+          path: |
+            ${{ github.workspace }}/HostedService/web/screenshots
+            ${{ github.workspace }}/HostedService/web/test-results
           if-no-files-found: error
           retention-days: 7

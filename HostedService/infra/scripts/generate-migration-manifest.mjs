@@ -17,6 +17,7 @@ const EXPECTED_NAMES = Object.freeze([
   "0006_auth_persistence.up.sql",
   "0007_policy_billing_integration.up.sql",
   "0008_professional_project_sync.up.sql",
+  "0009_publication_portal.up.sql",
 ]);
 
 const names = await readdir(migrationsDirectory);
@@ -31,7 +32,7 @@ if (unexpectedSql.length > 0) {
 
 const migrationNames = names.filter((name) => MIGRATION_NAME.test(name)).sort();
 if (JSON.stringify(migrationNames) !== JSON.stringify(EXPECTED_NAMES)) {
-  throw new Error("expected the exact ordered forward-only 0001-0008 migration set");
+  throw new Error("expected the exact ordered forward-only 0001-0009 migration set");
 }
 
 const migrations = await Promise.all(migrationNames.map(async (name) => Object.freeze({

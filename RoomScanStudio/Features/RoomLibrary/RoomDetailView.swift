@@ -1074,7 +1074,12 @@ struct RoomDetailView: View {
     @State private var showingAIRedesign = false
     @State private var preparingAIRedesign = false
     @State private var aiRedesignErrorMessage: String?
+    @State private var publicationModel: RoomPublicationReviewModel?
+    @State private var showingPublicationReview = false
+    @State private var preparingPublicationReview = false
+    @State private var publicationErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appEnvironment: AppEnvironment
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
@@ -1285,6 +1290,13 @@ struct RoomDetailView: View {
                 RoomAIRedesignHostView(model: aiRedesignModel)
             }
         }
+        .sheet(isPresented: $showingPublicationReview, onDismiss: {
+            publicationModel = nil
+        }) {
+            if let publicationModel {
+                RoomPublicationReviewView(model: publicationModel)
+            }
+        }
         .confirmationDialog(
             "Permanently delete this room package?",
             isPresented: $showingDeleteConfirmation,
@@ -1317,6 +1329,8 @@ struct RoomDetailView: View {
             spatialTruthSection
 
             aiRedesignSection
+
+            publicationSection
 
             // Capture quality remains bound to the immutable revision that
             // produced it. Later edits do not rebind or copy that report, so
@@ -1492,6 +1506,46 @@ struct RoomDetailView: View {
         )
     }
 
+    private var publicationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("CLIENT PORTAL PUBLICATION")
+                .font(AppTypography.measurement)
+                .tracking(1.2)
+                .foregroundStyle(AppPalette.blueprint)
+            Text("Build a review-only public snapshot")
+                .font(AppTypography.section)
+                .foregroundStyle(AppPalette.ink)
+            Text("Professional publication requires explicit entry, sign-in, a local unlock, and a fresh sensitive-action confirmation. Guest rooms, private sync, and local exports remain offline and separate.")
+                .font(AppTypography.callout)
+                .foregroundStyle(AppPalette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Task { await openPublicationReview() }
+            } label: {
+                if preparingPublicationReview {
+                    ProgressView()
+                } else {
+                    Label("Review client portal", systemImage: "rectangle.3.group.bubble")
+                }
+            }
+            .buttonStyle(InstrumentButtonStyle(role: .primary))
+            .disabled(preparingPublicationReview)
+            .accessibilityIdentifier("detail.publicationReview")
+            .accessibilityHint("Opens a public-only professional review. It does not upload or publish automatically.")
+            if let publicationErrorMessage {
+                Label(publicationErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.publicationError")
+            }
+        }
+        .padding(16)
+        .background(
+            AppPalette.raisedSurface,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+    }
+
     private func openAIRedesign() async {
         guard !preparingAIRedesign else { return }
         preparingAIRedesign = true
@@ -1505,6 +1559,29 @@ struct RoomDetailView: View {
         } catch {
             aiRedesignModel = nil
             aiRedesignErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func openPublicationReview() async {
+        guard !preparingPublicationReview else { return }
+        preparingPublicationReview = true
+        defer { preparingPublicationReview = false }
+
+        let factory = appEnvironment.professionalEnvironmentFactory
+        await factory.enterProfessionalWorkspace()
+        guard case .available = factory.state else {
+            publicationErrorMessage = "Professional publication is not configured in this build. This room remains local and offline."
+            return
+        }
+        do {
+            publicationModel = try await factory.makePublicationReviewModel(
+                projectID: projectID
+            )
+            publicationErrorMessage = nil
+            showingPublicationReview = true
+        } catch {
+            publicationModel = nil
+            publicationErrorMessage = "Sign in and confirm the configured professional workspace before reviewing a client portal."
         }
     }
 

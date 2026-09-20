@@ -181,7 +181,7 @@ test("scanner confirmation cannot consume until a person deliberately submits th
   assert.equal(posts[0]?.[0], "/auth/magic-link/consume");
   assert.deepEqual(JSON.parse((posts[0]?.[1] as { readonly body: string }).body), { selector: "selector-12345678", secret, purpose });
   assert.equal(button.disabled, true);
-  assert.equal(result.textContent, "Enter this code only in the RoomScan Studio app that requested this email: ABCD-EFGH");
+  assert.equal(result.textContent, "Enter this code in the RoomScan Studio app or browser workspace that requested this email: ABCD-EFGH");
 });
 
 test("Stripe ingress application wires the authoritative webhook handler to the ingress-only durable repository", async () => {

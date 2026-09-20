@@ -26,6 +26,11 @@ import {
   type MagicDeliveryKeyringPort,
   type MagicDeliveryProviderPort,
 } from "../persistence/runtime-repositories.js";
+import {
+  DataApiPublicationFeedbackDeliveryWorker,
+  type PublicationFeedbackDeliveryKeyringPort,
+  type PublicationFeedbackDeliveryProviderPort,
+} from "../persistence/publication-feedback-delivery.js";
 export { createSlice4RouteApplications } from "./route-application.js";
 
 /** Complete service-domain handler application. Infrastructure never supplies
@@ -123,6 +128,20 @@ export function createSlice4MagicDeliveryWorker(input: {
   readonly leaseMs: number;
 }): DataApiMagicDeliveryWorker {
   return new DataApiMagicDeliveryWorker(input);
+}
+
+/** Slice 6 feedback verification delivery uses the same email-only runtime
+ * pattern, but a distinct v3 outbox/reducer capability. This factory accepts
+ * neither portal/API ports nor an arbitrary recipient selector. */
+export function createSlice6FeedbackDeliveryWorker(input: {
+  readonly client: DataApiClient;
+  readonly clock: { nowMs(): number };
+  readonly random: { bytes(length: number): Uint8Array };
+  readonly decryptionKeys: PublicationFeedbackDeliveryKeyringPort;
+  readonly delivery: PublicationFeedbackDeliveryProviderPort;
+  readonly leaseMs: number;
+}): DataApiPublicationFeedbackDeliveryWorker {
+  return new DataApiPublicationFeedbackDeliveryWorker(input);
 }
 
 /** This bridge owns the auth-challenge DB role and is deliberately separate

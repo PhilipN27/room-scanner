@@ -195,3 +195,40 @@ was used for local Slice 5 verification. No AWS, CloudKit, Apple, Cognito, SES,
 Stripe, DNS, email, hosting, deployment, or account mutation is claimed.
 Physical-device, live-provider, production retention/quota, legal disclosure,
 and release approval remain external gates.
+
+## Slice 6 published-snapshot and portal addendum — 2026-08-31
+
+Publication creates a new privacy-minimized immutable snapshot from an empty
+versioned allowlist. It may contain web-optimized geometry/textures, semantic
+layout, selected sanitized images, floor plan, dimensions, bounded warnings,
+approved comparisons, constrained business/contact/accent branding, explicit
+downloads, and required RoomScanStudio attribution/disclaimers. It cannot
+represent raw RGB/depth/confidence, diagnostics, world maps, precise GPS,
+private notes, revision history, private packages, or unapproved working
+material. Property portals disclose that rooms are independent and do not
+claim shared coordinates or reconstruction.
+
+Disclosure approval is bound to the exact hosted source revision and exact
+source/selection/approval digests. Changing a source or selected public fact
+requires a new review. Native recovery persists only bounded public identifiers,
+digests, idempotency keys, byte count, and operation phase; it does not persist
+the link secret, PIN, share/signed URL, object identity, private path, archive
+bytes, or free-form content.
+
+Portal link secrets are high-entropy fragments stored only as keyed hashes.
+The browser scrubs the fragment before exchange and uses no third-party
+analytics. Optional PIN material is ephemeral in native and memory-hard at the
+service boundary. Feedback stores a scoped immutable action/comment plus a
+keyed verified-email pseudonym; raw delivery addresses are limited to the
+encrypted, short-lived email lane. Access history stores an hourly bucket,
+bounded outcome/client family, and keyed network-risk digest—not raw IP, user
+agent, URL, token, PIN, email, content, archive path, object key, or version.
+
+Protected assets are private, range-bounded, and reauthorized after the exact
+object read before bytes leave the service. Revocation or the publication kill
+switch therefore denies the next request from an already-open session. Browser
+free-form injection canaries are rendered only as text under a strict
+request-independent CSP. No real customer, room, biometric, GPS, identity,
+billing, email, or provider data was used in local verification, and no AWS,
+CDN, domain, email, credential, deployment, legal, retention-cleanup, or release
+claim is made.
