@@ -2005,3 +2005,58 @@ Safari/provider/email/AWS/CDN/domain, signing, deployment, cost/load, legal,
 App Store, and production-release gates remain excluded. Publication remains
 default-off. This closure makes a local commit only: no push, PR, provider
 configuration, deployment, or Slice 7 implementation.
+
+## 2026-09-30 — Repository agent instructions and workflow skills
+
+Scope: documentation-only agent setup on macOS. Added a root `AGENTS.md`,
+eight scoped guides for Core, native app, hosted service, database,
+infrastructure, web, verification scripts and documentation, and three
+project-local skills for native validation, hosted verification and fresh
+Slice 5/6 acceptance. Long procedures are in `.factory/skills/`, not copied
+into always-on instructions.
+
+The command inventory was reconciled with `Package.swift`, the four npm
+manifests, current Python verifiers, Xcode shared scheme, CI and setup docs.
+Current source and the 2026-09-20 closure take precedence over historical
+feature/count statements. No unsupported `start`, `dev` or lint command was
+invented.
+
+Observed environment: Node v24.15.0, npm 11.12.1, Python 3.12.6,
+Apple Swift 6.2.4 and Xcode 26.3 (17C529). Tool availability is not a new
+compilation or runtime acceptance claim.
+
+Commands/results:
+
+```sh
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+# 72 tests passed, both before and after the new instruction files.
+python3 -B Scripts/select_simulators.py --self-test
+# simulator selector self-test passed, before and after.
+python3 -B Scripts/verify_xcode_scaffold.py
+# static structure passed before the edits and on the final standalone rerun.
+python3 -B Scripts/verify_slice4_static_controls.py
+# guestNetworkScanner=PASS; structuredSecretScanner=PASS after the edits.
+git diff --check
+# passed for tracked changes.
+```
+
+An inline Python documentation audit checked nine agent guides, three skill
+entrypoints, 33 distinct npm/Python commands against actual package scripts
+and argparse declarations, three Markdown links, required skill
+name/description metadata and shell-block syntax. It passed. Whitespace
+checks also included the new untracked files explicitly, since an ordinary
+`git diff --check` does not inspect those.
+
+The first combined post-edit check hit its 240-second execution budget during
+the scaffold rerun, after all 72 tests and the selector had passed. That
+interrupted scaffold result is not a pass. A standalone rerun with a longer
+budget subsequently reported `static structure passed`; its structural-only
+evidence limitation remains unchanged. Concrete scoped skill references and
+the final change inventory were also checked: exactly 12 new instruction/skill
+files plus this log update, with no unrelated changes.
+
+No application code, package dependency, fixture, migration, CI behavior or
+historical acceptance result was changed. Full Swift/native schemes,
+service/database/infrastructure/browser matrices, physical hardware, live
+providers, signing, deployment and release approval were not rerun or
+claimed by this documentation task. No commit, push or PR was performed.
