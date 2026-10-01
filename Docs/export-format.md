@@ -27,6 +27,17 @@ records, package-local exports, and unreferenced files. Exported metadata,
 revision, and photos documents rewrite asset references to static archive paths
 and every rewritten reference must resolve to exactly one exported entry.
 
+### 2026-09-30 — Optional local trash metadata
+
+Package `metadata.json` may carry `trashedAt`, an ISO-8601 date encoded using
+the existing date strategy. Missing or null values mean the package is not in
+Trash; nil values are omitted on encoding to preserve older canonical bytes.
+Trash and restore change only this field, not revision history or sort dates.
+Head exports, AI source bindings, professional working copies and new backup
+snapshots reject trashed packages. Recovery retains the metadata in an existing
+backup, including its trash state; restore makes the local project eligible
+for outbound work again.
+
 ## Archive profile
 
 The final file is classic ZIP32 with STORE (no compression). Archive entry

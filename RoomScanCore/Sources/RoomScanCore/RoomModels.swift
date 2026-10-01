@@ -22,6 +22,8 @@ public enum RoomProjectStoreError: Error, Sendable, Equatable {
     case assetReferenceNotStaged(String)
     case projectAlreadyExists(String)
     case projectNotFound(String)
+    case projectTrashed(String)
+    case projectNotTrashed(String)
     case revisionNotFound(projectID: String, revisionID: String)
     case duplicateRevisionID(String)
     case revisionAlreadyExists(String)
@@ -203,6 +205,7 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
     public var tags: [String]
     public var thumbnailRelativePath: RoomRelativePath?
     public var archived: Bool
+    public var trashedAt: Date?
 
     public init(
         projectID: String,
@@ -214,7 +217,8 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
         notes: String,
         tags: [String],
         thumbnailRelativePath: RoomRelativePath?,
-        archived: Bool
+        archived: Bool,
+        trashedAt: Date? = nil
     ) {
         self.projectID = projectID
         self.customName = customName
@@ -226,6 +230,7 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
         self.tags = tags
         self.thumbnailRelativePath = thumbnailRelativePath
         self.archived = archived
+        self.trashedAt = trashedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -240,6 +245,7 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
         case tags
         case thumbnailRelativePath
         case archived
+        case trashedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -258,6 +264,7 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         thumbnailRelativePath = try container.decodeIfPresent(RoomRelativePath.self, forKey: .thumbnailRelativePath)
         archived = try container.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        trashedAt = try container.decodeIfPresent(Date.self, forKey: .trashedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -272,6 +279,7 @@ public struct RoomMetadata: Codable, Sendable, Equatable {
         try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(thumbnailRelativePath, forKey: .thumbnailRelativePath)
         try container.encode(archived, forKey: .archived)
+        try container.encodeIfPresent(trashedAt, forKey: .trashedAt)
     }
 }
 
@@ -817,6 +825,9 @@ public struct RoomProjectSummary: Codable, Sendable, Equatable, Identifiable {
     public var thumbnailRelativePath: RoomRelativePath?
     public var archived: Bool
     public var headRevisionID: String
+    public var trashedAt: Date?
+
+    public var isTrashed: Bool { trashedAt != nil }
 
     public var id: String {
         projectID
@@ -831,7 +842,8 @@ public struct RoomProjectSummary: Codable, Sendable, Equatable, Identifiable {
         tags: [String],
         thumbnailRelativePath: RoomRelativePath?,
         archived: Bool,
-        headRevisionID: String
+        headRevisionID: String,
+        trashedAt: Date? = nil
     ) {
         self.projectID = projectID
         self.customName = customName
@@ -842,6 +854,7 @@ public struct RoomProjectSummary: Codable, Sendable, Equatable, Identifiable {
         self.thumbnailRelativePath = thumbnailRelativePath
         self.archived = archived
         self.headRevisionID = headRevisionID
+        self.trashedAt = trashedAt
     }
 }
 

@@ -157,6 +157,45 @@ public actor LocalRoomRedesignStore {
         try fileManager.removeItem(at: fileURL)
     }
 
+    /// Removes only the selected project's companion tree. Absence never
+    /// creates the root. A link anywhere in the tree prevents any removal.
+    /// Returns false when the project directory was already absent.
+    @discardableResult
+    public func removeAll(projectID: String) throws -> Bool {
+        guard RoomPathValidation.isSafeStableIdentifier(projectID) else {
+            throw RoomProjectStoreError.invalidPackage("Unsafe redesign companion project identifier.")
+        }
+        let directory = rootURL.appendingPathComponent(projectID, isDirectory: true)
+        try requireExistingStorePathComponentsNonSymlink(through: directory)
+        guard pathExists(directory) else { return false }
+        try requireRemovableTree(directory)
+        try requireExistingStorePathComponentsNonSymlink(through: directory)
+        try fileManager.removeItem(at: directory)
+        return true
+    }
+
+    private func requireRemovableTree(_ directory: URL) throws {
+        var directories = [directory]
+        while let current = directories.popLast() {
+            try requireDirectoryNonSymlink(current)
+            for entry in try fileManager.contentsOfDirectory(
+                at: current,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
+                options: []
+            ) {
+                let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else {
+                    throw RoomProjectStoreError.symbolicLinkDetected(entry.lastPathComponent)
+                }
+                if values.isDirectory == true {
+                    directories.append(entry)
+                } else {
+                    try requireRegularNonSymlink(entry)
+                }
+            }
+        }
+    }
+
     private func stateURL(for source: RoomRedesignSourceRevision) throws -> URL {
         guard RoomPathValidation.isSafeStableIdentifier(source.projectID),
               RoomPathValidation.isSafeStableIdentifier(source.revisionID)
@@ -281,7 +320,42 @@ public actor LocalRoomPropertyStore {
     }
 
     public func list() throws -> [RoomPropertyContainerV1] {
-        guard fileManager.fileExists(atPath: rootURL.path) else { return [] }
+        let properties = try readProperties()
+        let memberships = properties.flatMap(\.roomProjectIDs)
+        guard Set(memberships).count == memberships.count else {
+            throw RoomProjectStoreError.invalidPackage("A room project appears in multiple property containers.")
+        }
+        return properties
+    }
+
+    /// Detaches a project even when historical files contain duplicate
+    /// cross-property membership. All files are validated before writing;
+    /// only membership changes, and empty properties remain on disk.
+    /// Returns the sorted IDs of properties that actually changed.
+    @discardableResult
+    public func detach(projectID: String) throws -> [String] {
+        guard RoomPathValidation.isSafeStableIdentifier(projectID) else {
+            throw RoomProjectStoreError.invalidPackage("Unsafe room project identifier.")
+        }
+        let properties = try readProperties()
+        var detached: [String] = []
+        for var property in properties where property.roomProjectIDs.contains(projectID) {
+            property.roomProjectIDs.removeAll { $0 == projectID }
+            try property.validate()
+            let fileURL = try propertyURL(property.propertyID)
+            try requireDirectoryNonSymlink(rootURL)
+            try requireRegularNonSymlink(fileURL)
+            try RoomRedesignCanonicalJSON.encode(property).write(to: fileURL, options: .atomic)
+            try requireRegularNonSymlink(fileURL)
+            detached.append(property.propertyID)
+        }
+        return detached.sorted()
+    }
+
+    private func readProperties() throws -> [RoomPropertyContainerV1] {
+        guard fileManager.fileExists(atPath: rootURL.path)
+                || (try? fileManager.destinationOfSymbolicLink(atPath: rootURL.path)) != nil
+        else { return [] }
         try requireDirectoryNonSymlink(rootURL)
         let files = try fileManager.contentsOfDirectory(
             at: rootURL,
@@ -310,10 +384,6 @@ public actor LocalRoomPropertyStore {
                 throw RoomProjectStoreError.invalidPackage("Property container bytes are non-canonical or rebound.")
             }
             properties.append(property)
-        }
-        let memberships = properties.flatMap(\.roomProjectIDs)
-        guard Set(memberships).count == memberships.count else {
-            throw RoomProjectStoreError.invalidPackage("A room project appears in multiple property containers.")
         }
         return properties.sorted { lhs, rhs in
             if lhs.displayName == rhs.displayName { return lhs.propertyID < rhs.propertyID }

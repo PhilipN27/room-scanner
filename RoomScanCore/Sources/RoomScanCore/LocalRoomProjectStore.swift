@@ -108,6 +108,7 @@ public enum RoomProjectStoreFaultPoint: String, Sendable, Equatable {
     case beforeInitialPackagePromotion
     case afterRevisionPromotionBeforeManifest
     case afterProfessionalWorkingCopyStageDirectoryCreationBeforeMarker
+    case beforeProfessionalWorkingCopyPromotion
 }
 
 /// Test-only seam for deterministic failure at the narrow commit boundary.
@@ -325,6 +326,9 @@ public actor LocalRoomProjectStore {
         )
 
         let root = try canonicalRootURL()
+        try withRootLock(root) {
+            try rejectTrashedProjectIfPresent(root: root, projectID: commit.draft.metadata.projectID)
+        }
         // Initial capture inputs are scratch files. Restore and duplicate have
         // separate paths because they intentionally read already-committed
         // package files under the store's ownership checks.
@@ -352,7 +356,10 @@ public actor LocalRoomProjectStore {
         }
 
         return try withRootLock(root) {
-            try writeNewProjectLocked(
+            // ID generation suspends the actor, so recheck the source under
+            // the same lock as staging/promotion.
+            try rejectTrashedProjectIfPresent(root: root, projectID: commit.draft.metadata.projectID)
+            return try writeNewProjectLocked(
                 root: root,
                 projectID: projectID,
                 revisionID: revisionID,
@@ -378,15 +385,17 @@ public actor LocalRoomProjectStore {
     }
 
     public func listSummaries(
-        includeArchived: Bool = false
+        includeArchived: Bool = false,
+        includeTrashed: Bool = false
     ) throws -> [RoomProjectSummary] {
-        try listProjectListing(includeArchived: includeArchived).summaries
+        try listProjectListing(includeArchived: includeArchived, includeTrashed: includeTrashed).summaries
     }
 
     /// Lists valid authoritative packages without allowing one malformed sibling
     /// to hide the rest of the library. Root enumeration failures still throw.
     public func listProjectListing(
-        includeArchived: Bool = true
+        includeArchived: Bool = true,
+        includeTrashed: Bool = false
     ) throws -> RoomProjectListing {
         let root = try canonicalRootURL()
         guard pathExists(root) else {
@@ -440,7 +449,7 @@ public actor LocalRoomProjectStore {
                     try reconcilePendingRevisionLocked(root: root, projectID: projectID)
                     let package = try loadProjectPackageLocked(root: root, projectID: projectID)
                     let summary = makeSummary(package)
-                    if includeArchived || !summary.archived {
+                    if (includeArchived || !summary.archived) && (includeTrashed || !summary.isTrashed) {
                         summaries.append(summary)
                     }
                 } catch {
@@ -481,7 +490,7 @@ public actor LocalRoomProjectStore {
         try validateIdentifier(revisionID)
         let root = try canonicalRootURL()
         return try withRootLock(root) {
-            let package = try loadLocked(root: root, projectID: projectID)
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard let revision = package.revisions.first(where: { $0.manifest.revisionID == revisionID }) else {
                 throw RoomProjectStoreError.revisionNotFound(projectID: projectID, revisionID: revisionID)
             }
@@ -551,11 +560,11 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             let destinationURL = try validatedExportDestination(
                 requestedDestinationURL,
                 root: root
             )
-            let package = try loadLocked(root: root, projectID: projectID)
             guard package.manifest.headRevisionID == expectedHeadRevisionID else {
                 throw RoomExportError.staleHead(
                     projectID: projectID,
@@ -803,7 +812,8 @@ public actor LocalRoomProjectStore {
     ) throws -> RoomProfessionalWorkingCopy {
         let root = try canonicalRootURL()
         let destinationURL = try withRootLock(root) {
-            try validatedBackupWorkspaceDestination(requestedDestinationURL, root: root)
+            _ = try loadMutableProjectLocked(root: root, projectID: projectID)
+            return try validatedBackupWorkspaceDestination(requestedDestinationURL, root: root)
         }
         let stage = try makeProfessionalWorkingCopyStage(
             parent: destinationURL.deletingLastPathComponent()
@@ -919,7 +929,9 @@ public actor LocalRoomProjectStore {
                 sourceRevision: sourceRevision,
                 redactedWorldMapPackagePath: redactedWorldMapPath
             )
+            try faultInjector.throwIfNeeded(at: .beforeProfessionalWorkingCopyPromotion)
             try withRootLock(root) {
+                _ = try loadMutableProjectLocked(root: root, projectID: projectID)
                 _ = try validatedBackupWorkspaceDestination(destinationURL, root: root)
                 try fileManager.moveItem(at: stagedWorkspaceURL, to: destinationURL)
             }
@@ -952,11 +964,11 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             let destinationURL = try validatedBackupWorkspaceDestination(
                 requestedDestinationURL,
                 root: root
             )
-            let package = try loadLocked(root: root, projectID: projectID)
             guard package.manifest.headRevisionID == expectedHeadRevisionID else {
                 throw RoomBackupError.staleHead(
                     projectID: projectID,
@@ -1354,7 +1366,7 @@ public actor LocalRoomProjectStore {
         try validateIdentifier(projectID)
         let root = try canonicalRootURL()
         try withRootLock(root) {
-            _ = try loadLocked(root: root, projectID: projectID)
+            _ = try loadMutableProjectLocked(root: root, projectID: projectID)
             let projectURL = try projectDirectory(root: root, projectID: projectID)
             let directory = projectURL.appendingPathComponent(
                 RoomMeshHeroCache.directoryName, isDirectory: true
@@ -1386,7 +1398,7 @@ public actor LocalRoomProjectStore {
         try validateIdentifier(projectID)
         let root = try canonicalRootURL()
         try withRootLock(root) {
-            _ = try loadLocked(root: root, projectID: projectID)
+            _ = try loadMutableProjectLocked(root: root, projectID: projectID)
             let projectURL = try projectDirectory(root: root, projectID: projectID)
             let directory = projectURL.appendingPathComponent(
                 RoomMeshHeroCache.directoryName, isDirectory: true
@@ -1411,9 +1423,12 @@ public actor LocalRoomProjectStore {
         try validateIdentifier(projectID)
         let root = try canonicalRootURL()
         return try withRootLock(root) {
-            var package = try loadLocked(root: root, projectID: projectID)
+            var package = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard metadata.projectID == projectID else {
                 throw RoomProjectStoreError.invalidPackage("Metadata project identifier does not match.")
+            }
+            guard metadata.trashedAt == package.metadata.trashedAt else {
+                throw RoomProjectStoreError.invalidPackage("Trash state can only change through the trash lifecycle.")
             }
 
             var updatedMetadata = metadata
@@ -1445,13 +1460,14 @@ public actor LocalRoomProjectStore {
 
     @discardableResult
     public func duplicate(projectID: String) async throws -> RoomProjectSummary {
+        try validateIdentifier(projectID)
         // Awaiting IDs happens before the lock; source is reloaded under it.
         let duplicateProjectID = await idGenerator.nextProjectID()
         let duplicateRevisionID = await idGenerator.nextRevisionID()
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
-            let source = try loadLocked(root: root, projectID: projectID)
+            let source = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard let sourceHead = source.revisions.last else {
                 throw RoomProjectStoreError.invalidPackage("Source package has no revisions.")
             }
@@ -1511,9 +1527,41 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    /// Changes only project metadata; revision history and sort position remain
+    /// intact. Read-only package loading remains available while in trash.
+    public func moveToTrash(projectID: String) throws {
+        try setTrashState(projectID: projectID, trashed: true)
+    }
+
+    public func restoreFromTrash(projectID: String) throws {
+        try setTrashState(projectID: projectID, trashed: false)
+    }
+
+    private func setTrashState(projectID: String, trashed: Bool) throws {
+        try validateIdentifier(projectID)
+        let root = try canonicalRootURL()
+        try withRootLock(root) {
+            var package = try loadLocked(root: root, projectID: projectID)
+            if trashed {
+                guard package.metadata.trashedAt == nil else {
+                    throw RoomProjectStoreError.projectTrashed(projectID)
+                }
+                package.metadata.trashedAt = clock.now()
+            } else {
+                guard package.metadata.trashedAt != nil else {
+                    throw RoomProjectStoreError.projectNotTrashed(projectID)
+                }
+                package.metadata.trashedAt = nil
+            }
+            try validate(metadata: package.metadata)
+            let projectURL = try projectDirectory(root: root, projectID: projectID)
+            try writeJSON(package.metadata, to: projectURL.appendingPathComponent("metadata.json"), root: root)
+        }
+    }
+
     /// A deletion primitive only. UI confirmation is intentionally outside this
     /// Foundation store.
-    public func delete(projectID: String) throws {
+    public func permanentlyDelete(projectID: String) throws {
         try validateIdentifier(projectID)
         let root = try canonicalRootURL()
         try withRootLock(root) {
@@ -1527,6 +1575,11 @@ public actor LocalRoomProjectStore {
             }
             try fileManager.removeItem(at: projectURL)
         }
+    }
+
+    @available(*, deprecated, renamed: "permanentlyDelete(projectID:)")
+    public func delete(projectID: String) throws {
+        try permanentlyDelete(projectID: projectID)
     }
 
     @discardableResult
@@ -1595,7 +1648,7 @@ public actor LocalRoomProjectStore {
         }
         let root = try canonicalRootURL()
         return try withRootLock(root) {
-            let package = try loadLocked(root: root, projectID: projectID)
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             return try appendRevisionLocked(
                 root: root,
                 projectID: projectID,
@@ -1637,7 +1690,7 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
-            let package = try loadLocked(root: root, projectID: projectID)
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard package.manifest.headRevisionID == expectedHeadRevisionID else {
                 throw RoomProjectStoreError.parentDoesNotMatchHead(
                     projectID: projectID,
@@ -1707,7 +1760,7 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
-            let package = try loadLocked(root: root, projectID: projectID)
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard package.manifest.headRevisionID == expectedHeadRevisionID else {
                 throw RoomProjectStoreError.parentDoesNotMatchHead(
                     projectID: projectID,
@@ -1781,7 +1834,7 @@ public actor LocalRoomProjectStore {
         let root = try canonicalRootURL()
 
         return try withRootLock(root) {
-            let package = try loadLocked(root: root, projectID: projectID)
+            let package = try loadMutableProjectLocked(root: root, projectID: projectID)
             guard let source = package.revisions.first(where: {
                 $0.manifest.revisionID == sourceRevisionID
             }) else {
@@ -1829,7 +1882,7 @@ public actor LocalRoomProjectStore {
         try validateIdentifier(projectID)
         let root = try canonicalRootURL()
         try withRootLock(root) {
-            var package = try loadLocked(root: root, projectID: projectID)
+            var package = try loadMutableProjectLocked(root: root, projectID: projectID)
             var metadata = package.metadata
             metadata.archived = archived
             metadata.lastRevisedDate = clock.now()
@@ -2316,6 +2369,22 @@ public actor LocalRoomProjectStore {
         }
     }
 
+    private func loadMutableProjectLocked(root: URL, projectID: String) throws -> RoomProjectPackage {
+        let package = try loadLocked(root: root, projectID: projectID)
+        guard package.metadata.trashedAt == nil else {
+            throw RoomProjectStoreError.projectTrashed(projectID)
+        }
+        return package
+    }
+
+    private func rejectTrashedProjectIfPresent(root: URL, projectID: String) throws {
+        let projectURL = try projectDirectory(root: root, projectID: projectID)
+        try assertNoSymbolicLinks(root: root, through: projectURL)
+        if pathExists(projectURL) {
+            _ = try loadMutableProjectLocked(root: root, projectID: projectID)
+        }
+    }
+
     private func loadLocked(root: URL, projectID: String) throws -> RoomProjectPackage {
         let projectURL = try projectDirectory(root: root, projectID: projectID)
         try assertNoSymbolicLinks(root: root, through: projectURL)
@@ -2362,6 +2431,7 @@ public actor LocalRoomProjectStore {
         let finalProjectURL = try projectDirectory(root: root, projectID: projectID)
         try assertNoSymbolicLinks(root: root, through: finalProjectURL)
         guard !pathExists(finalProjectURL) else {
+            try rejectTrashedProjectIfPresent(root: root, projectID: projectID)
             throw RoomProjectStoreError.projectAlreadyExists(projectID)
         }
 
@@ -2498,7 +2568,7 @@ public actor LocalRoomProjectStore {
             evidenceCompatibility: evidenceCompatibility
         )
         let transactionID = try nextValidatedTransactionID()
-        let package = try loadLocked(root: root, projectID: projectID)
+        let package = try loadMutableProjectLocked(root: root, projectID: projectID)
         let projectSchemaVersion = try validatedProjectSchemaVersion(
             package.manifest
         )
@@ -4327,7 +4397,8 @@ public actor LocalRoomProjectStore {
             tags: package.metadata.tags,
             thumbnailRelativePath: package.metadata.thumbnailRelativePath,
             archived: package.metadata.archived,
-            headRevisionID: package.manifest.headRevisionID
+            headRevisionID: package.manifest.headRevisionID,
+            trashedAt: package.metadata.trashedAt
         )
     }
 
@@ -4859,6 +4930,10 @@ public actor LocalRoomProjectStore {
     ) throws -> RoomBackupRecoveryResult {
         try ensureRootExists(root)
         let originalProjectID = prepared.manifest.projectID
+        try rejectTrashedProjectIfPresent(root: root, projectID: originalProjectID)
+        if let copyProjectID {
+            try rejectTrashedProjectIfPresent(root: root, projectID: copyProjectID)
+        }
         if forceExactRecoveredCopy {
             guard conflictPolicy == .recoverAsCopy,
                   let copyProjectID,

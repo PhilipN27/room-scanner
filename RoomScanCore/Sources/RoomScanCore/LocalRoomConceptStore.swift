@@ -130,6 +130,7 @@ public actor LocalRoomConceptStore {
     private static let pendingFilename = ".pending-concept.json"
 
     private let rootURL: URL
+    private let configuredRootURL: URL
     private let sourcePackageRootURL: URL
     private let faultInjector: any RoomConceptStoreFaultInjecting
     private let recoverySynchronizer: any RoomConceptRecoverySynchronizing
@@ -140,6 +141,7 @@ public actor LocalRoomConceptStore {
         sourcePackageRootURL: URL,
         faultInjector: any RoomConceptStoreFaultInjecting = NoRoomConceptStoreFaultInjector()
     ) {
+        self.configuredRootURL = rootURL.standardizedFileURL
         self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.sourcePackageRootURL = sourcePackageRootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.faultInjector = faultInjector
@@ -152,6 +154,7 @@ public actor LocalRoomConceptStore {
         faultInjector: any RoomConceptStoreFaultInjecting = NoRoomConceptStoreFaultInjector(),
         recoverySynchronizer: any RoomConceptRecoverySynchronizing
     ) {
+        self.configuredRootURL = rootURL.standardizedFileURL
         self.rootURL = rootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.sourcePackageRootURL = sourcePackageRootURL.standardizedFileURL.resolvingSymlinksInPath()
         self.faultInjector = faultInjector
@@ -582,6 +585,107 @@ public actor LocalRoomConceptStore {
         }
     }
 
+    /// Removes project companions without consulting the already-deleted
+    /// source package. Each concept must prove exact canonical marker
+    /// ownership at its project/revision/digest/concept path and have a
+    /// recursively link-free tree. Unsafe children are preserved, while
+    /// safe siblings are still attempted before a typed error is returned.
+    /// Returns false for an already-absent project; never creates directories.
+    @discardableResult
+    public func removeAll(projectID: String) throws -> Bool {
+        try requireIdentifier(projectID, at: "projectID")
+        try validateRootSeparation()
+        if pathExists(configuredRootURL) {
+            // The ordinary store canonicalizes its root during construction.
+            // Cleanup must also reject a link present at that original URL.
+            try requireDirectoryNonSymlink(configuredRootURL)
+        }
+        let project = rootURL.appendingPathComponent(projectID, isDirectory: true)
+        try requireExistingStorePathComponentsNonSymlink(through: project)
+        guard pathExists(project) else { return false }
+
+        var hadFailure = false
+        for revision in try cleanupChildren(of: project) {
+            do {
+                try requireIdentifier(revision.lastPathComponent, at: "revisionID")
+                try requireExistingStorePathComponentsNonSymlink(through: revision)
+                for revisionRoot in try cleanupChildren(of: revision) {
+                    do {
+                        try requireExistingStorePathComponentsNonSymlink(through: revisionRoot)
+                        try RoomConceptProcessLockRegistry.shared.withLock(key: revisionRoot.path) {
+                            try requireExistingStorePathComponentsNonSymlink(through: revisionRoot)
+                            for concept in try cleanupChildren(of: revisionRoot) {
+                                do {
+                                    try requireDirectoryNonSymlink(concept)
+                                    let ownership = try readOwnership(from: concept)
+                                    guard ownership.sourceRevision.projectID == projectID,
+                                          ownership.sourceRevision.revisionID == revision.lastPathComponent,
+                                          ownership.sourceRevision.revisionManifestSHA256 == revisionRoot.lastPathComponent,
+                                          ownership.conceptSetID == concept.lastPathComponent
+                                    else {
+                                        throw RoomConceptSetError.unsafeStore(
+                                            "Concept cleanup requires exact source and directory ownership."
+                                        )
+                                    }
+                                    try requireRemovableConceptTree(concept)
+                                    try requireExistingStorePathComponentsNonSymlink(through: concept)
+                                    try fileManager.removeItem(at: concept)
+                                } catch {
+                                    hadFailure = true
+                                }
+                            }
+                            try removeEmptyCleanupDirectory(revisionRoot)
+                        }
+                    } catch {
+                        hadFailure = true
+                    }
+                }
+                try removeEmptyCleanupDirectory(revision)
+            } catch {
+                hadFailure = true
+            }
+        }
+        try removeEmptyCleanupDirectory(project)
+        guard !hadFailure, !pathExists(project) else {
+            throw RoomConceptSetError.unsafeStore(
+                "Some Concept Set companions could not be safely removed; unsafe entries were preserved."
+            )
+        }
+        return true
+    }
+
+    private func cleanupChildren(of directory: URL) throws -> [URL] {
+        try requireDirectoryNonSymlink(directory)
+        return try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey],
+            options: []
+        ).sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    private func requireRemovableConceptTree(_ directory: URL) throws {
+        var directories = [directory]
+        while let current = directories.popLast() {
+            for entry in try cleanupChildren(of: current) {
+                let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else {
+                    throw RoomConceptSetError.unsafeStore("Concept cleanup refuses recursive symbolic links.")
+                }
+                if values.isDirectory == true {
+                    directories.append(entry)
+                } else {
+                    try requireRegularNonSymlink(entry)
+                }
+            }
+        }
+    }
+
+    private func removeEmptyCleanupDirectory(_ directory: URL) throws {
+        try requireExistingStorePathComponentsNonSymlink(through: directory)
+        guard try cleanupChildren(of: directory).isEmpty else { return }
+        try fileManager.removeItem(at: directory)
+    }
+
     private func setArchiveState(
         _ archiveState: RoomConceptArchiveState,
         conceptSetID: String,
@@ -1009,6 +1113,14 @@ public actor LocalRoomConceptStore {
     }
 
     private func validateConfiguration() throws {
+        try validateRootSeparation()
+        guard pathExists(sourcePackageRootURL) else {
+            throw RoomConceptSetError.unsafeStore("The immutable source package root does not exist.")
+        }
+        try requireDirectoryNonSymlink(sourcePackageRootURL)
+    }
+
+    private func validateRootSeparation() throws {
         let rootComponents = rootURL.pathComponents
         let sourceComponents = sourcePackageRootURL.pathComponents
         let rootInsideSource = hasPathPrefix(rootComponents, prefix: sourceComponents)
@@ -1016,10 +1128,6 @@ public actor LocalRoomConceptStore {
         guard !rootInsideSource, !sourceInsideRoot else {
             throw RoomConceptSetError.sourceStoreOverlap
         }
-        guard pathExists(sourcePackageRootURL) else {
-            throw RoomConceptSetError.unsafeStore("The immutable source package root does not exist.")
-        }
-        try requireDirectoryNonSymlink(sourcePackageRootURL)
     }
 
     private func hasPathPrefix(_ path: [String], prefix: [String]) -> Bool {

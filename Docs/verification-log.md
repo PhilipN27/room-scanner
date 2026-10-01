@@ -2060,3 +2060,54 @@ historical acceptance result was changed. Full Swift/native schemes,
 service/database/infrastructure/browser matrices, physical hardware, live
 providers, signing, deployment and release approval were not rerun or
 claimed by this documentation task. No commit, push or PR was performed.
+
+## 2026-09-30 — Slice 7 Core local-trash lifecycle
+
+Evidence tier: macOS Swift package XCTest and static verification only.
+Implemented optional `metadata.json.trashedAt`, summary projection, default-off
+trash listing, metadata-only trash/restore, guarded permanent deletion, a pure
+30-day retention policy, ownership-checked companion removal and property
+membership detachment. No app sources, PBX settings, dependencies, fixture
+bytes or privacy-manifest bytes changed. Core sources/tests are discovered by
+the existing local Swift package, not app PBX source phases.
+
+Commands from the repository root:
+
+```sh
+swift test --filter LocalRoomProjectStoreTrashTests
+swift test --filter 'LocalRoomProjectStoreTrashTests|CompanionRemovalTests'
+swift test
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+python3 -B Scripts/verify_xcode_scaffold.py
+git diff 81c3de6 --exit-code -- RoomScanStudio/Fixtures RoomScanCore/Tests/RoomScanCoreTests/Fixtures RoomScanStudio/Resources/PrivacyInfo.xcprivacy
+git diff --check
+```
+
+TDD: the initial trash suite failed for missing APIs; with the lifecycle in
+place but guards absent, 27 tests produced 50 failures, including successful
+forbidden writes and changed SHA-256 closures. A final-promotion race control
+failed with two assertions before the working-copy promotion recheck was added.
+Companion tests initially failed for missing APIs; removing the concept
+ownership check made the mixed-child control fail with two assertions, and the
+guard was restored before the passing run.
+
+Final results: 30 trash tests plus 14 companion tests passed; full `swift test`
+passed 362/362 (318 existing plus 44 new), with zero failures in 33.688 seconds.
+Python passed 72/72 in 34.110 seconds; scaffold reported
+`static structure passed`. Fixture/privacy diff and whitespace checks were
+empty. The deprecated `delete(projectID:)` alias remains for existing callers;
+unchanged callers emit expected deprecation warnings on compilation.
+
+The trash tests add keep-always text attachments named
+`VAL-TRASH-001-core-trash` through `VAL-TRASH-007-core-trash`; absent companion
+cleanup adds `VAL-TRASH-010-absent-companion-removal`. The package command does
+not produce an Xcode `.xcresult`, so no xcresult attachment export is claimed.
+Raw red/green and gate logs are retained under
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-core-trash/`; their
+SHA-256 inventory accompanies the worker handoff.
+
+Simulator, unsigned app build, physical-device, CloudKit and release gates were
+not run for this Core-only feature. App integration and UI portions of the
+validation contract remain assigned to later mission features. Another
+project's Simulator build was active during final verification and was left
+untouched.
