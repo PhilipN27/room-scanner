@@ -6,6 +6,8 @@ struct RoomTrashReaperReport: Equatable {
     var listingErrorMessage: String?
 
     var purgedCount: Int { purgeReports.filter { $0.package == .removed }.count }
+    var skippedCount: Int { purgeReports.filter { $0.package.skipped }.count }
+    var failedCount: Int { purgeReports.filter(\.hasFailures).count }
 }
 
 @MainActor
@@ -52,7 +54,7 @@ final class RoomTrashReaper: RoomTrashReaping {
             let expiredIDs = retentionPolicy.expiredProjectIDs(summaries: listing.summaries, now: clock.now())
             var reports: [RoomProjectPurgeReport] = []
             for projectID in expiredIDs {
-                reports.append(await purgeCoordinator.purge(projectID: projectID))
+                reports.append(await purgeCoordinator.purge(projectID: projectID, mode: .automatic))
             }
             return .init(purgeReports: reports)
         } catch {

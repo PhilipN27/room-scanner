@@ -312,7 +312,7 @@ final class RoomLibraryController: ObservableObject {
 
     @discardableResult
     func deleteNow(projectID: String) async throws -> RoomProjectPurgeReport {
-        let report = await purgeCoordinator.purge(projectID: projectID)
+        let report = await purgeCoordinator.purge(projectID: projectID, mode: .manual)
         recordPurgeReports([report])
         await refreshLibrary()
         if case .failed(let message) = report.package {

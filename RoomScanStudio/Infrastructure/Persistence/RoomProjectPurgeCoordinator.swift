@@ -5,7 +5,13 @@ import RoomScanCore
 enum RoomProjectPurgeResult: Equatable {
     case removed
     case alreadyAbsent
+    case skippedNotTrashed
+    case skippedNotExpired
     case failed(String)
+
+    var skipped: Bool {
+        self == .skippedNotTrashed || self == .skippedNotExpired
+    }
 
     var failed: Bool {
         if case .failed = self { return true }
@@ -31,7 +37,7 @@ struct RoomProjectPurgeReport: Equatable {
     let package: RoomProjectPurgeResult
     var companions: [RoomProjectPurgeCompanionResult] = []
 
-    var packageDeleted: Bool { !package.failed }
+    var packageDeleted: Bool { package == .removed || package == .alreadyAbsent }
     var hasFailures: Bool { package.failed || companions.contains { $0.result.failed } }
 
     var companionFailureMessage: String? {
@@ -43,7 +49,18 @@ struct RoomProjectPurgeReport: Equatable {
 
 @MainActor
 protocol RoomProjectPurging {
-    func purge(projectID: String) async -> RoomProjectPurgeReport
+    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport
+}
+
+enum RoomProjectPurgeMode {
+    case manual
+    case automatic
+}
+
+extension RoomProjectPurging {
+    func purge(projectID: String) async -> RoomProjectPurgeReport {
+        await purge(projectID: projectID, mode: .manual)
+    }
 }
 
 /// Local package truth is removed before independently guarded companions.
@@ -59,6 +76,8 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
     private let syncJournalRootURL: URL?
     private let indexContext: ModelContext?
     private let deletionRequest: (@MainActor (String) async throws -> Void)?
+    private let clock: any RoomProjectClock
+    private let retentionPolicy: RoomTrashRetentionPolicy
 
     init(
         store: LocalRoomProjectStore,
@@ -68,6 +87,8 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
         syncJournal: ProfessionalProjectSyncJournal? = nil,
         syncJournalRootURL: URL? = nil,
         modelContainer: ModelContainer? = nil,
+        clock: any RoomProjectClock = SystemRoomProjectClock(),
+        retentionPolicy: RoomTrashRetentionPolicy = .init(),
         deletionRequest: (@MainActor (String) async throws -> Void)? = nil
     ) {
         self.store = store
@@ -78,14 +99,18 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
         self.syncJournalRootURL = syncJournalRootURL
         indexContext = modelContainer.map(ModelContext.init)
         self.deletionRequest = deletionRequest
+        self.clock = clock
+        self.retentionPolicy = retentionPolicy
     }
 
-    func purge(projectID: String) async -> RoomProjectPurgeReport {
+    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport {
         // Validate/load first, so an invalid ID or unsafe package never reaches
         // the request hook. A repeated purge still retries companion cleanup.
         var packageExists = true
         do {
-            _ = try await store.load(projectID: projectID)
+            if let skip = try await skipReason(projectID: projectID, mode: mode) {
+                return .init(projectID: projectID, package: skip)
+            }
         } catch RoomProjectStoreError.projectNotFound(_) {
             packageExists = false
         } catch {
@@ -101,6 +126,11 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
 
         let packageResult: RoomProjectPurgeResult
         do {
+            // The request hook can suspend. Re-read disk truth after it and
+            // directly before deletion, never rely on the reaper's old listing.
+            if packageExists, let skip = try await skipReason(projectID: projectID, mode: mode) {
+                return .init(projectID: projectID, package: skip)
+            }
             try await store.permanentlyDelete(projectID: projectID)
             packageResult = .removed
         } catch RoomProjectStoreError.projectNotFound(_) {
@@ -152,6 +182,15 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
             return !records.isEmpty
         })
         return report
+    }
+
+    private func skipReason(projectID: String, mode: RoomProjectPurgeMode) async throws -> RoomProjectPurgeResult? {
+        let package = try await store.load(projectID: projectID)
+        guard let trashedAt = package.metadata.trashedAt else { return .skippedNotTrashed }
+        if mode == .automatic, retentionPolicy.purgeDate(trashedAt: trashedAt) > clock.now() {
+            return .skippedNotExpired
+        }
+        return nil
     }
 
     private func remove(

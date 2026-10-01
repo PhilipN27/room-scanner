@@ -475,34 +475,49 @@ final class RoomScanStudioUITests: XCTestCase {
                         "order=\(order)\n\(trashTestElementInventory(in: app))")
     }
 
-    func testTrashDarkModeAndIncreaseContrastKeepListOrderAndDetailLegible() throws {
+    func testTrashDarkModeKeepsListOrderAndDetailLegible() throws {
         executionTimeAllowance = 300
         let token = String(UUID().uuidString.prefix(12))
         let light = launchIsolatedApp(rootToken: token, extraArguments: ["-AppleInterfaceStyle", "Light"])
-        saveTrashTestRooms(2, in: light)
-        for id in ["ui-project-002", "ui-project-001"] {
-            openTrashTestProject(id, in: light)
-            moveTrashTestProjectToTrash(in: light, valID: "VAL-TRASH-030", slug: "light-trash-\(id)")
-        }
-        selectTrashTestFilter("Trash", in: light)
-        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: light)
+        seedTrashTestAppearanceRooms(in: light, slug: "light")
         XCTAssertGreaterThan(try trashTestPaperBrightness(in: light), 0.7,
                              "The light control must actually render light paper.")
         attachTrashScreenshot(light, "VAL-TRASH-030", "light-order-control")
         light.terminate()
 
-        // UIAccessibility's real system setting, not an invented app flag.
-        // The Simulator verification operator enables Increase Contrast before
-        // running this test; the assertion fails rather than mislabeling evidence.
         let dark = launchIsolatedApp(rootToken: token, keepRoot: true, extraArguments: [
             "-AppleInterfaceStyle", "Dark",
         ])
         defer { dark.terminate() }
-        XCTAssertTrue(UIAccessibility.isDarkerSystemColorsEnabled,
-                      "Enable Simulator Increase Contrast before collecting VAL-TRASH-030 evidence.")
         XCTAssertTrue(dark.buttons["home.existingRooms"].waitForExistence(timeout: 10))
         dark.buttons["home.existingRooms"].tap()
         selectTrashTestFilter("Trash", in: dark)
+        try assertTrashTestDarkAppearance(in: dark, slug: "dark")
+    }
+
+    func testTrashIncreaseContrastKeepsListOrderAndDetailLegible() throws {
+        try XCTSkipUnless(UIAccessibility.isDarkerSystemColorsEnabled,
+                          "Increase Contrast is off; run services.yaml test-trash-contrast-iphone, which enables it.")
+        executionTimeAllowance = 300
+        let dark = launchIsolatedApp(extraArguments: ["-AppleInterfaceStyle", "Dark"])
+        defer { dark.terminate() }
+        seedTrashTestAppearanceRooms(in: dark, slug: "dark-increase-contrast")
+        try assertTrashTestDarkAppearance(in: dark, slug: "dark-increase-contrast")
+        attachTrashText("VAL-TRASH-030", "system-contrast-and-element-frames",
+                        "UIAccessibility.isDarkerSystemColorsEnabled=\(UIAccessibility.isDarkerSystemColorsEnabled)\n\(trashTestElementInventory(in: dark))")
+    }
+
+    private func seedTrashTestAppearanceRooms(in app: XCUIApplication, slug: String) {
+        saveTrashTestRooms(2, in: app)
+        for id in ["ui-project-002", "ui-project-001"] {
+            openTrashTestProject(id, in: app)
+            moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-030", slug: "\(slug)-trash-\(id)")
+        }
+        selectTrashTestFilter("Trash", in: app)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: app)
+    }
+
+    private func assertTrashTestDarkAppearance(in dark: XCUIApplication, slug: String) throws {
         assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: dark)
         XCTAssertLessThan(try trashTestPaperBrightness(in: dark), 0.3,
                           "Dark evidence must render dark paper, not just carry a Dark launch argument.")
@@ -510,21 +525,19 @@ final class RoomScanStudioUITests: XCTestCase {
             assertTrashTestBadge("TRASH", projectID: id, in: dark)
             _ = trashTestPurgeLabel(id, in: dark)
         }
-        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-trash-list")
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "\(slug)-trash-list")
         openTrashTestProject("ui-project-001", in: dark)
         let banner = identifiedElement("detail.trashBanner", in: dark)
         XCTAssertTrue(banner.waitForExistence(timeout: 10))
         scrollIntoView(banner, in: dark.scrollViews["detail.scroll"], direction: .backward)
         assertTrashTestFullyVisible(banner, in: dark.scrollViews["detail.scroll"])
-        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-trash-banner")
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "\(slug)-trash-banner")
         let restore = dark.buttons["detail.restore"]
         XCTAssertTrue(restore.waitForExistence(timeout: 10))
         scrollIntoView(restore, in: dark.scrollViews["detail.scroll"])
         assertTrashTestTarget(restore)
         assertTrashTestTarget(dark.buttons["detail.delete"])
-        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-restore-delete-actions")
-        attachTrashText("VAL-TRASH-030", "system-contrast-and-element-frames",
-                        "UIAccessibility.isDarkerSystemColorsEnabled=true\n\(trashTestElementInventory(in: dark))")
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "\(slug)-restore-delete-actions")
     }
 
     func testRevisionInspectionAndRestoreCreateNewLineage() {
@@ -836,6 +849,7 @@ final class RoomScanStudioUITests: XCTestCase {
 
             saveAnyway.tap()
             let project = app.buttons["library.project.ui-project-001"]
+            scrollIntoView(project, in: app)
             XCTAssertTrue(project.waitForExistence(timeout: 10))
             project.tap()
             let persisted = app.descendants(matching: .any)["detail.quality.summary"]
@@ -959,6 +973,7 @@ final class RoomScanStudioUITests: XCTestCase {
             advanceSimulatedCaptureToReview(in: app)
             app.buttons["capture.save"].tap()
             let project = app.buttons["library.project.ui-project-001"]
+            scrollIntoView(project, in: app)
             XCTAssertTrue(project.waitForExistence(timeout: 10))
             project.tap()
             let detailScroll = app.scrollViews["detail.scroll"]

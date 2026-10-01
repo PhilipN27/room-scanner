@@ -89,7 +89,8 @@ final class AppEnvironment: ObservableObject {
             ),
             propertyStore: propertyStore,
             syncJournalRootURL: syncJournalRoot,
-            modelContainer: indexBootstrap.container
+            modelContainer: indexBootstrap.container,
+            clock: resolvedTrashClock
         )
         trashReaper = RoomTrashReaper(
             store: store, purgeCoordinator: purgeCoordinator, clock: resolvedTrashClock

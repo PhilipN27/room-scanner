@@ -2516,3 +2516,109 @@ Promoted scratch xcresults/attachments were byte-verified before removal.
 The RoomScan iPhone Simulator was shut down and erased to reclaim space.
 Full iPhone/iPad schemes, physical device, signed archive, LiDAR and real
 CloudKit were **not run** in this feature; they remain separate mission gates.
+
+## 2026-10-01 — Slice 7 full-scheme fixes, partial reconciliation
+
+This reconciles the Milestone 1 scrutiny gate at `fa20373` (371 passed,
+three failed out of 374). Evidence tiers: Core/macOS, static structure and
+iPhone 16 Pro Simulator/iOS 26.3.1 only. **The required zero-failure full
+iPhone gate is not closed.**
+
+Both screenshot matrices now scroll the lazy Library project into view
+immediately before waiting. Their assertions, all four Light/Dark/default/
+AXXXL variants and all 20 screenshots remain. No filter layout, accessibility
+identifier, Core primitive, fixture, PBX or privacy-manifest change was made.
+
+Dark appearance is tested unconditionally, including real paper-brightness
+controls, row order, badges, purge dates, banner and action targets. The
+separate Increase Contrast test starts with `XCTSkipUnless` naming the
+dedicated setting-enabled command. That command resets the setting even on
+failure. A skip does not count as high-contrast evidence.
+
+The purge coordinator re-reads disk trash state before the local deletion
+request and again directly before permanent deletion, after any suspension
+in that request. Active/restored projects return `skippedNotTrashed` without
+package, companion or index cleanup; automatic purges also return
+`skippedNotExpired` for a new, unexpired trash date. Manual Delete now still
+requires trash but not expiry. The reaper requests automatic semantics and
+counts skips separately from purges and failures. Store, coordinator and
+reaper share the resolved clock in app composition.
+
+| Dated reconciliation | Command/selection | Result |
+| --- | --- | --- |
+| 2026-10-01 | `swift test` | 362 passed, zero failures, including reruns in both completed full gates |
+| 2026-10-01 | `python3 -B Scripts/verify_xcode_scaffold.py`; Python unittest discovery; Simulator-selector self-test | Static structure passed; 79 Python tests passed; selector self-test passed |
+| 2026-10-01 | `build-for-testing-iphone`; `RoomTrashLifecycleTests` | Build passed; 23 app tests passed, zero failures |
+| 2026-10-01 | `test-screenshot-matrices-iphone` | Both matrix tests passed; 20 original screenshots retained |
+| 2026-10-01 | `test-trash-ui-iphone`, Increase Contrast off | 29 passed, zero failures, one expected contrast skip (30 total) |
+| 2026-10-01 | `test-trash-relaunch-iphone` | 25 passed, zero failures |
+| 2026-10-01 | `test-trash-library-backup-regressions-iphone` | 13 passed, one existing backup-error visibility timeout; that method passed 1/1 on its single unchanged retry |
+| 2026-10-01 | `test-trash-contrast-iphone` | 1/1 passed; dark+Increase Contrast list/banner/actions and `isDarkerSystemColorsEnabled=true` text retained; setting reset to disabled |
+| 2026-10-01 | Full `services.yaml: test`, first completed gate | 377 passed, one failed, one expected contrast skip (379 total); exit 65 |
+| 2026-10-01 | Full `services.yaml: test`, one completed unchanged retry | 376 passed, two failed, one expected contrast skip (379 total); exit 65 |
+
+The first completed full gate failed on XCTest's transient identity-binding
+snapshot while enumerating accessibility order in
+`testTrashAccessibilityXXXLKeepsFiltersRowsBannerAndActionsReachableInOrder`.
+The original assertions passed in both scoped selections. Another project's
+Simulator test session was running when this full gate finished; it was left
+alone, and the retry waited for it to finish. The retry instead failed the
+existing `testMetadataDuplicateArchiveAndUnarchiveRemainExplicit` and
+`testTrashOrderingUsesTrashDateNotProjectIDOrLastRevision` visibility waits.
+Those tests passed in the scoped runs. The two fixed matrices and all four
+new purge tests passed in both completed full gates. No further full retry or
+unrelated UI-test change was made.
+
+The red-first stale-expiry test failed with seven assertions because the
+restored package, real redesign/Concept Set/property/sync companions and
+index were deleted. A temporary mutation removed both trash/expiry checks
+from the disk-read helper: all three selected controls failed (19 assertions,
+including the expected subsequent not-found error). The checks were restored
+before rebuilding and running the green 23-test suite. Four keep-always
+`VAL-TRASH-032-*` text attachments prove restored-after-listing survival,
+restoration during the awaited hook, current-date automatic skip versus
+manual deletion, and active manual skip.
+
+Commands are the named selections above from mission `services.yaml`, from
+the repository root. They use explicit pinned RoomScan iPhone destinations,
+`/tmp/roomscan-slice7-work/DerivedData`, `-parallel-testing-enabled NO`,
+`-collect-test-diagnostics never`, and timestamped result bundles. The full
+command also runs Core and Python tests. It reuses the worker DerivedData
+rather than allocating a second Simulator build. The failed backup method's
+single retry used the same `test-without-building` flags and
+`-only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testCloudBackupIsDisabledAndUnconfiguredWithoutAutomaticLaunchOperation`.
+
+Retained root:
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-full-scheme-fixes/`.
+`full-iphone-first-summary.json` and `full-iphone-retry-summary.json` are
+**failed-gate** summaries, not acceptance passes. Their attachment manifests
+retain 183 and 171 contract/matrix attachments respectively, with test
+identifiers, original attachment names and SHA-256 bindings. The dedicated
+`contrast-attachments/manifest.json` has the actual system-setting evidence.
+Reviewed screenshots show both ordered dark Trash rows, legible purge dates,
+the full banner and Restore/Delete now actions.
+
+Three pause-interrupted full attempts never finalized a readable result
+bundle; only their partial logs are retained, and none is counted as a gate.
+All completed raw xcresults were removed only after summary/attachment
+promotion and byte verification. The interrupted session-created scratch
+bundles were also removed after confirming their missing result Info.plist.
+The iPhone Simulator was shut down with Increase Contrast disabled. The
+final completed retry started with 18 GiB free, above the 8 GiB full-gate
+floor. Earlier scoped work reclaimed only promoted scratch output and the
+mission-owned iPhone Simulator.
+
+The remaining full-gate failures are returned as a blocker for separate UI
+stability investigation. No iPad, unsigned generic iOS build, physical device,
+signed archive, LiDAR, real CloudKit or upload was performed in this feature.
+
+SHA-256 bindings beneath the retained root:
+
+- `core.log`: `d69baecfde183ff248f3e35f12ec406d8d621a421ca19f9f4a029003f490f288`
+- `scaffold-final.log`: `d158a487710f46f6d70f53f12079a3bcd0d03a371be60ccfe2c1691091e6af60`
+- `python-final.log`: `1d6ff19a772df33f5924fc005c9a6bf29150061f709fde76601c28b4ae723acc`
+- `full-iphone-first.log`: `bc34053ad6f65972501c4196d85f9eb480301d183c2ce279d5722ce9ccda1c46`
+- `full-iphone-retry.log`: `ab42ca9a93a0a41ee136627f6d24386f4fc02901c484f57511a76e672a3dbf85`
+- `test-trash-contrast-iphone.log`: `1a47739d6b82bb6a17b51bc87c7b4d7fdfcd7ea8f634bb8e8ac4154734c4267b`
+- `mutation-test.log`: `8b49d902018181351be8fa137ea0eb4c0f23ad80f1639aa7af7e805b41b1c44c`
+- `red-test.log`: `b160b27e292f695f0d5cd2ab4ff5ff69a89cf932ba603b6b82301b0c94c4a6a6`

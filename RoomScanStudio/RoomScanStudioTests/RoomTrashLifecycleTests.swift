@@ -88,6 +88,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         let container = try RoomProjectIndexFactory.makeContainer(isStoredInMemoryOnly: true)
         try await rebuildIndex(store: store, container: container)
         XCTAssertEqual(try indexRecords(container).map(\.projectID), [saved.projectID])
+        try await store.moveToTrash(projectID: saved.projectID)
         let coordinator = RoomProjectPurgeCoordinator(
             store: store,
             redesignStore: redesign,
@@ -130,6 +131,62 @@ final class RoomTrashLifecycleTests: XCTestCase {
                "Package, redesign, imported Concept Set, both property memberships, sync record and index removed. "
                + "Property files retained with exact remaining fields. Real .published operation bytes unchanged; "
                + "SHA256=\(RoomSHA256.hexDigest(of: auditBefore)).")
+    }
+
+    func testPurgeSkipsProjectRestoredAfterExpiryWasComputedAndPreservesAllLocalState() async throws {
+        let store = makeStore(projectIDs: ["restored-project"])
+        let saved = try await saveProject(in: store)
+        let source = try await store.redesignSourceRevisionBinding(
+            projectID: saved.projectID, revisionID: saved.headRevisionID
+        )
+        let redesign = LocalRoomRedesignStore(rootURL: root("RedesignState"))
+        try await seedRedesign(in: redesign, store: store, source: source)
+        let concepts = makeConceptStore()
+        _ = try await concepts.importConceptSet(
+            conceptImport(source: source),
+            context: .init(expectedSourceRevision: source, currentCanonicalCameraIDs: [])
+        )
+        let properties = LocalRoomPropertyStore(rootURL: root("Properties"))
+        try await properties.save(property("property-001", members: [saved.projectID]))
+        let journal = try ProfessionalProjectSyncJournal(rootURL: root("ProfessionalSyncJournal"))
+        try journal.replace(syncRecord(for: saved))
+        try await store.moveToTrash(projectID: saved.projectID)
+        let advancedClock = FixedRoomProjectClock(date: epoch.addingTimeInterval(31 * day))
+        let listing = try await store.listProjectListing(includeArchived: true, includeTrashed: true)
+        let expiredIDs = RoomTrashRetentionPolicy().expiredProjectIDs(
+            summaries: listing.summaries, now: advancedClock.now()
+        )
+        XCTAssertEqual(expiredIDs, [saved.projectID])
+        try await store.restoreFromTrash(projectID: saved.projectID)
+        let container = try RoomProjectIndexFactory.makeContainer(isStoredInMemoryOnly: true)
+        try await rebuildIndex(store: store, container: container)
+        let before = try bytesUnder(temporaryRoot)
+        var requestIDs: [String] = []
+        let coordinator = RoomProjectPurgeCoordinator(
+            store: store, redesignStore: redesign, conceptStore: concepts,
+            propertyStore: properties, syncJournal: journal, modelContainer: container, clock: advancedClock,
+            deletionRequest: { requestIDs.append($0) }
+        )
+
+        let report = await coordinator.purge(projectID: expiredIDs[0], mode: .automatic)
+
+        XCTAssertFalse(report.packageDeleted, "A stale expiry decision must never delete a restored package.")
+        XCTAssertEqual(report.package, .skippedNotTrashed)
+        XCTAssertFalse(report.hasFailures)
+        XCTAssertTrue(report.companions.isEmpty)
+        XCTAssertTrue(requestIDs.isEmpty, "A skipped purge must not journal a deletion request.")
+        XCTAssertTrue(fileManager.fileExists(atPath: projectURL(saved.projectID).path))
+        XCTAssertEqual(try bytesUnder(temporaryRoot), before, "Package and every companion must remain byte-identical.")
+        XCTAssertEqual(try indexRecords(container).map(\.projectID), [saved.projectID])
+        XCTAssertNil(try indexRecords(container).first?.trashedAt)
+        let reaperReport = RoomTrashReaperReport(purgeReports: [report])
+        XCTAssertEqual(reaperReport.skippedCount, 1)
+        XCTAssertEqual(reaperReport.purgedCount, 0)
+        XCTAssertEqual(reaperReport.failedCount, 0)
+        attach("VAL-TRASH-032", "restored-after-expiry-survives",
+               "Surviving package: Projects/\(saved.projectID). Report: \(report). "
+               + "Surviving files: \(try relativePaths().joined(separator: ", ")). "
+               + "All package/companion bytes and restored index row unchanged; deletion requests: \(requestIDs).")
     }
 
     func testMixedConceptOwnershipReportsFailureRemovesSafeChildAndNeverResurrectsPackage() async throws {
@@ -189,9 +246,94 @@ final class RoomTrashLifecycleTests: XCTestCase {
                + "Concept failure reported; package absent from disk/listing and index row removed.")
     }
 
+    func testAutomaticPurgeRechecksNewTrashDateButManualDeleteNowDoesNotRequireExpiry() async throws {
+        let store = makeStore(projectIDs: ["retrashed-project"])
+        let saved = try await saveProject(in: store)
+        try await trash(saved.projectID, at: epoch.addingTimeInterval(-31 * day))
+        let listing = try await store.listProjectListing(includeArchived: true, includeTrashed: true)
+        XCTAssertEqual(RoomTrashRetentionPolicy().expiredProjectIDs(summaries: listing.summaries, now: epoch),
+                       [saved.projectID])
+        try await store.restoreFromTrash(projectID: saved.projectID)
+        try await store.moveToTrash(projectID: saved.projectID)
+        let before = try bytesUnder(temporaryRoot)
+        var requests: [String] = []
+        let coordinator = RoomProjectPurgeCoordinator(
+            store: store, clock: FixedRoomProjectClock(date: epoch), deletionRequest: { requests.append($0) }
+        )
+
+        let automatic = await coordinator.purge(projectID: saved.projectID, mode: .automatic)
+
+        XCTAssertEqual(automatic.package, .skippedNotExpired)
+        XCTAssertFalse(automatic.packageDeleted)
+        XCTAssertFalse(automatic.hasFailures)
+        XCTAssertTrue(automatic.companions.isEmpty)
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertEqual(try bytesUnder(temporaryRoot), before)
+        let controller = RoomLibraryController(store: store, modelContainer: nil, purgeCoordinator: coordinator)
+        let manual = try await controller.deleteNow(projectID: saved.projectID)
+        XCTAssertEqual(manual.package, .removed)
+        XCTAssertEqual(requests, [saved.projectID])
+        XCTAssertFalse(fileManager.fileExists(atPath: projectURL(saved.projectID).path))
+        attach("VAL-TRASH-032", "retrashed-date-automatic-skip-manual-delete",
+               "New current trash date: \(epoch). Automatic report: \(automatic), all bytes survived, zero requests. "
+               + "Manual Delete now report: \(manual), package removed without waiting 30 days.")
+    }
+
+    func testPurgeRechecksDiskAfterSuspendingDeletionRequest() async throws {
+        let store = makeStore(projectIDs: ["restored-during-request"])
+        let saved = try await saveProject(in: store)
+        try await trash(saved.projectID, at: epoch.addingTimeInterval(-31 * day))
+        let companion = root("RedesignState").appendingPathComponent("\(saved.projectID)/keep")
+        try writeCanary(at: companion)
+        let container = try RoomProjectIndexFactory.makeContainer(isStoredInMemoryOnly: true)
+        try await rebuildIndex(store: store, container: container)
+        let coordinator = RoomProjectPurgeCoordinator(
+            store: store, redesignStore: LocalRoomRedesignStore(rootURL: root("RedesignState")),
+            modelContainer: container, clock: FixedRoomProjectClock(date: epoch),
+            deletionRequest: { projectID in
+                try await store.restoreFromTrash(projectID: projectID)
+                try await self.rebuildIndex(store: store, container: container)
+            }
+        )
+
+        let report = await coordinator.purge(projectID: saved.projectID, mode: .automatic)
+
+        XCTAssertEqual(report.package, .skippedNotTrashed)
+        XCTAssertFalse(report.packageDeleted)
+        XCTAssertTrue(report.companions.isEmpty)
+        let package = try await store.load(projectID: saved.projectID)
+        XCTAssertNil(package.metadata.trashedAt)
+        XCTAssertEqual(try Data(contentsOf: companion), Self.canary)
+        XCTAssertEqual(try indexRecords(container).map(\.projectID), [saved.projectID])
+        XCTAssertNil(try indexRecords(container).first?.trashedAt)
+        attach("VAL-TRASH-032", "restore-during-request-survives-final-read",
+               "Surviving package: Projects/\(saved.projectID). Report: \(report). "
+               + "Restore inside awaited local request hook retained package, redesign canary and restored index.")
+    }
+
+    func testManualPurgeAlsoSkipsActiveProjectWithoutRequestsOrCompanionCleanup() async throws {
+        let store = makeStore(projectIDs: ["active-project"])
+        let saved = try await saveProject(in: store)
+        let before = try bytesUnder(temporaryRoot)
+        var requests: [String] = []
+        let report = await RoomProjectPurgeCoordinator(
+            store: store, deletionRequest: { requests.append($0) }
+        ).purge(projectID: saved.projectID, mode: .manual)
+
+        XCTAssertEqual(report.package, .skippedNotTrashed)
+        XCTAssertFalse(report.packageDeleted)
+        XCTAssertFalse(report.hasFailures)
+        XCTAssertTrue(report.companions.isEmpty)
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertEqual(try bytesUnder(temporaryRoot), before)
+        attach("VAL-TRASH-032", "active-manual-purge-skips",
+               "Surviving package: Projects/\(saved.projectID). Report: \(report). Zero requests, all bytes unchanged.")
+    }
+
     func testPurgeIsIdempotentAndAbsentCompanionRemovalCreatesNoDirectories() async throws {
         let store = makeStore(projectIDs: ["project-001"])
         let saved = try await saveProject(in: store)
+        try await store.moveToTrash(projectID: saved.projectID)
         let redesign = LocalRoomRedesignStore(rootURL: root("RedesignState"))
         let concepts = makeConceptStore()
         let properties = LocalRoomPropertyStore(rootURL: root("Properties"))
@@ -238,6 +380,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
     func testDeletionRequestIsAwaitedWhilePackageStillExistsBeforePurge() async throws {
         let store = makeStore(projectIDs: ["project-001"])
         let saved = try await saveProject(in: store)
+        try await store.moveToTrash(projectID: saved.projectID)
         let gate = TrashLifecycleGate()
         let requestURL = root("DeletionRequests").appendingPathComponent("\(saved.projectID).json")
         var events: [String] = []
@@ -346,7 +489,9 @@ final class RoomTrashLifecycleTests: XCTestCase {
         try await trash("P1", at: epoch.addingTimeInterval(-31 * day))
         try await trash("P2", at: epoch.addingTimeInterval(-day))
         try await trash("P4", at: epoch.addingTimeInterval(-30 * day))
-        let spy = TrashRecordingPurger(real: RoomProjectPurgeCoordinator(store: store))
+        let spy = TrashRecordingPurger(real: RoomProjectPurgeCoordinator(
+            store: store, clock: FixedRoomProjectClock(date: epoch)
+        ))
         let reaper = RoomTrashReaper(store: store, purgeCoordinator: spy, clock: FixedRoomProjectClock(date: epoch))
 
         let report = await reaper.purgeExpiredTrash()
@@ -392,7 +537,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         XCTAssertEqual(transport.calls, ["checkAccount"])
         transport.reset()
         var requestIDs: [String] = []
-        let coordinator = RoomProjectPurgeCoordinator(store: store, deletionRequest: { projectID in
+        let coordinator = RoomProjectPurgeCoordinator(store: store, clock: FixedRoomProjectClock(date: epoch), deletionRequest: { projectID in
             requestIDs.append(projectID)
             try self.writeCanary(at: self.root("DeletionRequests").appendingPathComponent("\(projectID).json"))
         })
@@ -600,7 +745,10 @@ final class RoomTrashLifecycleTests: XCTestCase {
             arguments: ["--ui-testing", "--reset-local-store", "--trash-clock=\(Int(epoch.timeIntervalSince1970 + 30 * day))"]
         )
 
-        let expired = await RoomTrashReaper(store: store, purgeCoordinator: coordinator, clock: expiryClock).purgeExpiredTrash()
+        let expired = await RoomTrashReaper(
+            store: store, purgeCoordinator: RoomProjectPurgeCoordinator(store: store, clock: expiryClock),
+            clock: expiryClock
+        ).purgeExpiredTrash()
 
         XCTAssertEqual(expired.purgedCount, 1)
         XCTAssertEqual(expired.purgeReports.map(\.projectID), [saved.projectID])
@@ -693,6 +841,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         )
         let canary = conceptDirectory(source: source, conceptID: "unowned").appendingPathComponent("keep")
         try writeCanary(at: canary)
+        try await store.moveToTrash(projectID: saved.projectID)
         let coordinator = RoomProjectPurgeCoordinator(store: store, conceptStore: makeConceptStore())
         let controller = RoomLibraryController(store: store, modelContainer: nil, purgeCoordinator: coordinator)
         await controller.refreshLibrary()
@@ -970,9 +1119,9 @@ private final class TrashRecordingPurger: RoomProjectPurging {
         self.real = real
     }
 
-    func purge(projectID: String) async -> RoomProjectPurgeReport {
+    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport {
         projectIDs.append(projectID)
-        if let real { return await real.purge(projectID: projectID) }
+        if let real { return await real.purge(projectID: projectID, mode: mode) }
         return .init(projectID: projectID, package: .removed)
     }
 }
