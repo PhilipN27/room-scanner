@@ -259,19 +259,12 @@ final class RoomExportService: RoomExportProviding {
 }
 
 enum RoomExportScratchRootResolver {
-    private static let isolatedTestingDirectoryName = "RoomScanStudio-UI-Testing-ExportScratch"
-
     static func resolve(arguments: [String], fileManager: FileManager) -> URL {
-        let isIsolatedUIRun = arguments.contains("--ui-testing")
-            && arguments.contains("--reset-local-store")
-        if isIsolatedUIRun {
-            let temporaryRoot = fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-            return temporaryRoot.appendingPathComponent(
-                isolatedTestingDirectoryName,
-                isDirectory: true
-            )
+        // Lease recovery remains ownership-marker based, not a recursive wipe.
+        if let root = IsolatedTestRoots.resolve(
+            .exportScratch, arguments: arguments, fileManager: fileManager, wipeOnReset: false
+        ) {
+            return root
         }
         let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,

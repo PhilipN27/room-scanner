@@ -1363,22 +1363,9 @@ enum RoomAIRedesignRootResolver {
         projectRootURL: URL,
         fileManager: FileManager
     ) -> Roots {
-        if arguments.contains("--ui-testing"),
-           arguments.contains("--reset-local-store") {
-            let temporaryRoot = fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-            let suffix = String(ProcessInfo.processInfo.processIdentifier)
-            return Roots(
-                concepts: temporaryRoot.appendingPathComponent(
-                    "RoomScanStudio-UI-Testing-ConceptSets-\(suffix)",
-                    isDirectory: true
-                ),
-                importScratch: temporaryRoot.appendingPathComponent(
-                    "RoomScanStudio-UI-Testing-ConceptImportScratch-\(suffix)",
-                    isDirectory: true
-                )
-            )
+        if let concepts = IsolatedTestRoots.resolve(.conceptSets, arguments: arguments, fileManager: fileManager),
+           let importScratch = IsolatedTestRoots.resolve(.conceptImportScratch, arguments: arguments, fileManager: fileManager) {
+            return Roots(concepts: concepts, importScratch: importScratch)
         }
         let appRoot = projectRootURL.deletingLastPathComponent()
         return Roots(

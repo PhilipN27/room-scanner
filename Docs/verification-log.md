@@ -2111,3 +2111,71 @@ not run for this Core-only feature. App integration and UI portions of the
 validation contract remain assigned to later mission features. Another
 project's Simulator build was active during final verification and was left
 untouched.
+
+## 2026-09-30 — Slice 7 isolated token roots and relaunch infrastructure
+
+Scope: static checks, macOS Core tests, unsigned iOS compilation and scoped
+iPhone 16 Pro Simulator tests (iOS 26.3.1, Xcode 26.3). No physical-device,
+LiDAR, real CloudKit or release evidence is claimed.
+
+`IsolatedRootSuffix` gates token and keep arguments on the isolated launch
+pair. All seven package/companion roots share its validated token or PID
+suffix and guarded reset policy. Export/cloud scratch also use the suffix,
+retaining marker-only lease recovery. Journal/fake-backup sibling kinds are
+registered for the later backup feature; this change does not implement those
+services. The stale sweep runs once after root resolution, preserves current
+roots, and removes only known-prefix non-symlink directories older than
+60 minutes. Containment tests use the now-internal
+`removeIsolatedTestRootIfSafe` seam plus injected temporary/Application
+Support directories through the public resolvers.
+
+Commands from the repository root (the destination uses the mission's pinned
+RoomScan iPhone Simulator; its ID is kept in the raw logs):
+
+```sh
+swift test
+python3 -B Scripts/verify_xcode_scaffold.py
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData -jobs 4
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -only-testing:RoomScanStudioTests/IsolatedTestRootTests \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testIsolatedTokenKeepsSavedRoomAcrossRelaunchAndResetStartsEmpty \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-isolated-final.xcresult
+xcodebuild -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -sdk iphoneos \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData-unsigned -jobs 4 build
+```
+
+TDD: the baseline compiled, then four new unit tests produced 28 failed
+assertions and the relaunch UI test failed when the saved row disappeared.
+Additional safety/sweep tests initially failed compilation for missing APIs.
+Negative controls bypassing containment and weakening the age threshold
+produced 24 failed assertions across two tests. Both guards were restored;
+the final nine root tests and relaunch UI test passed 10/10 with no skips.
+
+The broader scoped run passed 87/87: 81 app tests (root, library, mesh job,
+export, fake backup and production AI integration) plus six UI tests (empty
+library, mock save/discard, metadata/duplicate/archive/delete, disabled backup,
+explicit fake backup/recovery and token relaunch). No contention retries were
+needed. Full Core passed 362/362; Python passed 72/72; scaffold reported
+`static structure passed`; unsigned iOS build succeeded. Fixture/privacy and
+whitespace diffs were empty. Full iPhone/iPad schemes remain milestone gates.
+
+The final xcresult exported nine `VAL-TRASH-014-*`/`VAL-TRASH-015-*` text
+attachments plus two screenshots:
+`VAL-TRASH-014-saved-room-after-token-relaunch` and
+`VAL-TRASH-014-token-relaunch-without-keep-is-empty`. Reviewed screenshots show
+the saved Mock Studio Room under Active after the kept launch and the empty
+Active library after reset. Logs, red/green/mutation/final xcresults and final
+attachment manifest are retained under
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-isolated-root-token/`;
+the worker handoff includes SHA-256 log bindings.
+
+Other projects' Xcode runs were allowed to finish before native work. Low
+disk was recovered by shutting down the RoomScan Simulator and removing only
+mission-owned generated DerivedData; retained results were not deleted.

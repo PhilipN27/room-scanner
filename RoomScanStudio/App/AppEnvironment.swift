@@ -67,24 +67,11 @@ final class AppEnvironment: ObservableObject {
         let indexBootstrap = RoomProjectIndexBootstrap.makeContainer()
 
         let usesIsolatedUIEnvironment = arguments.contains("--ui-testing")
-        let jobRecordStore: RoomMeshColoringJobRecordStore
-        if usesIsolatedUIEnvironment {
-            // Process-scoped for the same reason as the project/scratch
-            // roots above: a fixed name would let a second app instance on
-            // the same simulator delete this instance's active job record.
-            let isolatedJobURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(
-                        "RoomScanStudio-UI-MeshJob-\(ProcessInfo.processInfo.processIdentifier)",
-                        isDirectory: true
-                    )
-                    .appendingPathComponent("active-job.json")
-            if arguments.contains("--reset-local-store") {
-                try? FileManager.default.removeItem(at: isolatedJobURL)
-            }
-            jobRecordStore = RoomMeshColoringJobRecordStore(fileURL: isolatedJobURL)
-        } else {
-            jobRecordStore = .applicationSupport()
-        }
+        let jobRecordStore = RoomMeshColoringJobRecordStore(
+            fileURL: RoomMeshJobRecordRootResolver.resolve(
+                arguments: arguments, fileManager: .default
+            )
+        )
         let notificationRouter = RoomMeshNotificationRouter()
         meshNotificationRouter = notificationRouter
         UNUserNotificationCenter.current().delegate = notificationRouter
@@ -318,6 +305,9 @@ final class AppEnvironment: ObservableObject {
         bootstrapMessage = bootstrapMessages.isEmpty
             ? nil
             : bootstrapMessages.joined(separator: " ")
+        // Run once, after all current roots are resolved. A kept token launch
+        // deliberately leaves every sibling alone.
+        IsolatedTestRoots.sweepStaleRoots(arguments: arguments, fileManager: .default)
     }
 
     func handleProfessionalLifecycle(_ event: ProfessionalLifecycleEvent) {
@@ -481,29 +471,15 @@ private struct RoomProjectIndexBootstrap {
 }
 
 enum RoomProjectRootResolver {
-    // Process-scoped rather than a fixed name: two app instances launched
-    // with `--reset-local-store` against the SAME simulator (e.g. a stray
-    // concurrent test run sharing a device) must never wipe each other's
-    // isolated project data out from under an in-progress test.
-    private static var isolatedTestingDirectoryName: String {
-        "RoomScanStudio-UI-Testing-Projects-\(ProcessInfo.processInfo.processIdentifier)"
-    }
-
     static func resolve(
         arguments: [String],
         fileManager: FileManager
     ) -> URL {
-        let isIsolatedUIRun = arguments.contains("--ui-testing")
-            && arguments.contains("--reset-local-store")
-        if isIsolatedUIRun {
-            let temporaryRoot = fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-            let testRoot = temporaryRoot.appendingPathComponent(
-                isolatedTestingDirectoryName,
-                isDirectory: true
-            )
-            removeIsolatedTestRootIfSafe(testRoot, temporaryRoot: temporaryRoot, fileManager: fileManager)
+        // --isolated-root-token and --keep-isolated-root are gated on the
+        // --ui-testing / --reset-local-store pair by the shared helper.
+        if let testRoot = IsolatedTestRoots.resolve(
+            .projects, arguments: arguments, fileManager: fileManager
+        ) {
             return testRoot
         }
 
@@ -516,25 +492,29 @@ enum RoomProjectRootResolver {
             .appendingPathComponent("Projects", isDirectory: true)
     }
 
-    private static func removeIsolatedTestRootIfSafe(
+    static func removeIsolatedTestRootIfSafe(
         _ testRoot: URL,
         temporaryRoot: URL,
+        expectedName: String,
         fileManager: FileManager
     ) {
-        let rootComponents = temporaryRoot.standardizedFileURL.pathComponents
+        let canonicalTemporaryRoot = temporaryRoot.resolvingSymlinksInPath().standardizedFileURL
+        let rootComponents = canonicalTemporaryRoot.pathComponents
         let targetComponents = testRoot.standardizedFileURL.pathComponents
         let isContained = targetComponents.count == rootComponents.count + 1
             && zip(rootComponents, targetComponents).allSatisfy { pair in
                 pair.0 == pair.1
             }
-            && testRoot.lastPathComponent == isolatedTestingDirectoryName
+            && testRoot.lastPathComponent == expectedName
+            && testRoot.resolvingSymlinksInPath().standardizedFileURL == testRoot.standardizedFileURL
         guard isContained else {
             return
         }
         guard (try? fileManager.destinationOfSymbolicLink(atPath: testRoot.path)) == nil else {
             return
         }
-        guard fileManager.fileExists(atPath: testRoot.path) else {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: testRoot.path),
+              attributes[.type] as? FileAttributeType == .typeDirectory else {
             return
         }
         do {
@@ -556,26 +536,9 @@ enum RoomRedesignLocalRootResolver {
         projectRootURL: URL,
         fileManager: FileManager
     ) -> Roots {
-        let isIsolatedUIRun = arguments.contains("--ui-testing")
-            && arguments.contains("--reset-local-store")
-        if isIsolatedUIRun {
-            let temporaryRoot = fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-            let suffix = String(ProcessInfo.processInfo.processIdentifier)
-            let roots = Roots(
-                redesign: temporaryRoot.appendingPathComponent("RoomScanStudio-UI-Testing-RedesignState-\(suffix)", isDirectory: true),
-                properties: temporaryRoot.appendingPathComponent("RoomScanStudio-UI-Testing-Properties-\(suffix)", isDirectory: true)
-            )
-            for url in [roots.redesign, roots.properties] {
-                let parentMatches = url.deletingLastPathComponent().standardizedFileURL == temporaryRoot
-                guard parentMatches,
-                      (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) == nil,
-                      fileManager.fileExists(atPath: url.path)
-                else { continue }
-                try? fileManager.removeItem(at: url)
-            }
-            return roots
+        if let redesign = IsolatedTestRoots.resolve(.redesignState, arguments: arguments, fileManager: fileManager),
+           let properties = IsolatedTestRoots.resolve(.properties, arguments: arguments, fileManager: fileManager) {
+            return Roots(redesign: redesign, properties: properties)
         }
         let appRoot = projectRootURL.deletingLastPathComponent()
         return Roots(
@@ -586,32 +549,13 @@ enum RoomRedesignLocalRootResolver {
 }
 
 enum RoomCaptureScratchRootResolver {
-    // Process-scoped for the same reason as `RoomProjectRootResolver`: a
-    // fixed name is a collision hazard when more than one app instance with
-    // `--reset-local-store` is alive on the same simulator at once.
-    private static var isolatedTestingDirectoryName: String {
-        "RoomScanStudio-UI-Testing-CaptureScratch-\(ProcessInfo.processInfo.processIdentifier)"
-    }
-
     static func resolve(
         arguments: [String],
         fileManager: FileManager
     ) -> URL {
-        let isIsolatedUIRun = arguments.contains("--ui-testing")
-            && arguments.contains("--reset-local-store")
-        if isIsolatedUIRun {
-            let temporaryRoot = fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-            let scratchRoot = temporaryRoot.appendingPathComponent(
-                isolatedTestingDirectoryName,
-                isDirectory: true
-            )
-            removeIsolatedScratchRootIfSafe(
-                scratchRoot,
-                temporaryRoot: temporaryRoot,
-                fileManager: fileManager
-            )
+        if let scratchRoot = IsolatedTestRoots.resolve(
+            .captureScratch, arguments: arguments, fileManager: fileManager
+        ) {
             return scratchRoot
         }
 
@@ -622,31 +566,6 @@ enum RoomCaptureScratchRootResolver {
         return applicationSupport
             .appendingPathComponent("RoomScanStudio", isDirectory: true)
             .appendingPathComponent("CaptureScratch", isDirectory: true)
-    }
-
-    private static func removeIsolatedScratchRootIfSafe(
-        _ scratchRoot: URL,
-        temporaryRoot: URL,
-        fileManager: FileManager
-    ) {
-        let rootComponents = temporaryRoot.standardizedFileURL.pathComponents
-        let targetComponents = scratchRoot.standardizedFileURL.pathComponents
-        let isContained = targetComponents.count == rootComponents.count + 1
-            && zip(rootComponents, targetComponents).allSatisfy { pair in
-                pair.0 == pair.1
-            }
-            && scratchRoot.lastPathComponent == isolatedTestingDirectoryName
-        guard isContained,
-              fileManager.fileExists(atPath: scratchRoot.path),
-              (try? fileManager.destinationOfSymbolicLink(atPath: scratchRoot.path)) == nil
-        else {
-            return
-        }
-        do {
-            try fileManager.removeItem(at: scratchRoot)
-        } catch {
-            return
-        }
     }
 }
 

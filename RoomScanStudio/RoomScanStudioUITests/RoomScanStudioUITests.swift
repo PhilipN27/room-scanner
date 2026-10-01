@@ -65,6 +65,37 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["library.empty"].waitForExistence(timeout: 2))
     }
 
+    func testIsolatedTokenKeepsSavedRoomAcrossRelaunchAndResetStartsEmpty() {
+        executionTimeAllowance = 180
+        let token = String(UUID().uuidString.prefix(12))
+        let first = launchIsolatedApp(rootToken: token)
+        saveMockRoom(in: first)
+        first.terminate()
+
+        let kept = launchIsolatedApp(rootToken: token, keepRoot: true)
+        XCTAssertTrue(kept.buttons["home.existingRooms"].waitForExistence(timeout: 10))
+        kept.buttons["home.existingRooms"].tap()
+        XCTAssertTrue(kept.buttons["library.showActive"].waitForExistence(timeout: 10))
+        kept.buttons["library.showActive"].tap()
+        XCTAssertTrue(kept.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
+        let persisted = XCTAttachment(screenshot: kept.screenshot())
+        persisted.name = "VAL-TRASH-014-saved-room-after-token-relaunch"
+        persisted.lifetime = .keepAlways
+        add(persisted)
+        kept.terminate()
+
+        let reset = launchIsolatedApp(rootToken: token)
+        XCTAssertTrue(reset.buttons["home.existingRooms"].waitForExistence(timeout: 10))
+        reset.buttons["home.existingRooms"].tap()
+        XCTAssertTrue(reset.staticTexts["library.empty"].waitForExistence(timeout: 10))
+        XCTAssertFalse(reset.buttons["library.project.ui-project-001"].exists)
+        let empty = XCTAttachment(screenshot: reset.screenshot())
+        empty.name = "VAL-TRASH-014-token-relaunch-without-keep-is-empty"
+        empty.lifetime = .keepAlways
+        add(empty)
+        reset.terminate()
+    }
+
     func testExplicitMockReviewDoesNotAutoSeedLibrary() {
         let app = launchIsolatedApp()
         app.buttons["home.newRoomScan"].tap()
@@ -1017,13 +1048,24 @@ final class RoomScanStudioUITests: XCTestCase {
         attachSlice5Screenshot(named: "slice5-stale-head-comparison", app: conflict)
     }
 
-    private func launchIsolatedApp() -> XCUIApplication {
+    private func launchIsolatedApp(
+        rootToken: String? = nil,
+        keepRoot: Bool = false,
+        extraArguments: [String] = []
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "--ui-testing",
             "--reset-local-store",
             "--use-mock-fixture",
         ]
+        if let rootToken {
+            app.launchArguments.append("--isolated-root-token=\(rootToken)")
+        }
+        if keepRoot {
+            app.launchArguments.append("--keep-isolated-root")
+        }
+        app.launchArguments += extraArguments
         app.launch()
         return app
     }
@@ -1282,31 +1324,31 @@ final class RoomScanStudioUITests: XCTestCase {
 
     private func openMockReview(in app: XCUIApplication) {
         let newRoomScan = app.buttons["home.newRoomScan"]
-        XCTAssertTrue(newRoomScan.waitForExistence(timeout: 5))
+        XCTAssertTrue(newRoomScan.waitForExistence(timeout: 10))
         XCTAssertTrue(newRoomScan.isHittable)
         newRoomScan.tap()
 
         let mockReview = app.buttons["newScan.openMockReview"]
-        XCTAssertTrue(mockReview.waitForExistence(timeout: 5))
+        XCTAssertTrue(mockReview.waitForExistence(timeout: 10))
         scrollIntoView(mockReview, in: app)
         XCTAssertTrue(mockReview.isHittable)
         mockReview.tap()
-        XCTAssertTrue(app.staticTexts["mockReview.title"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["mockReview.title"].waitForExistence(timeout: 10))
     }
 
     private func saveMockRoom(in app: XCUIApplication) {
         openMockReview(in: app)
         let save = app.buttons["mockReview.save"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.waitForExistence(timeout: 10))
         scrollIntoView(save, in: app)
         XCTAssertTrue(save.isHittable)
         save.tap()
 
         let openLibrary = app.buttons["mockReview.openLibrary"]
-        XCTAssertTrue(openLibrary.waitForExistence(timeout: 5))
+        XCTAssertTrue(openLibrary.waitForExistence(timeout: 10))
         scrollIntoView(openLibrary, in: app, direction: .backward)
         XCTAssertTrue(openLibrary.isHittable)
         openLibrary.tap()
-        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
     }
 }

@@ -72,6 +72,35 @@ Then run the Xcode test scheme separately on one discovered iPhone UUID and
 one discovered iPad UUID. The hosted workflow runs this sequence dynamically;
 physical-device checks still require the release operator's Mac and devices.
 
+## UI test isolation and launch arguments
+
+UI tests launch with `--ui-testing --reset-local-store --use-mock-fixture`.
+The first two flags together select temporary roots instead of real
+Application Support data. Without both, root-token and keep flags are ignored.
+
+For a test that spans app launches, generate a unique token and use
+`--isolated-root-token=<token>` on every launch. Tokens contain 1–64 ASCII
+letters, digits, underscores or hyphens; invalid tokens fall back to the
+process ID. Add `--keep-isolated-root` after the first launch to preserve the
+saved room and its companion roots. Launching the token again without the keep
+flag resets it. Keep without a valid token is ignored.
+
+Packages live at `tmp/RoomScanStudio-UI-Testing-Projects-<token>/<projectID>/`.
+Capture scratch, mesh job records, redesign state, properties, Concept Sets
+and concept-import scratch use sibling roots with the same suffix.
+`IsolatedTestRoots.Kind` centralizes names and cleanup for later siblings,
+including the backup-deletion journal and persistent fake-backup records.
+Export and cloud-backup scratch also share the suffix, but retain their
+ownership-marker-only lease recovery rather than recursively clearing them.
+
+`launchIsolatedApp(rootToken:keepRoot:extraArguments:)` provides these flags
+in `RoomScanStudioUITests`. Use the same token for all launches of a scenario;
+do not reuse it between tests. Token directories can remain in Simulator tmp
+until the device is erased. Non-kept isolated launches sweep known-prefix
+directory siblings older than 60 minutes, excluding their current roots,
+symlinks, regular files and unrelated names. This is test-only cleanup, not
+production data retention.
+
 ## Optional private backup configuration
 
 Cloud backup remains disabled by default. A build operator may supply an exact

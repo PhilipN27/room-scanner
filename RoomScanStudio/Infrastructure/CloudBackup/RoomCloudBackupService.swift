@@ -401,16 +401,12 @@ final class RoomCloudBackupService: RoomCloudBackupProviding {
 }
 
 enum RoomCloudBackupScratchRootResolver {
-    private static let isolatedTestingDirectoryName = "RoomScanStudio-UI-Testing-CloudBackupScratch"
-
     static func resolve(arguments: [String], fileManager: FileManager) -> URL {
-        let isIsolatedUIRun = arguments.contains("--ui-testing")
-            && arguments.contains("--reset-local-store")
-        if isIsolatedUIRun {
-            return fileManager.temporaryDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-                .appendingPathComponent(isolatedTestingDirectoryName, isDirectory: true)
+        // Preserve marker-only lease recovery, including on reset launches.
+        if let root = IsolatedTestRoots.resolve(
+            .cloudBackupScratch, arguments: arguments, fileManager: fileManager, wipeOnReset: false
+        ) {
+            return root
         }
         let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
