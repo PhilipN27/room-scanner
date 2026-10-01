@@ -1,3 +1,4 @@
+import CryptoKit
 import UIKit
 import XCTest
 
@@ -124,79 +125,406 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 5))
     }
 
-    func testMetadataDuplicateArchiveUnarchiveAndDeleteRequireExplicitActionsAndConfirmation() {
-        executionTimeAllowance = 120
+    func testMetadataDuplicateArchiveAndUnarchiveRemainExplicit() {
+        executionTimeAllowance = 240
         let app = launchIsolatedApp()
         saveMockRoom(in: app)
 
-        app.buttons["library.project.ui-project-001"].tap()
-        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
-        app.buttons["detail.infoToggle"].tap()
-        XCTAssertTrue(app.buttons["detail.editMetadata"].waitForExistence(timeout: 5))
+        openTrashTestProject("ui-project-001", in: app)
+        openTrashTestInfo(in: app)
+        XCTAssertTrue(app.buttons["detail.editMetadata"].waitForExistence(timeout: 10))
         app.buttons["detail.editMetadata"].tap()
-        XCTAssertTrue(app.textFields["metadata.roomName"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["metadata.roomName"].waitForExistence(timeout: 10))
         app.textFields["metadata.roomName"].tap()
         app.textFields["metadata.roomName"].typeText(" Updated")
         app.buttons["metadata.save"].tap()
         let updatedRoomName = app.staticTexts["detail.roomName"]
-        XCTAssertTrue(updatedRoomName.waitForExistence(timeout: 5))
+        XCTAssertTrue(updatedRoomName.waitForExistence(timeout: 10))
         XCTAssertTrue(updatedRoomName.label.contains("Updated"))
 
-        app.buttons["detail.duplicate"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 5))
+        tapTrashTestDetailAction("detail.duplicate", in: app)
+        backToTrashTestLibrary(in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001", "ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-026", "legacy-metadata-and-duplicate-successor")
 
-        app.buttons["library.project.ui-project-001"].tap()
-        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
-        app.buttons["detail.infoToggle"].tap()
-        XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 5))
-        app.buttons["detail.archive"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.buttons["library.showArchived"].tap()
-        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 5))
-        app.buttons["library.project.ui-project-001"].tap()
-        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
-        app.buttons["detail.infoToggle"].tap()
-        XCTAssertTrue(app.buttons["detail.unarchive"].waitForExistence(timeout: 5))
-        app.buttons["detail.unarchive"].tap()
-        // Unarchiving dismisses the info panel; reopen it to confirm the
-        // room now offers Archive again, then close it to reach Delete on
-        // the base page.
-        XCTAssertTrue(app.buttons["detail.infoToggle"].waitForExistence(timeout: 5))
-        app.buttons["detail.infoToggle"].tap()
-        XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 5))
-        app.buttons["detail.infoPanel.close"].tap()
-        let deleteButton = app.buttons["detail.delete"]
-        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5))
-        scrollIntoView(deleteButton, in: app.scrollViews["detail.scroll"])
-        deleteButton.tap()
-        let deleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
-        XCTAssertTrue(deleteConfirmation.waitForExistence(timeout: 2))
-        deleteConfirmation.tap()
-        XCTAssertTrue(app.buttons["library.showActive"].waitForExistence(timeout: 2))
-        app.buttons["library.showActive"].tap()
-        XCTAssertTrue(app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 2))
+        openTrashTestProject("ui-project-001", in: app)
+        setTrashTestArchived(true, in: app)
+        backToTrashTestLibrary(in: app)
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001"], absent: ["ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-024", "legacy-archive-successor")
+        openTrashTestProject("ui-project-001", in: app)
+        setTrashTestArchived(false, in: app)
+        openTrashTestInfo(in: app)
+        XCTAssertTrue(app.buttons["detail.archive"].waitForExistence(timeout: 10))
+        closeTrashTestInfo(in: app)
+        backToTrashTestLibrary(in: app)
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001", "ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-026", "legacy-unarchive-successor")
+    }
 
-        app.buttons["library.project.ui-project-002"].tap()
-        let duplicateDelete = app.buttons["detail.delete"]
-        XCTAssertTrue(duplicateDelete.waitForExistence(timeout: 5))
-        let duplicateDetailScroll = app.scrollViews["detail.scroll"]
-        XCTAssertTrue(waitForHittable(
-            duplicateDelete,
-            in: duplicateDetailScroll,
-            searchBothDirections: true
-        ))
-        // `isHittable` can become true when only the top edge is exposed.
-        // Move to the scroll limit so the confirmation dialog has a stable
-        // presentation anchor instead of a nearly off-screen source view.
-        duplicateDetailScroll.swipeUp()
-        XCTAssertTrue(duplicateDelete.isHittable)
-        duplicateDelete.tap()
-        let duplicateDeleteConfirmation = app.buttons.matching(identifier: "delete.confirm").firstMatch
-        XCTAssertTrue(duplicateDeleteConfirmation.waitForExistence(timeout: 2))
-        duplicateDeleteConfirmation.tap()
-        XCTAssertTrue(app.staticTexts["library.empty"].waitForExistence(timeout: 2))
+    func testTrashLifecycleConfirmationRestoreArchiveAndDeleteNowPreserveOtherProject() throws {
+        executionTimeAllowance = 600
+        let token = String(UUID().uuidString.prefix(12))
+        // A real clock gives the two saves distinct lastRevisedDate values.
+        // The separate forced-clock test verifies the exact retention date.
+        let app = launchIsolatedApp(rootToken: token)
+        defer { app.terminate() }
+        saveTrashTestRooms(2, in: app)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-018", "two-active-projects")
+        attachTrashScreenshot(app, "VAL-TRASH-023", "original-newest-first-order")
+        // Prove the filter row is reachable from Home by ordinary taps, not
+        // solely through the post-save Open library shortcut.
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["home.existingRooms"].waitForExistence(timeout: 10))
+        app.buttons["home.existingRooms"].tap()
+        assertTrashTestFilterTargets(in: app)
+        selectTrashTestFilter("Trash", in: app)
+        assertTrashTestEmpty(in: app)
+        let emptyCopy = app.staticTexts["library.empty"].label
+        XCTAssertTrue(emptyCopy.localizedCaseInsensitiveContains("Trash"))
+        XCTAssertTrue(emptyCopy.contains("30"))
+        XCTAssertFalse(emptyCopy.localizedCaseInsensitiveContains("erased"))
+        attachTrashScreenshot(app, "VAL-TRASH-019", "tap-only-empty-trash-30-day-copy")
+        selectTrashTestFilter("Active", in: app)
+
+        // Persist real revision-bound redesign documents through the app UI,
+        // then add marker-owned on-disk Concept Set cleanup fixtures. The
+        // screen-only --slice3-ui-fixture does not persist project companions.
+        for id in ["ui-project-001", "ui-project-002"] {
+            openTrashTestProject(id, in: app)
+            seedTrashTestRedesignThroughUI(in: app)
+            backToTrashTestLibrary(in: app)
+        }
+        let roots = try trashTestRoots(token: token)
+        if let roots {
+            try seedTrashTestOwnedConcept(in: roots, projectID: "ui-project-001", token: token)
+            try seedTrashTestOwnedConcept(in: roots, projectID: "ui-project-002", token: token)
+            try attachTrashTestListing(roots, "VAL-TRASH-025", "seeded-companions-before-lifecycle")
+        }
+        let firstCompanions = try roots.map { try trashTestCompanionBytes($0, projectID: "ui-project-001") }
+        let firstPackage = try roots.map {
+            try trashTestBytes($0.root("Projects").appendingPathComponent("ui-project-001"), under: $0.temporary)
+        }
+        let otherBytes = try roots.map { try trashTestProjectAndCompanionBytes($0, projectID: "ui-project-002") }
+
+        openTrashTestProject("ui-project-001", in: app)
+        let headBefore = trashTestHead(in: app)
+        XCTAssertFalse(app.buttons["detail.delete"].exists, "Active rooms must offer Trash, not Delete now.")
+        tapTrashTestDetailAction("detail.trash", in: app)
+        let confirmation = trashTestConfirmation("trash.confirm", in: app)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "30 days")).firstMatch.exists)
+        attachTrashScreenshot(app, "VAL-TRASH-020", "move-to-trash-confirmation-30-days")
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(confirmation.waitForNonExistence(timeout: 10))
+        backToTrashTestLibrary(in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001", "ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-020", "cancel-keeps-active-project")
+
+        openTrashTestProject("ui-project-001", in: app)
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-020", slug: "confirmed-trash")
+        assertTrashTestMembership(in: app, present: ["ui-project-002"], absent: ["ui-project-001"])
+        attachTrashScreenshot(app, "VAL-TRASH-020", "active-excludes-trashed-project")
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestEmpty(in: app)
+        XCTAssertFalse(app.buttons["library.project.ui-project-001"].exists)
+        attachTrashScreenshot(app, "VAL-TRASH-020", "archived-excludes-trashed-project")
+        selectTrashTestFilter("Trash", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001"], absent: ["ui-project-002"])
+        let purgeLabel = trashTestPurgeLabel("ui-project-001", in: app)
+        assertTrashTestBadge("TRASH", projectID: "ui-project-001", in: app)
+        assertTrashTestNoBadge("ARCHIVED", projectID: "ui-project-001", in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-020", "confirmed-trash-filter")
+        attachTrashScreenshot(app, "VAL-TRASH-018", "one-trash-one-active")
+        attachTrashScreenshot(app, "VAL-TRASH-021", "trash-badge-and-purge-line")
+
+        openTrashTestProject("ui-project-001", in: app)
+        assertTrashTestReadOnlyDetail(in: app, purgeLabel: purgeLabel)
+        tapTrashTestDetailAction("detail.restore", in: app)
+        assertTrashTestEmpty(in: app) // Restore preserves the selected Trash filter.
+        attachTrashScreenshot(app, "VAL-TRASH-023", "restore-dismisses-to-empty-trash")
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-023", "restored-original-sort-position")
+        attachTrashScreenshot(app, "VAL-TRASH-018", "both-active-after-restore")
+        if let roots, let firstCompanions {
+            XCTAssertEqual(try trashTestCompanionBytes(roots, projectID: "ui-project-001"), firstCompanions)
+            if let firstPackage {
+                let restored = try trashTestBytes(
+                    roots.root("Projects").appendingPathComponent("ui-project-001"), under: roots.temporary
+                )
+                XCTAssertEqual(restored.filter { $0.key != "metadata.json" },
+                               firstPackage.filter { $0.key != "metadata.json" },
+                               "Restore must preserve every immutable revision, asset and manifest byte.")
+                let oldMetadata = try JSONSerialization.jsonObject(with: XCTUnwrap(firstPackage["metadata.json"])) as? NSDictionary
+                let restoredMetadata = try JSONSerialization.jsonObject(with: XCTUnwrap(restored["metadata.json"])) as? NSDictionary
+                XCTAssertEqual(restoredMetadata?["lastRevisedDate"] as? String, oldMetadata?["lastRevisedDate"] as? String)
+                XCTAssertTrue(restoredMetadata?["trashedAt"] == nil || restoredMetadata?["trashedAt"] is NSNull)
+            }
+            try attachTrashTestListing(roots, "VAL-TRASH-023", "restore-keeps-seeded-companion-bytes")
+        }
+        openTrashTestProject("ui-project-001", in: app)
+        XCTAssertFalse(identifiedElement("detail.trashBanner", in: app).exists)
+        XCTAssertTrue(app.buttons["detail.editRoom"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["detail.rescan"].waitForExistence(timeout: 10))
+        XCTAssertEqual(trashTestHead(in: app), headBefore)
+        XCTAssertTrue(app.buttons["detail.trash"].waitForExistence(timeout: 10))
+        attachTrashScreenshot(app, "VAL-TRASH-023", "restored-head-and-mutation-controls")
+
+        setTrashTestArchived(true, in: app)
+        backToTrashTestLibrary(in: app)
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001"], absent: ["ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-024", "archived-before-trash")
+        openTrashTestProject("ui-project-001", in: app)
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-024", slug: "archive-then-trash")
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-024", "archived-excludes-archived-trash")
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-002"], absent: ["ui-project-001"])
+        attachTrashScreenshot(app, "VAL-TRASH-024", "active-excludes-archived-trash")
+        selectTrashTestFilter("Trash", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001"])
+        assertTrashTestBadge("TRASH", projectID: "ui-project-001", in: app)
+        assertTrashTestBadge("ARCHIVED", projectID: "ui-project-001", in: app)
+        _ = trashTestPurgeLabel("ui-project-001", in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-024", "archived-trash-badges")
+        openTrashTestProject("ui-project-001", in: app)
+        tapTrashTestDetailAction("detail.restore", in: app)
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-024", "archived-restore-clears-trash")
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-002"], absent: ["ui-project-001"])
+        attachTrashScreenshot(app, "VAL-TRASH-024", "archived-restore-not-active")
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-001"], absent: ["ui-project-002"])
+        attachTrashScreenshot(app, "VAL-TRASH-024", "restore-preserves-archived-flag")
+
+        openTrashTestProject("ui-project-001", in: app)
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-026", slug: "second-trash-before-delete")
+        selectTrashTestFilter("Trash", in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        confirmTrashTestDeleteWithBackupDisabled(in: app, slug: "default-off")
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-025", "default-off-empty-trash-after-delete")
+        attachTrashScreenshot(app, "VAL-TRASH-026", "single-process-lifecycle-final-empty-trash")
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-025", "default-off-empty-archived-after-delete")
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-002"], absent: ["ui-project-001"])
+        attachTrashScreenshot(app, "VAL-TRASH-018", "only-other-project-after-delete")
+        if let roots, let otherBytes {
+            try assertTrashTestPurgeOnDisk(roots, projectID: "ui-project-001")
+            XCTAssertEqual(try trashTestProjectAndCompanionBytes(roots, projectID: "ui-project-002"), otherBytes)
+            try attachTrashTestListing(roots, "VAL-TRASH-025", "default-off-purged-companions-other-project-unchanged")
+        }
+    }
+
+    func testTrashForcedClockRendersExactlyThirtyDayPurgeDate() {
+        executionTimeAllowance = 180
+        let app = launchIsolatedApp(
+            rootToken: String(UUID().uuidString.prefix(12)),
+            extraArguments: ["--trash-clock=1800014400", "-AppleLocale", "en_US", "-AppleLanguages", "(en)"]
+        )
+        defer { app.terminate() }
+        saveMockRoom(in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-013", slug: "forced-clock-confirmation")
+        selectTrashTestFilter("Trash", in: app)
+        let label = trashTestPurgeLabel("ui-project-001", in: app)
+        let expected = Date(timeIntervalSince1970: 1_800_014_400 + 2_592_000)
+            .formatted(.dateTime.year().month().day().locale(Locale(identifier: "en_US")))
+        XCTAssertEqual(label, "Deletes permanently on \(expected)")
+        assertTrashTestBadge("TRASH", projectID: "ui-project-001", in: app)
+        assertTrashTestNoBadge("ARCHIVED", projectID: "ui-project-001", in: app)
+        attachTrashText("VAL-TRASH-013", "forced-clock-date-comparison",
+                        "trash-clock=1800014400; retention=2592000; expected=\(expected); actual=\(label)")
+        attachTrashScreenshot(app, "VAL-TRASH-013", "forced-february-14-2027-purge-date")
+        attachTrashScreenshot(app, "VAL-TRASH-021", "forced-date-trash-badge")
+    }
+
+    func testTrashOrderingUsesTrashDateNotProjectIDOrLastRevision() {
+        executionTimeAllowance = 300
+        // Deliberately do not freeze the clock: 002,001,003 must have distinct
+        // trash timestamps rather than fall into the project-ID tie breaker.
+        let app = launchIsolatedApp(rootToken: String(UUID().uuidString.prefix(12)))
+        defer { app.terminate() }
+        saveTrashTestRooms(3, in: app)
+        for id in ["ui-project-002", "ui-project-001", "ui-project-003"] {
+            openTrashTestProject(id, in: app)
+            moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-017", slug: "trash-\(id)")
+            XCTAssertFalse(app.buttons["library.project.\(id)"].exists)
+        }
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-017", "all-three-excluded-from-active")
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-017", "all-three-excluded-from-archived")
+        selectTrashTestFilter("Trash", in: app)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001", "ui-project-003"], in: app)
+        let libraryScroll = app.scrollViews.firstMatch
+        assertTrashTestFullyVisible(app.buttons["library.project.ui-project-003"], in: libraryScroll)
+        let visible = libraryScroll.frame.intersection(app.windows.firstMatch.frame)
+        for id in ["ui-project-002", "ui-project-001", "ui-project-003"] {
+            XCTAssertTrue(visible.contains(app.buttons["library.project.\(id)"].frame),
+                          "The retained order screenshot must show all three rows.")
+        }
+        attachTrashScreenshot(app, "VAL-TRASH-017", "ascending-trash-date-002-001-003")
+    }
+
+    func testTrashDeleteNowWithFakeBackupExplicitlyTurnedOffHasOneChoiceAndNoJournal() throws {
+        executionTimeAllowance = 360
+        let token = String(UUID().uuidString.prefix(12))
+        let app = launchIsolatedApp(rootToken: token, extraArguments: ["--use-fake-cloud-backup"])
+        defer { app.terminate() }
+        saveTrashTestRooms(2, in: app)
+        for id in ["ui-project-001", "ui-project-002"] {
+            openTrashTestProject(id, in: app)
+            seedTrashTestRedesignThroughUI(in: app)
+            backToTrashTestLibrary(in: app)
+        }
+        let roots = try trashTestRoots(token: token)
+        if let roots {
+            try seedTrashTestOwnedConcept(in: roots, projectID: "ui-project-001", token: token)
+            try seedTrashTestOwnedConcept(in: roots, projectID: "ui-project-002", token: token)
+            try attachTrashTestListing(roots, "VAL-TRASH-025", "fake-backup-off-seeded-before-delete")
+        }
+        let otherBytes = try roots.map { try trashTestProjectAndCompanionBytes($0, projectID: "ui-project-002") }
+        openTrashTestProject("ui-project-001", in: app)
+        openTrashTestInfo(in: app)
+        let backup = app.buttons["detail.backup"]
+        XCTAssertTrue(backup.waitForExistence(timeout: 10))
+        scrollIntoView(backup, in: app.scrollViews["detail.infoPanel.scroll"])
+        backup.tap()
+        XCTAssertTrue(app.scrollViews["cloudBackup.scroll"].waitForExistence(timeout: 10))
+        let enable = app.switches["cloudBackup.enable"]
+        XCTAssertTrue(enable.waitForExistence(timeout: 10))
+        scrollIntoView(enable, in: app.scrollViews["cloudBackup.scroll"])
+        XCTAssertEqual(enable.value as? String, "1", "The fake flag enables backup at launch.")
+        enable.tap() // Exactly once: ON -> OFF, never an attempt to enable the fake.
+        let off = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "0"), object: enable)
+        XCTAssertEqual(XCTWaiter.wait(for: [off], timeout: 10), .completed)
+        attachTrashScreenshot(app, "VAL-TRASH-025", "fake-backup-toggle-explicitly-off")
+        XCTAssertTrue(app.buttons["cloudBackup.close"].waitForExistence(timeout: 10))
+        app.buttons["cloudBackup.close"].tap()
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-025", slug: "fake-backup-off-trash")
+        selectTrashTestFilter("Trash", in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        confirmTrashTestDeleteWithBackupDisabled(in: app, slug: "fake-explicitly-off")
+        assertTrashTestEmpty(in: app)
+        attachTrashScreenshot(app, "VAL-TRASH-025", "fake-backup-off-empty-trash")
+        selectTrashTestFilter("Archived", in: app)
+        assertTrashTestEmpty(in: app)
+        selectTrashTestFilter("Active", in: app)
+        assertTrashTestMembership(in: app, present: ["ui-project-002"], absent: ["ui-project-001"])
+        attachTrashScreenshot(app, "VAL-TRASH-025", "fake-backup-off-other-project-retained")
+        if let roots, let otherBytes {
+            try assertTrashTestPurgeOnDisk(roots, projectID: "ui-project-001")
+            XCTAssertEqual(try trashTestProjectAndCompanionBytes(roots, projectID: "ui-project-002"), otherBytes)
+            try attachTrashTestListing(roots, "VAL-TRASH-025", "fake-backup-off-purged-no-journal-other-bytes-unchanged")
+        }
+    }
+
+    func testTrashAccessibilityXXXLKeepsFiltersRowsBannerAndActionsReachableInOrder() {
+        executionTimeAllowance = 480
+        let app = launchIsolatedApp(extraArguments: [
+            "--trash-clock=1800014400",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        defer { app.terminate() }
+        saveMockRoom(in: app)
+        assertTrashTestFilterTargets(in: app, valID: "VAL-TRASH-029")
+        openTrashTestProject("ui-project-001", in: app)
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-TRASH-029", slug: "axxxl-confirmation")
+        selectTrashTestFilter("Trash", in: app)
+        let row = app.buttons["library.project.ui-project-001"]
+        scrollIntoView(row, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(row.frame.height, 44)
+        let purge = app.staticTexts["library.project.ui-project-001.purgeDate"]
+        XCTAssertTrue(purge.waitForExistence(timeout: 10))
+        scrollIntoView(purge, in: app)
+        assertTrashTestFullyVisible(purge, in: app.scrollViews.firstMatch)
+        XCTAssertFalse(purge.label.contains("…"))
+        XCTAssertFalse(purge.label.contains("..."))
+        attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-row-full-purge-date")
+        openTrashTestProject("ui-project-001", in: app)
+        let banner = identifiedElement("detail.trashBanner", in: app)
+        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        scrollIntoView(banner, in: app.scrollViews["detail.scroll"], direction: .backward)
+        assertTrashTestFullyVisible(banner, in: app.scrollViews["detail.scroll"])
+        XCTAssertFalse(banner.label.contains("…"))
+        attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-full-trash-banner")
+        for id in ["detail.restore", "detail.delete"] {
+            let action = app.buttons[id]
+            XCTAssertTrue(action.waitForExistence(timeout: 10))
+            scrollIntoView(action, in: app.scrollViews["detail.scroll"])
+            assertTrashTestTarget(action)
+            assertTrashTestFullyVisible(action, in: app.scrollViews["detail.scroll"])
+            attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-\(id)")
+        }
+        let order = app.descendants(matching: .any).allElementsBoundByAccessibilityElement
+            .map(\.identifier).filter { ["detail.trashBanner", "detail.restore", "detail.delete"].contains($0) }
+        XCTAssertEqual(order, ["detail.trashBanner", "detail.restore", "detail.delete"])
+        attachTrashText("VAL-TRASH-029", "accessibility-order-and-frames",
+                        "order=\(order)\n\(trashTestElementInventory(in: app))")
+    }
+
+    func testTrashDarkModeAndIncreaseContrastKeepListOrderAndDetailLegible() throws {
+        executionTimeAllowance = 300
+        let token = String(UUID().uuidString.prefix(12))
+        let light = launchIsolatedApp(rootToken: token, extraArguments: ["-AppleInterfaceStyle", "Light"])
+        saveTrashTestRooms(2, in: light)
+        for id in ["ui-project-002", "ui-project-001"] {
+            openTrashTestProject(id, in: light)
+            moveTrashTestProjectToTrash(in: light, valID: "VAL-TRASH-030", slug: "light-trash-\(id)")
+        }
+        selectTrashTestFilter("Trash", in: light)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: light)
+        XCTAssertGreaterThan(try trashTestPaperBrightness(in: light), 0.7,
+                             "The light control must actually render light paper.")
+        attachTrashScreenshot(light, "VAL-TRASH-030", "light-order-control")
+        light.terminate()
+
+        // UIAccessibility's real system setting, not an invented app flag.
+        // The Simulator verification operator enables Increase Contrast before
+        // running this test; the assertion fails rather than mislabeling evidence.
+        let dark = launchIsolatedApp(rootToken: token, keepRoot: true, extraArguments: [
+            "-AppleInterfaceStyle", "Dark",
+        ])
+        defer { dark.terminate() }
+        XCTAssertTrue(UIAccessibility.isDarkerSystemColorsEnabled,
+                      "Enable Simulator Increase Contrast before collecting VAL-TRASH-030 evidence.")
+        XCTAssertTrue(dark.buttons["home.existingRooms"].waitForExistence(timeout: 10))
+        dark.buttons["home.existingRooms"].tap()
+        selectTrashTestFilter("Trash", in: dark)
+        assertTrashTestOrder(["ui-project-002", "ui-project-001"], in: dark)
+        XCTAssertLessThan(try trashTestPaperBrightness(in: dark), 0.3,
+                          "Dark evidence must render dark paper, not just carry a Dark launch argument.")
+        for id in ["ui-project-002", "ui-project-001"] {
+            assertTrashTestBadge("TRASH", projectID: id, in: dark)
+            _ = trashTestPurgeLabel(id, in: dark)
+        }
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-trash-list")
+        openTrashTestProject("ui-project-001", in: dark)
+        let banner = identifiedElement("detail.trashBanner", in: dark)
+        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        scrollIntoView(banner, in: dark.scrollViews["detail.scroll"], direction: .backward)
+        assertTrashTestFullyVisible(banner, in: dark.scrollViews["detail.scroll"])
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-trash-banner")
+        let restore = dark.buttons["detail.restore"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 10))
+        scrollIntoView(restore, in: dark.scrollViews["detail.scroll"])
+        assertTrashTestTarget(restore)
+        assertTrashTestTarget(dark.buttons["detail.delete"])
+        attachTrashScreenshot(dark, "VAL-TRASH-030", "dark-increase-contrast-restore-delete-actions")
+        attachTrashText("VAL-TRASH-030", "system-contrast-and-element-frames",
+                        "UIAccessibility.isDarkerSystemColorsEnabled=true\n\(trashTestElementInventory(in: dark))")
     }
 
     func testRevisionInspectionAndRestoreCreateNewLineage() {
@@ -1048,6 +1376,552 @@ final class RoomScanStudioUITests: XCTestCase {
         attachSlice5Screenshot(named: "slice5-stale-head-comparison", app: conflict)
     }
 
+    // MARK: - Slice 7 trash UI regression helpers
+
+    private func attachTrashScreenshot(_ app: XCUIApplication, _ valID: String, _ slug: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "\(valID)-\(slug)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func trashTestPaperBrightness(in app: XCUIApplication) throws -> Double {
+        let image = try XCTUnwrap(app.screenshot().image.cgImage)
+        // Sample the outer paper margin, away from cards, text and chrome.
+        let sample = try XCTUnwrap(image.cropping(to: CGRect(
+            x: 8, y: image.height / 2, width: 1, height: 1
+        )))
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return (Double(pixel[0]) + Double(pixel[1]) + Double(pixel[2])) / (3 * 255)
+    }
+
+    private func attachTrashText(_ valID: String, _ slug: String, _ text: String) {
+        let attachment = XCTAttachment(string: text)
+        attachment.name = "\(valID)-\(slug)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func saveTrashTestRooms(_ count: Int, in app: XCUIApplication) {
+        for number in 1...count {
+            if number > 1 {
+                XCTAssertTrue(app.navigationBars.buttons.firstMatch.waitForExistence(timeout: 10))
+                app.navigationBars.buttons.firstMatch.tap()
+                XCTAssertTrue(app.buttons["home.newRoomScan"].waitForExistence(timeout: 10))
+            }
+            saveMockRoom(in: app)
+            let id = String(format: "ui-project-%03d", number)
+            XCTAssertTrue(app.buttons["library.project.\(id)"].waitForExistence(timeout: 10))
+        }
+    }
+
+    private func selectTrashTestFilter(_ filter: String, in app: XCUIApplication) {
+        let button = app.buttons["library.show\(filter)"]
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        scrollIntoView(button, in: app, direction: .backward)
+        XCTAssertTrue(button.isHittable)
+        button.tap()
+    }
+
+    private func assertTrashTestMembership(
+        in app: XCUIApplication,
+        present: [String],
+        absent: [String] = []
+    ) {
+        for id in present {
+            let row = app.buttons["library.project.\(id)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 10), "Expected \(id) in the selected filter.")
+        }
+        for id in absent {
+            XCTAssertTrue(app.buttons["library.project.\(id)"].waitForNonExistence(timeout: 10),
+                          "\(id) must not appear in the selected filter.")
+        }
+    }
+
+    private func assertTrashTestEmpty(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["library.empty"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.project.")).count, 0)
+    }
+
+    private func assertTrashTestOrder(_ ids: [String], in app: XCUIApplication) {
+        assertTrashTestMembership(in: app, present: ids)
+        let rows = ids.map { app.buttons["library.project.\($0)"] }
+        scrollIntoView(rows[0], in: app, direction: .backward)
+        let exposedIDs = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.project."))
+            .allElementsBoundByAccessibilityElement.map(\.identifier)
+        XCTAssertEqual(exposedIDs, ids.map { "library.project.\($0)" })
+        // Frames are a second oracle independent of query enumeration order.
+        for (upper, lower) in zip(rows, rows.dropFirst()) {
+            XCTAssertLessThan(upper.frame.minY, lower.frame.minY)
+        }
+        attachTrashText("VAL-TRASH-017", "row-order-\(ids.joined(separator: "-"))",
+                        rows.map { "\($0.identifier): \($0.frame)" }.joined(separator: "\n"))
+    }
+
+    private func assertTrashTestTarget(_ element: XCUIElement) {
+        XCTAssertTrue(element.exists)
+        XCTAssertTrue(element.isEnabled)
+        XCTAssertTrue(element.isHittable)
+        // CGFloat subtraction can report 43.99999999999997 for a 44-pt
+        // frame. Allow floating-point noise, not a sub-point target.
+        XCTAssertGreaterThanOrEqual(element.frame.width + 0.000001, 44, element.identifier)
+        XCTAssertGreaterThanOrEqual(element.frame.height + 0.000001, 44, element.identifier)
+    }
+
+    private func assertTrashTestFullyVisible(_ element: XCUIElement, in scrollView: XCUIElement) {
+        // Hittable includes partially visible targets. Scroll until the whole
+        // element fits, then assert its frame instead of accepting that proxy.
+        let app = XCUIApplication()
+        let window = app.windows.firstMatch.frame
+        let navigationBottom = app.navigationBars.firstMatch.frame.maxY
+        let viewport = scrollView.frame.intersection(window)
+        let visible = CGRect(x: viewport.minX, y: max(viewport.minY, navigationBottom),
+                             width: viewport.width,
+                             height: viewport.maxY - max(viewport.minY, navigationBottom))
+        for _ in 0..<6 where !visible.insetBy(dx: -1, dy: -1).contains(element.frame) {
+            swipe(scrollView, direction: element.frame.maxY > visible.maxY ? .forward : .backward)
+        }
+        XCTAssertTrue(element.isHittable)
+        XCTAssertGreaterThan(element.frame.width, 0)
+        XCTAssertGreaterThan(element.frame.height, 0)
+        XCTAssertTrue(visible.insetBy(dx: -1, dy: -1).contains(element.frame),
+                      "\(element.identifier) must fit without clipping: element=\(element.frame), viewport=\(visible)")
+    }
+
+    private func assertTrashTestFilterTargets(in app: XCUIApplication, valID: String = "VAL-TRASH-019") {
+        var frames: [String] = []
+        for filter in ["Active", "Archived", "Trash"] {
+            selectTrashTestFilter(filter, in: app)
+            let button = app.buttons["library.show\(filter)"]
+            assertTrashTestTarget(button)
+            assertTrashTestFullyVisible(button, in: app.scrollViews.firstMatch)
+            frames.append("\(button.identifier): \(button.frame)")
+            attachTrashScreenshot(app, valID, "filter-\(filter.lowercased())-44-point-target")
+        }
+        attachTrashText(valID, "filter-target-frames", frames.joined(separator: "\n"))
+        selectTrashTestFilter("Active", in: app)
+    }
+
+    private func openTrashTestProject(_ id: String, in app: XCUIApplication) {
+        let row = app.buttons["library.project.\(id)"]
+        scrollIntoView(row, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.isHittable)
+        row.tap()
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.scrollViews["detail.scroll"].waitForExistence(timeout: 10))
+    }
+
+    private func backToTrashTestLibrary(in app: XCUIApplication) {
+        let back = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        back.tap()
+        XCTAssertTrue(app.buttons["library.showActive"].waitForExistence(timeout: 10))
+    }
+
+    private func openTrashTestInfo(in app: XCUIApplication) {
+        let toggle = app.buttons["detail.infoToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        toggle.tap()
+        XCTAssertTrue(app.buttons["detail.infoPanel.close"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.scrollViews["detail.infoPanel.scroll"].waitForExistence(timeout: 10))
+    }
+
+    private func closeTrashTestInfo(in app: XCUIApplication) {
+        let close = app.buttons["detail.infoPanel.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 10))
+    }
+
+    private func trashTestHead(in app: XCUIApplication) -> String {
+        let head = app.staticTexts["detail.headRevision"]
+        let openedInfo = !head.exists
+        if openedInfo { openTrashTestInfo(in: app) }
+        XCTAssertTrue(head.waitForExistence(timeout: 10))
+        let value = head.label
+        XCTAssertFalse(value.isEmpty)
+        if openedInfo { closeTrashTestInfo(in: app) }
+        return value
+    }
+
+    private func tapTrashTestDetailAction(_ identifier: String, in app: XCUIApplication) {
+        let action = app.buttons[identifier]
+        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        let scroll = app.scrollViews["detail.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 10))
+        scrollIntoView(action, in: scroll)
+        if identifier == "detail.trash" || identifier == "detail.delete" {
+            scroll.swipeUp() // Expose the whole bottom action, not just its top edge.
+        }
+        XCTAssertTrue(action.isHittable)
+        action.tap()
+    }
+
+    private func trashTestConfirmation(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        let buttons = app.buttons.matching(identifier: identifier)
+        XCTAssertTrue(buttons.firstMatch.waitForExistence(timeout: 10))
+        let hittable = buttons.allElementsBoundByAccessibilityElement.filter(\.isHittable)
+        // iOS 26 can expose the same SwiftUI confirmation as a button inside
+        // a button. Collapse only exact label/frame aliases, not real choices.
+        let targets = Set(hittable.map { "\($0.identifier)|\($0.label)|\($0.frame)" })
+        XCTAssertEqual(targets.count, 1, "Expected one confirmation target, not distinct destructive choices.")
+        return hittable.first ?? buttons.firstMatch
+    }
+
+    private func moveTrashTestProjectToTrash(in app: XCUIApplication, valID: String, slug: String) {
+        XCTAssertFalse(app.buttons["detail.delete"].exists)
+        tapTrashTestDetailAction("detail.trash", in: app)
+        let confirm = trashTestConfirmation("trash.confirm", in: app)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "30 days")).firstMatch.exists)
+        attachTrashScreenshot(app, valID, "\(slug)-confirmation")
+        confirm.tap()
+        XCTAssertTrue(app.buttons["library.showActive"].waitForExistence(timeout: 10),
+                      "Trash must dismiss detail and refresh the selected library filter.")
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForNonExistence(timeout: 10))
+        attachTrashScreenshot(app, valID, "\(slug)-dismissed-library")
+    }
+
+    private func setTrashTestArchived(_ archived: Bool, in app: XCUIApplication) {
+        openTrashTestInfo(in: app)
+        let action = app.buttons[archived ? "detail.archive" : "detail.unarchive"]
+        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        scrollIntoView(action, in: app.scrollViews["detail.infoPanel.scroll"])
+        XCTAssertTrue(action.isHittable)
+        action.tap()
+        XCTAssertTrue(app.buttons["detail.infoPanel.close"].waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+    }
+
+    private func trashTestPurgeLabel(_ projectID: String, in app: XCUIApplication) -> String {
+        let purge = app.staticTexts["library.project.\(projectID).purgeDate"]
+        XCTAssertTrue(purge.waitForExistence(timeout: 10))
+        scrollIntoView(purge, in: app)
+        XCTAssertTrue(purge.label.hasPrefix("Deletes permanently on "))
+        XCTAssertFalse(purge.label.contains("…"))
+        return purge.label
+    }
+
+    private func assertTrashTestBadge(_ label: String, projectID: String, in app: XCUIApplication) {
+        let row = app.buttons["library.project.\(projectID)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        // SwiftUI may combine a NavigationLink's label into its button rather
+        // than expose child Text elements; both forms must carry the badge.
+        XCTAssertTrue(row.staticTexts[label].exists || row.label.contains(label))
+    }
+
+    private func assertTrashTestNoBadge(_ label: String, projectID: String, in app: XCUIApplication) {
+        let row = app.buttons["library.project.\(projectID)"]
+        XCTAssertFalse(row.staticTexts[label].exists)
+        XCTAssertFalse(row.label.contains(label))
+    }
+
+    private var trashTestForbiddenIdentifiers: [String] {
+        [
+            "detail.trash", "detail.editRoom", "detail.rescan", "detail.duplicate",
+            "detail.editMetadata", "detail.reviewOrientation", "detail.aiRedesign",
+            "detail.publicationReview", "detail.export", "detail.exportBundle", "detail.backup",
+            "detail.archive", "detail.unarchive", "ai.prepare", "ai.workspace", "ai.share",
+        ]
+    }
+
+    private func assertTrashTestNoMutations(in app: XCUIApplication, slug: String) {
+        for identifier in trashTestForbiddenIdentifiers {
+            for element in app.descendants(matching: .any).matching(identifier: identifier)
+                .allElementsBoundByAccessibilityElement {
+                XCTAssertFalse(element.isEnabled, "\(identifier) must be absent or disabled while trashed (\(slug)).")
+            }
+        }
+        attachTrashText("VAL-TRASH-022", "\(slug)-mutation-and-outbound-inventory",
+                        "Checked absent-or-disabled: \(trashTestForbiddenIdentifiers.joined(separator: ", "))\n"
+                        + trashTestElementInventory(in: app))
+    }
+
+    private func trashTestElementInventory(in app: XCUIApplication) -> String {
+        app.descendants(matching: .any).allElementsBoundByAccessibilityElement
+            .filter { $0.identifier.hasPrefix("detail.") || $0.identifier.hasPrefix("ai.") }
+            .map { "\($0.identifier): type=\($0.elementType.rawValue), enabled=\($0.isEnabled), frame=\($0.frame)" }
+            .joined(separator: "\n")
+    }
+
+    private func assertTrashTestReadOnlyDetail(in app: XCUIApplication, purgeLabel: String) {
+        let banner = identifiedElement("detail.trashBanner", in: app)
+        XCTAssertTrue(banner.waitForExistence(timeout: 10))
+        XCTAssertTrue(banner.label.contains("In Trash"))
+        let date = String(purgeLabel.dropFirst("Deletes permanently on ".count))
+        XCTAssertTrue(banner.label.localizedCaseInsensitiveContains("deletes permanently on \(date)"))
+        scrollIntoView(banner, in: app.scrollViews["detail.scroll"], direction: .backward)
+        attachTrashScreenshot(app, "VAL-TRASH-022", "read-only-trash-banner")
+        for id in ["detail.restore", "detail.delete"] {
+            let action = app.buttons[id]
+            XCTAssertTrue(action.waitForExistence(timeout: 10))
+            scrollIntoView(action, in: app.scrollViews["detail.scroll"])
+            assertTrashTestTarget(action)
+        }
+        XCTAssertTrue(app.buttons["detail.delete"].label.contains("Delete now"))
+        XCTAssertTrue(app.staticTexts["detail.roomName"].exists)
+        assertTrashTestNoMutations(in: app, slug: "base-detail")
+        attachTrashScreenshot(app, "VAL-TRASH-022", "restore-and-delete-now-actions")
+        if app.buttons["detail.infoToggle"].exists {
+            openTrashTestInfo(in: app)
+            XCTAssertTrue(app.staticTexts["detail.headRevision"].waitForExistence(timeout: 10))
+            assertTrashTestNoMutations(in: app, slug: "info-panel")
+            attachTrashScreenshot(app, "VAL-TRASH-022", "read-only-info-panel")
+            closeTrashTestInfo(in: app)
+        } else {
+            XCTAssertTrue(app.staticTexts["detail.headRevision"].waitForExistence(timeout: 10))
+        }
+        let viewer = app.buttons["detail.view"]
+        if viewer.exists && viewer.isEnabled {
+            tapTrashTestDetailAction("detail.view", in: app)
+            XCTAssertTrue(app.buttons["viewer.close"].waitForExistence(timeout: 10))
+            assertTrashTestNoMutations(in: app, slug: "read-only-viewer")
+            let outbound = app.descendants(matching: .any).matching(NSPredicate(
+                format: "identifier CONTAINS[c] 'export' OR identifier CONTAINS[c] 'publication' OR identifier CONTAINS[c] 'backup' OR identifier == 'ai.share'"
+            )).allElementsBoundByAccessibilityElement
+            for element in outbound { XCTAssertFalse(element.isEnabled, element.identifier) }
+            attachTrashScreenshot(app, "VAL-TRASH-022", "viewer-has-no-outbound-controls")
+            app.buttons["viewer.close"].tap()
+            XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+        }
+    }
+
+    private func confirmTrashTestDeleteWithBackupDisabled(in app: XCUIApplication, slug: String) {
+        tapTrashTestDetailAction("detail.delete", in: app)
+        let confirm = trashTestConfirmation("delete.confirm", in: app)
+        XCTAssertEqual(confirm.label, "Delete now")
+        XCTAssertFalse(app.buttons["delete.confirmWithBackup"].exists)
+        // A single-choice dialog may expose a duplicate presentation wrapper;
+        // count actionable choices, as in trashTestConfirmation above.
+        let destructiveChoices = app.buttons.allElementsBoundByAccessibilityElement.filter {
+            $0.isHittable && ($0.label.hasPrefix("Delete now") || $0.identifier.hasPrefix("delete.confirm"))
+        }
+        XCTAssertEqual(Set(destructiveChoices.map { "\($0.label)|\($0.frame)" }).count, 1)
+        let copy = app.staticTexts.allElementsBoundByAccessibilityElement.map(\.label).joined(separator: " ").lowercased()
+        for forbidden in ["erased", "wiped", "instantly", "immediately", "all devices"] {
+            XCTAssertFalse(copy.contains(forbidden), "Delete copy must not promise physical erasure.")
+        }
+        attachTrashScreenshot(app, "VAL-TRASH-025", "\(slug)-single-choice-delete-confirmation")
+        confirm.tap()
+        XCTAssertTrue(app.buttons["library.showTrash"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Settings & privacy"].exists,
+                       "Finishing a local purge must not require a Cloud Backup sheet.")
+    }
+
+    private func seedTrashTestRedesignThroughUI(in app: XCUIApplication) {
+        tapTrashTestDetailAction("detail.reviewOrientation", in: app)
+        let form = app.collectionViews.firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 10))
+        let request = app.descendants(matching: .any)["orientation.request"]
+        // Form cells are virtualized, unlike the detail ScrollView.
+        scrollIntoView(request, in: form)
+        XCTAssertTrue(request.waitForExistence(timeout: 10))
+        request.tap()
+        request.typeText("Synthetic trash regression: preserve captured shell.")
+        let save = app.buttons["orientation.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(save.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+    }
+
+    private struct TrashTestRoots {
+        let temporary: URL
+        let token: String
+
+        func root(_ kind: String) -> URL {
+            temporary.appendingPathComponent("RoomScanStudio-UI-Testing-\(kind)-\(token)", isDirectory: true)
+        }
+    }
+
+    private enum TrashTestFileError: Error {
+        case unsafePath(String)
+        case missingRoot
+        case invalidSourceBinding
+    }
+
+    private func trashTestRoots(token: String) throws -> TrashTestRoots? {
+        #if targetEnvironment(simulator)
+        // Discover the app's sibling data container from the runner's own
+        // Simulator container. No host path or simulator/device ID is baked in.
+        let applicationContainers = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .deletingLastPathComponent()
+        guard applicationContainers.lastPathComponent == "Application" else {
+            throw TrashTestFileError.unsafePath("Unexpected Simulator runner container layout.")
+        }
+        let candidates = try FileManager.default.contentsOfDirectory(
+            at: applicationContainers, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+        )
+        var roots: [TrashTestRoots] = []
+        for candidate in candidates {
+            let values = try candidate.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
+            let temporary = candidate.appendingPathComponent("tmp", isDirectory: true)
+            let owned = TrashTestRoots(temporary: temporary, token: token)
+            let project = owned.root("Projects").appendingPathComponent("ui-project-001", isDirectory: true)
+            guard FileManager.default.fileExists(atPath: project.appendingPathComponent("metadata.json").path) else { continue }
+            try requireTrashTestSafePath(project, under: temporary)
+            roots.append(owned)
+        }
+        guard roots.count == 1, let root = roots.first else { throw TrashTestFileError.missingRoot }
+        return root
+        #else
+        // iOS sandboxes prohibit sibling-container inspection. The device run
+        // retains UI evidence only; file deletion proof is Simulator-tier.
+        attachTrashText("VAL-TRASH-025", "device-file-oracle-unavailable",
+                        "Physical-device sandbox: no companion seeding/inspection outside the runner. "
+                        + "VAL-TRASH-025 filesystem proof requires the Simulator run.")
+        return nil
+        #endif
+    }
+
+    private func requireTrashTestSafePath(_ url: URL, under temporary: URL) throws {
+        let base = temporary.standardizedFileURL
+        let path = url.standardizedFileURL
+        guard path.path.hasPrefix(base.path + "/") else {
+            throw TrashTestFileError.unsafePath("Path is not inside the test app's temporary directory.")
+        }
+        var current = path
+        while current.path != base.path {
+            do {
+                // lstat-style attributes catch dangling links too; fileExists
+                // would follow them and incorrectly report "not present".
+                let attributes = try FileManager.default.attributesOfItem(atPath: current.path)
+                guard attributes[.type] as? FileAttributeType != .typeSymbolicLink else {
+                    throw TrashTestFileError.unsafePath("Refusing any symlink in the owned fixture tree.")
+                }
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain
+                && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) {
+                // A new fixture may have not-yet-created path components.
+            }
+            current.deleteLastPathComponent()
+        }
+        let values = try base.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isDirectory == true, values.isSymbolicLink != true else {
+            throw TrashTestFileError.unsafePath("The app temporary directory must be a real directory.")
+        }
+    }
+
+    private func seedTrashTestOwnedConcept(in roots: TrashTestRoots, projectID: String, token: String) throws {
+        let redesignRoot = roots.root("RedesignState").appendingPathComponent(projectID, isDirectory: true)
+        try requireTrashTestSafePath(redesignRoot, under: roots.temporary)
+        let states = try FileManager.default.contentsOfDirectory(at: redesignRoot, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" && !$0.lastPathComponent.hasPrefix(".") }
+        guard states.count == 1, let state = states.first else { throw TrashTestFileError.invalidSourceBinding }
+        try requireTrashTestSafePath(state, under: roots.temporary)
+        let document = try JSONSerialization.jsonObject(with: Data(contentsOf: state)) as? [String: Any]
+        guard let source = document?["sourceRevision"] as? [String: Any],
+              source["projectID"] as? String == projectID,
+              let revisionID = source["revisionID"] as? String,
+              revisionID.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil,
+              let digest = source["revisionManifestSHA256"] as? String,
+              digest.range(of: #"^[a-f0-9]{64}$"#, options: .regularExpression) != nil
+        else { throw TrashTestFileError.invalidSourceBinding }
+        let directory = roots.root("ConceptSets").appendingPathComponent(projectID)
+            .appendingPathComponent(revisionID).appendingPathComponent(digest)
+            .appendingPathComponent("ui-trash-owned-concept", isDirectory: true)
+        try requireTrashTestSafePath(directory, under: roots.temporary)
+        guard !FileManager.default.fileExists(atPath: directory.path) else {
+            throw TrashTestFileError.unsafePath("Never overwrite an existing Concept Set fixture.")
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let ownership: [String: Any] = [
+            "formatVersion": "roomscan-concept-store-ownership-v1",
+            "sourceRevision": source,
+            "conceptSetID": "ui-trash-owned-concept",
+            "transactionID": UUID().uuidString.lowercased(),
+        ]
+        let marker = try JSONSerialization.data(withJSONObject: ownership, options: [.sortedKeys, .withoutEscapingSlashes])
+        try marker.write(to: directory.appendingPathComponent(".roomscan-concept-ownership.json"), options: .withoutOverwriting)
+        // This is a real marker-owned cleanup fixture, not a screen fixture or
+        // a claim that a full semantic Concept Set was imported through UI.
+        let fixtureOwner = try JSONSerialization.data(
+            withJSONObject: ["token": token, "projectID": projectID, "purpose": "synthetic-trash-ui-cleanup"],
+            options: [.sortedKeys]
+        )
+        try fixtureOwner.write(to: directory.appendingPathComponent(".roomscan-ui-trash-test-ownership.json"),
+                               options: .withoutOverwriting)
+        try Data("Synthetic Concept Set companion bytes for \(projectID)".utf8)
+            .write(to: directory.appendingPathComponent("retained-companion.txt"), options: .withoutOverwriting)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent(".roomscan-concept-ownership.json").path))
+        XCTAssertFalse(try trashTestBytes(directory, under: roots.temporary).isEmpty)
+    }
+
+    private func trashTestBytes(_ directory: URL, under temporary: URL) throws -> [String: Data] {
+        try requireTrashTestSafePath(directory, under: temporary)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [:] }
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
+        )
+        var bytes: [String: Data] = [:]
+        for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            try requireTrashTestSafePath(entry, under: temporary)
+            let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isSymbolicLink != true else { throw TrashTestFileError.unsafePath("Fixture symlink.") }
+            if values.isDirectory == true {
+                for (name, data) in try trashTestBytes(entry, under: temporary) {
+                    bytes["\(entry.lastPathComponent)/\(name)"] = data
+                }
+            } else {
+                guard values.isRegularFile == true else { throw TrashTestFileError.unsafePath("Non-regular fixture file.") }
+                bytes[entry.lastPathComponent] = try Data(contentsOf: entry)
+            }
+        }
+        return bytes
+    }
+
+    private func trashTestCompanionBytes(_ roots: TrashTestRoots, projectID: String) throws -> [String: Data] {
+        var bytes: [String: Data] = [:]
+        for kind in ["RedesignState", "ConceptSets"] {
+            let files = try trashTestBytes(roots.root(kind).appendingPathComponent(projectID), under: roots.temporary)
+            XCTAssertFalse(files.isEmpty, "Positive control: \(kind)/\(projectID) must really be seeded.")
+            for (name, data) in files { bytes["\(kind)/\(name)"] = data }
+        }
+        return bytes
+    }
+
+    private func trashTestProjectAndCompanionBytes(_ roots: TrashTestRoots, projectID: String) throws -> [String: Data] {
+        var bytes = try trashTestCompanionBytes(roots, projectID: projectID)
+        let package = try trashTestBytes(roots.root("Projects").appendingPathComponent(projectID), under: roots.temporary)
+        XCTAssertFalse(package.isEmpty)
+        for (name, data) in package { bytes["Projects/\(name)"] = data }
+        return bytes
+    }
+
+    private func assertTrashTestPurgeOnDisk(_ roots: TrashTestRoots, projectID: String) throws {
+        for kind in ["Projects", "RedesignState", "ConceptSets"] {
+            let directory = roots.root(kind).appendingPathComponent(projectID)
+            try requireTrashTestSafePath(directory, under: roots.temporary)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path), "\(kind)/\(projectID) must be removed.")
+        }
+        let journal = roots.root("CloudBackupDeletionJournal").appendingPathComponent("records/\(projectID).json")
+        try requireTrashTestSafePath(journal, under: roots.temporary)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: journal.path),
+                       "Disabled Cloud Backup must not create a deletion request.")
+    }
+
+    private func attachTrashTestListing(_ roots: TrashTestRoots, _ valID: String, _ slug: String) throws {
+        var lines = ["Synthetic Simulator token=\(roots.token); relative paths, byte counts and SHA-256 only (no file bodies)."]
+        for kind in ["Projects", "RedesignState", "ConceptSets", "CloudBackupDeletionJournal"] {
+            let root = roots.root(kind)
+            try requireTrashTestSafePath(root, under: roots.temporary)
+            lines.append("\(root.lastPathComponent)/: \(FileManager.default.fileExists(atPath: root.path) ? "present" : "absent")")
+            for (name, data) in try trashTestBytes(root, under: roots.temporary).sorted(by: { $0.key < $1.key }) {
+                let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                lines.append("  \(name) bytes=\(data.count) sha256=\(digest)")
+            }
+        }
+        attachTrashText(valID, slug, lines.joined(separator: "\n"))
+    }
+
     private func launchIsolatedApp(
         rootToken: String? = nil,
         keepRoot: Bool = false,
@@ -1325,8 +2199,9 @@ final class RoomScanStudioUITests: XCTestCase {
     private func openMockReview(in app: XCUIApplication) {
         let newRoomScan = app.buttons["home.newRoomScan"]
         XCTAssertTrue(newRoomScan.waitForExistence(timeout: 10))
+        scrollIntoView(newRoomScan, in: app)
         XCTAssertTrue(newRoomScan.isHittable)
-        newRoomScan.tap()
+        newRoomScan.press(forDuration: 0.15)
 
         let mockReview = app.buttons["newScan.openMockReview"]
         XCTAssertTrue(mockReview.waitForExistence(timeout: 10))
@@ -1349,6 +2224,7 @@ final class RoomScanStudioUITests: XCTestCase {
         scrollIntoView(openLibrary, in: app, direction: .backward)
         XCTAssertTrue(openLibrary.isHittable)
         openLibrary.tap()
+        scrollIntoView(app.buttons["library.project.ui-project-001"], in: app)
         XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
     }
 }

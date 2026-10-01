@@ -102,6 +102,51 @@ def expect(condition: bool, message: str, errors: list[str]) -> None:
         errors.append(message)
 
 
+def trash_ui_contract_errors(ui_tests: str) -> list[str]:
+    """Bind the legacy metadata safeguards to their trash lifecycle successors."""
+    errors: list[str] = []
+    metadata_test = "testMetadataDuplicateArchiveAndUnarchiveRemainExplicit"
+    for required_test in (
+        metadata_test,
+        "testTrashLifecycleConfirmationRestoreArchiveAndDeleteNowPreserveOtherProject",
+    ):
+        expect(
+            swift_function_body(ui_tests, f"func {required_test}(") is not None,
+            f"required UI test is missing: {required_test}",
+            errors,
+        )
+    metadata = swift_function_body(ui_tests, f"func {metadata_test}(") or ""
+    membership = swift_function_body(ui_tests, "private func assertTrashTestMembership(") or ""
+    duplicate_call = re.search(
+        r'tapTrashTestDetailAction\("detail\.duplicate", in: app\)\s*'
+        r'backToTrashTestLibrary\(in: app\)\s*'
+        r'assertTrashTestMembership\(in: app, present: \["ui-project-001", "ui-project-002"\]\)',
+        metadata,
+    )
+    membership_wait = re.search(
+        r'for id in present\s*\{\s*'
+        r'let row = app\.buttons\["library\.project\.\\\(id\)"\]\s*'
+        r'XCTAssertTrue\(row\.waitForExistence\(timeout: 10\)',
+        membership,
+    )
+    expect(
+        duplicate_call is not None and membership_wait is not None,
+        "UI synchronization contract is missing: duplicate project wait",
+        errors,
+    )
+    expect(
+        re.search(
+            r'setTrashTestArchived\(false, in: app\)\s*'
+            r'openTrashTestInfo\(in: app\)\s*'
+            r'XCTAssertTrue\(app\.buttons\["detail\.archive"\]\.waitForExistence\(timeout: 10\)\)',
+            metadata,
+        ) is not None,
+        "UI synchronization contract is missing: unarchive replacement-action wait",
+        errors,
+    )
+    return errors
+
+
 def guest_hosted_boundary_errors(production_sources: dict[Path, str]) -> list[str]:
     """Reject every guest route to privileged auth/network implementation.
 
@@ -3685,7 +3730,8 @@ def verify_source_contract(errors: list[str]) -> None:
         "testImmediateDiscardCancelsQueuedReferencePhotoBeforeDriverEntry",
     ):
         expect(required_test in coordinator_tests, f"required capture coordinator test is missing: {required_test}", errors)
-    for required_test in ("testEmptyLibraryUsesIsolatedResetStore", "testMockSaveCreatesOneProfileAndDiscardCreatesNone", "testMetadataDuplicateArchiveUnarchiveAndDeleteRequireExplicitActionsAndConfirmation", "testRevisionInspectionAndRestoreCreateNewLineage", "testSimulatedCaptureCanPrepareScanReviewAndSaveOneProfile", "testSimulatedCaptureDiscardCreatesNoProfile", "testSimulatedCameraDenialDoesNotCreateAProfile", "testSimulatedCloseDuringScanningWaitsForCleanupAndCreatesNoProfile", "testSimulatedCloseDuringProcessingWaitsForCleanupAndCreatesNoProfile", "testSimulatedPhotoFailureShowsFeedbackAndReenablesStop", "testSimulatedGPSDenialKeepsManualLocationSaveAvailable", "testSimulatedSaveFailureRetainsReviewThenDiscardCreatesNoProfile", "testSimulatedProcessingFailureCanRetryOnceOrDiscardPersistentlyFailingAttempt"):
+    errors.extend(trash_ui_contract_errors(ui_tests))
+    for required_test in ("testEmptyLibraryUsesIsolatedResetStore", "testMockSaveCreatesOneProfileAndDiscardCreatesNone", "testRevisionInspectionAndRestoreCreateNewLineage", "testSimulatedCaptureCanPrepareScanReviewAndSaveOneProfile", "testSimulatedCaptureDiscardCreatesNoProfile", "testSimulatedCameraDenialDoesNotCreateAProfile", "testSimulatedCloseDuringScanningWaitsForCleanupAndCreatesNoProfile", "testSimulatedCloseDuringProcessingWaitsForCleanupAndCreatesNoProfile", "testSimulatedPhotoFailureShowsFeedbackAndReenablesStop", "testSimulatedGPSDenialKeepsManualLocationSaveAvailable", "testSimulatedSaveFailureRetainsReviewThenDiscardCreatesNoProfile", "testSimulatedProcessingFailureCanRetryOnceOrDiscardPersistentlyFailingAttempt"):
         expect(required_test in ui_tests, f"required UI test is missing: {required_test}", errors)
     for required_test in (
         "testProductionRescanProviderIsHardUnavailableWithoutCaptureWork",
@@ -3726,9 +3772,7 @@ def verify_source_contract(errors: list[str]) -> None:
     ):
         expect(capture_contract in ui_tests, f"deterministic capture UI-test contract is missing: {capture_contract}", errors)
     for description, contract in (
-        ("duplicate project wait", 'app.buttons["library.project.ui-project-002"].waitForExistence(timeout: 5)'),
         ("archived project wait", 'app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 5)'),
-        ("unarchive replacement-action wait", 'app.buttons["detail.archive"].waitForExistence(timeout: 5)'),
         ("deterministic restored head assertion", 'XCTAssertEqual(headRevision.label, "revision-002")'),
         ("restored revision row wait", 'app.buttons["revision.revision-002"].waitForExistence(timeout: 5)'),
         ("edited room-name assertion", 'updatedRoomName.label.contains("Updated")'),

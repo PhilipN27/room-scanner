@@ -11,6 +11,7 @@ struct RoomScanStudioApp: App {
     private let slice5FixtureArguments: [String]
     private let slice6FixtureArguments: [String]
     private let slice3FixtureColorScheme: ColorScheme?
+    private let isolatedUITestColorScheme: ColorScheme?
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -44,6 +45,7 @@ struct RoomScanStudioApp: App {
         slice5FixtureArguments = arguments
         slice6FixtureArguments = arguments
         slice3FixtureColorScheme = arguments.contains("--slice3-ui-fixture-dark") ? .dark : nil
+        isolatedUITestColorScheme = IsolatedUITestAppearance.resolve(arguments: arguments)
     }
 
     var body: some Scene {
@@ -68,6 +70,7 @@ struct RoomScanStudioApp: App {
                         .preferredColorScheme(slice3FixtureColorScheme)
                 } else {
                     HomeView(environment: environment)
+                        .preferredColorScheme(isolatedUITestColorScheme)
                 }
             }
             .environmentObject(environment)
@@ -93,6 +96,26 @@ struct RoomScanStudioApp: App {
 
     private var argumentsSpecifyPropertyFixture: Bool {
         slice6FixtureArguments.contains("--slice6-publication-ui-property")
+    }
+}
+
+/// UIKit no longer reliably applies the appearance launch default on iOS 26.
+/// Keep screenshot overrides inside Debug isolated runs, never normal launches.
+enum IsolatedUITestAppearance {
+    static func resolve(arguments: [String]) -> ColorScheme? {
+#if DEBUG
+        guard IsolatedRootSuffix.isIsolatedRun(arguments: arguments),
+              let index = arguments.firstIndex(of: "-AppleInterfaceStyle"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        switch arguments[index + 1].lowercased() {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+#else
+        return nil
+#endif
     }
 }
 

@@ -1,6 +1,7 @@
 import Foundation
 import RoomScanCore
 import SwiftData
+import SwiftUI
 import XCTest
 @testable import RoomScanStudio
 
@@ -27,6 +28,26 @@ final class RoomTrashLifecycleTests: XCTestCase {
         }
         temporaryRoot = nil
         try super.tearDownWithError()
+    }
+
+    func testUITestAppearanceRequiresBothIsolationFlagsAndAValidStyle() {
+        let style = ["-AppleInterfaceStyle", "Dark"]
+        for flags in [[], ["--ui-testing"], ["--reset-local-store"]] {
+            XCTAssertNil(IsolatedUITestAppearance.resolve(arguments: flags + style))
+        }
+        let isolated = ["--ui-testing", "--reset-local-store"]
+        XCTAssertEqual(IsolatedUITestAppearance.resolve(arguments: isolated + style), .dark)
+        XCTAssertEqual(IsolatedUITestAppearance.resolve(
+            arguments: isolated + ["-AppleInterfaceStyle", "Light"]
+        ), .light)
+        XCTAssertNil(IsolatedUITestAppearance.resolve(arguments: isolated))
+        XCTAssertNil(IsolatedUITestAppearance.resolve(arguments: isolated + ["-AppleInterfaceStyle"]))
+        XCTAssertNil(IsolatedUITestAppearance.resolve(
+            arguments: isolated + ["-AppleInterfaceStyle", "unsupported"]
+        ))
+        attach("VAL-TRASH-030", "isolated-appearance-argument-boundary",
+               "Dark and Light overrides require both isolated-run flags and a recognized style; "
+               + "normal, partial, missing and malformed arguments leave system appearance unchanged.")
     }
 
     func testPurgeRemovesEveryRealCompanionAndIndexButPreservesPublishedOperationAuditBytes() async throws {

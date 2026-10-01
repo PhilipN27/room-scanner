@@ -1046,6 +1046,8 @@ struct RoomDetailView: View {
     @State private var errorMessage: String?
     @State private var showingMetadataEditor = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingTrashConfirmation = false
+    @State private var changingTrashState = false
     @State private var showingRescan = false
     @State private var showingViewer = false
     @State private var showingRoomEditor = false
@@ -1297,23 +1299,57 @@ struct RoomDetailView: View {
                 RoomPublicationReviewView(model: publicationModel)
             }
         }
-        .confirmationDialog(
-            "Permanently delete this room package?",
-            isPresented: $showingDeleteConfirmation,
-            titleVisibility: .visible
+        .alert(
+            "Delete this room package now?",
+            isPresented: $showingDeleteConfirmation
         ) {
-            Button("Delete permanently", role: .destructive) {
+            if canRemoveBackup {
+                Button("Delete now and remove iCloud backup", role: .destructive) {
+                    Task { await deletePackage() }
+                }
+                .accessibilityIdentifier("delete.confirmWithBackup")
+            }
+            Button(canRemoveBackup ? "Delete now, keep iCloud backup" : "Delete now", role: .destructive) {
                 Task { await deletePackage() }
             }
             .accessibilityIdentifier("delete.confirm")
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the local package and its immutable revision history from this device.")
+            Text("This deletes the local package, its revision history and project companions before the 30 days in Trash end. Any iCloud backup is separate.")
+        }
+        .alert(
+            "Move this room to Trash?",
+            isPresented: $showingTrashConfirmation
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                Task { await movePackageToTrash() }
+            }
+            .accessibilityIdentifier("trash.confirm")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can restore this room for 30 days. After 30 days, its local package and project companions are deleted permanently. Any iCloud backup is separate.")
         }
     }
 
+    private var canRemoveBackup: Bool {
+        guard case .ready = cloudBackupCoordinator.availability else { return false }
+        return backupDeletionAvailable
+    }
+
+    // Milestone 2 wires the durable deletion journal and explicit cloud action.
+    // Never offer a backup-deletion choice before that operation is available.
+    private var backupDeletionAvailable: Bool { false }
+
     @ViewBuilder
     private func detailContent(_ package: RoomProjectPackage) -> some View {
+        if let trashedAt = package.metadata.trashedAt {
+            trashedDetailContent(package, trashedAt: trashedAt)
+        } else {
+            activeDetailContent(package)
+        }
+    }
+
+    private func activeDetailContent(_ package: RoomProjectPackage) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             RoomHeroMedia(
                 state: heroState,
@@ -1395,11 +1431,70 @@ struct RoomDetailView: View {
                 .frame(height: 1)
                 .accessibilityHidden(true)
 
-            Button("Delete permanently", role: .destructive) {
-                showingDeleteConfirmation = true
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.error")
+            }
+
+            Button("Move to Trash", role: .destructive) {
+                showingTrashConfirmation = true
             }
             .buttonStyle(InstrumentButtonStyle(role: .destructive))
-            .accessibilityIdentifier("detail.delete")
+            .disabled(changingTrashState)
+            .accessibilityIdentifier("detail.trash")
+        }
+    }
+
+    private func trashedDetailContent(_ package: RoomProjectPackage, trashedAt: Date) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("In Trash — deletes permanently on \(RoomTrashRetentionPolicy().purgeDate(trashedAt: trashedAt).formatted(date: .abbreviated, time: .omitted)). You can restore this room during the 30 days in Trash.")
+                .font(AppTypography.callout)
+                .foregroundStyle(AppPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityIdentifier("detail.trashBanner")
+                .accessibilitySortPriority(3)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Button("Restore") {
+                    Task { await restorePackageFromTrash() }
+                }
+                .buttonStyle(InstrumentButtonStyle(role: .primary))
+                .disabled(changingTrashState)
+                .accessibilityIdentifier("detail.restore")
+                .accessibilitySortPriority(2)
+
+                Button("Delete now", role: .destructive) {
+                    showingDeleteConfirmation = true
+                }
+                .buttonStyle(InstrumentButtonStyle(role: .destructive))
+                .disabled(changingTrashState)
+                .accessibilityIdentifier("detail.delete")
+                .accessibilitySortPriority(1)
+            }
+
+            Text(package.metadata.customName)
+                .font(AppTypography.editorial)
+                .foregroundStyle(AppPalette.ink)
+                .accessibilityIdentifier("detail.roomName")
+            DetailPair("Head revision", value: package.manifest.headRevisionID,
+                       accessibilityIdentifier: "detail.headRevision")
+            DetailPair("Manual location", value: package.metadata.manualLocation.isEmpty
+                       ? "Not recorded" : package.metadata.manualLocation)
+            DetailPair("Notes", value: package.metadata.notes.isEmpty ? "No notes" : package.metadata.notes)
+            Text("\(package.revisions.count) immutable revision\(package.revisions.count == 1 ? "" : "s") retained in Trash.")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedInk)
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
+                    .accessibilityIdentifier("detail.error")
+            }
         }
     }
 
@@ -1646,6 +1741,7 @@ struct RoomDetailView: View {
     private func runPendingInfoAction() {
         guard let action = pendingInfoAction else { return }
         pendingInfoAction = nil
+        guard package?.metadata.trashedAt == nil else { return }
         switch action {
         case .editMetadata:
             showingMetadataEditor = true
@@ -2007,11 +2103,38 @@ struct RoomDetailView: View {
     }
 
     private func deletePackage() async {
+        guard !changingTrashState else { return }
+        changingTrashState = true
+        defer { changingTrashState = false }
         do {
-            try await controller.delete(projectID: projectID)
+            try await controller.deleteNow(projectID: projectID)
             dismiss()
         } catch {
             errorMessage = "The room package could not be deleted."
+        }
+    }
+
+    private func movePackageToTrash() async {
+        guard !changingTrashState else { return }
+        changingTrashState = true
+        defer { changingTrashState = false }
+        do {
+            try await controller.moveToTrash(projectID: projectID)
+            dismiss()
+        } catch {
+            errorMessage = "The room package could not be moved to Trash."
+        }
+    }
+
+    private func restorePackageFromTrash() async {
+        guard !changingTrashState else { return }
+        changingTrashState = true
+        defer { changingTrashState = false }
+        do {
+            try await controller.restoreFromTrash(projectID: projectID)
+            dismiss()
+        } catch {
+            errorMessage = "The room package could not be restored from Trash."
         }
     }
 }

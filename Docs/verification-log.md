@@ -2252,3 +2252,87 @@ Logs, broad/mutation/restored xcresults and exported contract attachments are
 retained under
 `.artifacts/slice7-personal-release-2026-09-30/gates/m1-purge-coordinator-reaper/`.
 Their SHA-256 log bindings are recorded in the mission handoff.
+
+## 2026-10-01 — Slice 7 Library and room-detail Trash UI
+
+Evidence tiers: static verification, macOS Core XCTest and iPhone 16 Pro
+Simulator XCTest/XCUITest (iOS 26.3.1, Xcode 26.3). This is not physical-device,
+real iCloud, LiDAR, Share Sheet or release evidence.
+
+The library now offers Active, Archived and Trash through its adaptive action
+row. Active/Archived exclude trash; Trash uses ascending purge-date order,
+an amber TRASH badge and a wrapping “Deletes permanently on” line. Empty Trash
+and confirmations state the 30-day window. Active detail offers confirmed
+Move to Trash; trashed detail is read-only, with the banner, Restore and
+Delete now in accessibility order. It exposes no revision restore, mutation,
+viewer, export, backup or professional route. Restore/deletion refresh and
+dismiss to the selected library filter. The backup-deletion choice is declared
+but unavailable until the durable journal and explicit cloud action are wired.
+No new fixed-size font, black/white literal or animation was added to the views;
+buttons reuse the existing Reduce Motion-aware instrument style.
+
+Commands (the pinned Simulator ID follows the preceding environment-variable
+convention; exact expanded commands and complete selectors are in retained logs):
+
+```sh
+swift test
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+python3 -B Scripts/verify_xcode_scaffold.py
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData -jobs 4
+xcrun simctl ui "$ROOMSCAN_IPHONE_SIMULATOR_ID" increase_contrast enabled
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -only-testing:RoomScanStudioTests/RoomTrashLifecycleTests \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashAccessibilityXXXLKeepsFiltersRowsBannerAndActionsReachableInOrder \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashForcedClockRendersExactlyThirtyDayPurgeDate \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashDarkModeAndIncreaseContrastKeepListOrderAndDetailLegible \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-trash-ui-appearance-green.xcresult
+```
+
+The broad scope passed **47/47** (34 app + 13 UI): the six new Trash flows,
+the metadata/duplicate/archive/unarchive successor and six existing library,
+revision, viewer and backup flows. Its single-process lifecycle proves cancel,
+trash filter membership, read-only detail, restore order/head/companion bytes,
+archived-flag preservation, default-off permanent deletion, actual seeded
+companion removal and byte-identical retention of the second project. The
+second disabled-backup case explicitly turns the already-enabled fake OFF.
+Companions are UI-saved redesign documents and canonical marker-owned Concept
+Set cleanup fixtures, not a claim of full Concept Set import.
+
+Screenshot review found that the broad bundle's supposedly dark screenshots
+were light: iOS 26 ignored the appearance launch default. Those images are not
+accepted as dark evidence. A new pixel-level oracle failed on light paper
+brightness 0.897. Debug isolated launches now explicitly honor the existing
+Light/Dark argument; non-isolated and Release launches remain unchanged.
+The corrected appearance/date/AXXXL scope passed **22/22** (19 app + 3 UI);
+reviewed dark/high-contrast screenshots show dark paper, legible amber badges,
+purge dates and banner. AXXXL screenshots retain the full purge date and banner,
+with scroll-reachable 44-point actions and accessibility order
+banner → Restore → Delete now. Bypassing the isolation guard produced three
+expected unit failures; restoring it returned the trash suite to **19/19**.
+Core passed **362/362**, Python **79/79**, and scaffold passed.
+A final ordering evidence run passed **1/1**, explicitly framing all three
+Trash rows (002, 001, 003) in one screenshot.
+
+The initial UI red control detected the old active-detail delete action.
+Deterministic test fixes cover virtualized Form/lazy rows, whole-target
+scrolling, exact duplicate confirmation wrappers and CGFloat noise. One missed
+Home tap under load was retried with the existing 150-ms touch convention.
+A supplemental copy smoke was interrupted by worker Simulator shutdown and
+stopped with exit 143; its date/AXXXL coverage subsequently passed in the
+corrected 22-test scope. Full iPhone/iPad and unsigned gates remain milestone
+work. No new Swift file or PBX membership was needed.
+
+Retained logs, red/broad/appearance/mutation/restored xcresults and exported
+attachments live under
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-trash-library-detail-ui/`.
+Use `m1-trash-ui-final.xcresult` for lifecycle/filter/cleanup proof, and
+`m1-trash-ui-appearance-green.xcresult` for corrected dark/AXXXL/date evidence.
+Use `m1-trash-ui-order-evidence.xcresult` for the complete three-row order image.
+Their attachment manifests bind the `VAL-TRASH-*` screenshot/text names to
+exported files; SHA-256 log bindings are in the mission handoff. Increase
+Contrast was reset and the RoomScan Simulator shut down afterward.

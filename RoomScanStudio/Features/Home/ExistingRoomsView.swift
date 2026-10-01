@@ -7,8 +7,25 @@ struct ExistingRoomsView: View {
     private enum LibraryFilter: String, CaseIterable, Identifiable {
         case active = "Active"
         case archived = "Archived"
+        case trash = "Trash"
 
         var id: String { rawValue }
+
+        var accessibilityIdentifier: String {
+            switch self {
+            case .active: return "library.showActive"
+            case .archived: return "library.showArchived"
+            case .trash: return "library.showTrash"
+            }
+        }
+
+        var emptyMessage: String {
+            switch self {
+            case .active: return "No active room profiles yet."
+            case .archived: return "No archived room profiles."
+            case .trash: return "Trash is empty. Rooms in Trash can be restored for 30 days."
+            }
+        }
     }
 
     @ObservedObject var controller: RoomLibraryController
@@ -22,12 +39,15 @@ struct ExistingRoomsView: View {
     @StateObject private var previewCache = RoomFloorPlanPreviewCache()
 
     private var filteredSummaries: [RoomProjectSummary] {
-        controller.summaries.filter { summary in
+        if filter == .trash { return controller.trashedSummaries }
+        return controller.summaries.filter { summary in
             switch filter {
             case .active:
-                return !summary.archived
+                return !summary.archived && !summary.isTrashed
             case .archived:
-                return summary.archived
+                return summary.archived && !summary.isTrashed
+            case .trash:
+                return false
             }
         }
     }
@@ -67,11 +87,9 @@ struct ExistingRoomsView: View {
                 Button(option.rawValue) {
                     filter = option
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(option == filter ? AppPalette.primaryAction : AppPalette.paperShadow)
-                .accessibilityIdentifier(
-                    option == .active ? "library.showActive" : "library.showArchived"
-                )
+                .buttonStyle(InstrumentButtonStyle(role: option == filter ? .primary : .secondary))
+                .accessibilityIdentifier(option.accessibilityIdentifier)
+                .accessibilityAddTraits(option == filter ? [.isSelected] : [])
             }
             Spacer()
             Button {
@@ -79,6 +97,7 @@ struct ExistingRoomsView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
+            .buttonStyle(InstrumentButtonStyle(role: .quiet))
             .accessibilityLabel("Refresh library")
             .accessibilityIdentifier("library.refresh")
         }
@@ -124,14 +143,17 @@ struct ExistingRoomsView: View {
     private var libraryContent: some View {
         if filteredSummaries.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: "archivebox")
+                Image(systemName: filter == .trash ? "trash" : "archivebox")
                     .font(AppTypography.symbol)
                     .foregroundStyle(AppPalette.blueprint)
-                Text(filter == .active ? "No active room profiles yet." : "No archived room profiles.")
+                Text(filter.emptyMessage)
                     .font(AppTypography.section)
                     .foregroundStyle(AppPalette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("library.empty")
-                Text("A mock fixture becomes a profile only after its review explicitly saves it.")
+                Text(filter == .trash
+                     ? "After 30 days, local packages and their project companions are deleted permanently."
+                     : "A mock fixture becomes a profile only after its review explicitly saves it.")
                     .font(AppTypography.callout)
                     .foregroundStyle(AppPalette.mutedInk)
             }
@@ -173,8 +195,34 @@ private struct RoomLibraryRow: View {
     let thumbnailData: Data?
     let controller: RoomLibraryController
     let previewCache: RoomFloorPlanPreviewCache
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if dynamicTypeSize.isAccessibilitySize {
+                roomFacts
+                statusFacts
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    roomFacts
+                    Spacer(minLength: 8)
+                    statusFacts
+                }
+            }
+            if let trashedAt = summary.trashedAt {
+                Text("Deletes permanently on \(RoomTrashRetentionPolicy().purgeDate(trashedAt: trashedAt).formatted(date: .abbreviated, time: .omitted))")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("library.project.\(summary.projectID).purgeDate")
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var roomFacts: some View {
         HStack(alignment: .top, spacing: 14) {
             RoomThumbnailView(
                 data: thumbnailData,
@@ -205,23 +253,25 @@ private struct RoomLibraryRow: View {
                     .font(AppTypography.measurement)
                     .foregroundStyle(AppPalette.blueprint)
             }
+        }
+    }
 
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(summary.lastRevisedDate, format: .dateTime.year().month().day())
+    private var statusFacts: some View {
+        VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: 6) {
+            Text(summary.lastRevisedDate, format: .dateTime.year().month().day())
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.mutedInk)
+            if summary.archived {
+                Text("ARCHIVED")
                     .font(AppTypography.measurement)
-                    .foregroundStyle(AppPalette.mutedInk)
-                if summary.archived {
-                    Text("ARCHIVED")
-                        .font(AppTypography.measurement)
-                        .foregroundStyle(AppPalette.amber)
-                }
+                    .foregroundStyle(AppPalette.amber)
+            }
+            if summary.isTrashed {
+                Text("TRASH")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.amber)
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
