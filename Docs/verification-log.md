@@ -2407,3 +2407,112 @@ Retained partial logs and negative-control bundle:
 The bundle is intentionally failing overall and must not be cited as a green
 VAL-TRASH-016/027 acceptance run. Its attachment manifest and log SHA-256
 bindings are recorded in the mission handoff.
+
+## 2026-10-01 — Slice 7 relaunch tests, restored green verification
+
+Continuation of the preceding partial checkpoint at `6d24a2a`. No runtime or
+test changes were needed. Evidence tiers: Core/macOS, static structure, iPhone
+16 Pro Simulator (iOS 26.3.1), and unsigned generic iOS compilation only.
+
+The fresh Simulator `build-for-testing` passed. The restored
+`RoomTrashLifecycleTests` passed **19/19**, including the reopened-disk,
+fresh-index projection test and the composed fake-provider zero-transport
+test. Durability UI passed after same-token relaunch and actual index-file
+deletion, with unchanged package bytes and the February 14, 2027 purge line.
+The first expiry UI run failed during setup: a Back tap left the first saved
+room's Library visible instead of Home (`RoomScanStudioUITests.swift:1416`).
+The one allowed unchanged retry passed the complete **21/21** selection
+(19 app units, two UI tests). Both runs are retained; the failed run is not
+green expiry evidence.
+
+The passing expiry test proves the 29-day-23-hour retention control, Home
+purge at 30 days plus one second with empty Trash and only 002 active, and
+midday UTC +31-day purge of A while recent Trash B and active C remain.
+Package, RedesignState and marker-owned Concept Set removal was checked on
+Home before any library tap, within ten seconds. B/C package and companion
+bytes and B's purge-date line stayed unchanged.
+
+The separate existing Trash/Library/fake-backup UI regression selection
+passed **13/13**, with Increase Contrast enabled for the appearance test and
+reset afterward. Core passed **362/362**; Python verifier tests passed
+**79/79**; scaffold and Simulator-selector self-test passed. Unsigned generic
+iOS build passed. The local-only index still uses `cloudKitDatabase: .none`;
+the reaper/coordinator contain no CloudKit, transport or background-scheduler
+references.
+
+Commands, from the repository root (the destination variable denotes only
+the mission-owned RoomScan iPhone Simulator):
+
+```sh
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_UDID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData -jobs 4
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_UDID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-trash-relaunch-continuation-retry.xcresult \
+  -only-testing:RoomScanStudioTests/RoomTrashLifecycleTests \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashSurvivesTokenRelaunchAndDeletedIndexWithIdenticalPurgeDate \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashReaperOnTokenRelaunchHonorsBoundaryAndPreservesRecentTrashAndActiveProject
+```
+
+The initial unchanged selection used
+`m1-trash-relaunch-continuation-green.xcresult` and exited 65 (20 passed,
+one setup failure). The retry above exited 0. Existing regressions used:
+
+```sh
+xcrun simctl ui "$ROOMSCAN_IPHONE_UDID" increase_contrast enabled
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_UDID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-trash-relaunch-regressions.xcresult \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testEmptyLibraryUsesIsolatedResetStore \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testIsolatedTokenKeepsSavedRoomAcrossRelaunchAndResetStartsEmpty \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testMockSaveCreatesOneProfileAndDiscardCreatesNone \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testMetadataDuplicateArchiveAndUnarchiveRemainExplicit \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashLifecycleConfirmationRestoreArchiveAndDeleteNowPreserveOtherProject \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashForcedClockRendersExactlyThirtyDayPurgeDate \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashOrderingUsesTrashDateNotProjectIDOrLastRevision \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashDeleteNowWithFakeBackupExplicitlyTurnedOffHasOneChoiceAndNoJournal \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashAccessibilityXXXLKeepsFiltersRowsBannerAndActionsReachableInOrder \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashDarkModeAndIncreaseContrastKeepListOrderAndDetailLegible \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testCloudBackupIsDisabledAndUnconfiguredWithoutAutomaticLaunchOperation \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testFakeCloudBackupRequiresExplicitListBackupAndRecoverCopyAction \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testFakeCloudAccountUnavailableIsVisibleOnlyAfterExplicitCheck
+xcrun simctl ui "$ROOMSCAN_IPHONE_UDID" increase_contrast disabled
+xcodebuild -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -sdk iphoneos \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  -derivedDataPath /tmp/roomscan-slice7-gates/DerivedData-unsigned -jobs 4 build
+swift test
+python3 -B Scripts/verify_xcode_scaffold.py
+python3 -B Scripts/select_simulators.py --self-test
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+```
+
+Retained root:
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-trash-relaunch-tests/`.
+Use `m1-trash-relaunch-continuation-retry.xcresult` for green
+VAL-TRASH-016/027 evidence and `m1-trash-relaunch-regressions.xcresult` for
+regressions. The exported `*-attachments/manifest.json` files bind test
+identifiers and `VAL-*` attachment names to screenshots and text files.
+Reviewed green screenshots show rebuilt Trash with the unchanged date, empty
+Trash after boundary expiry, recent B alone in Trash with March 16, 2027
+purge date, and C alone in Active. Metadata and isolated-root listings are
+retained text attachments. The earlier deliberate red-control bundle remains
+separate and intentionally failing.
+
+SHA-256 log bindings:
+
+- `m1-trash-relaunch-continuation-retry.log`:
+  `1a78339ec74e4dc250846c86afdd27d631c7e56419cd619dac8950933314d320`
+- `m1-trash-relaunch-regressions.log`:
+  `8ab7823fabc35b37dcbbfff9667e96c90f77691abb584eb4f5619a1504ddd576`
+- `m1-trash-relaunch-unsigned.log`:
+  `de1170056321e14f1f2ca998e1add9ce990be35caf0c64d9bf36942efb2ab288`
+
+Promoted scratch xcresults/attachments were byte-verified before removal.
+The RoomScan iPhone Simulator was shut down and erased to reclaim space.
+Full iPhone/iPad schemes, physical device, signed archive, LiDAR and real
+CloudKit were **not run** in this feature; they remain separate mission gates.
