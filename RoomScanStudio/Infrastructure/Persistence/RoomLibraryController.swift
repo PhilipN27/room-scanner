@@ -10,22 +10,40 @@ final class RoomLibraryController: ObservableObject {
     @Published private(set) var listingIssues: [RoomProjectListingIssue] = []
     @Published private(set) var libraryErrorMessage: String?
     @Published private(set) var indexErrorMessage: String?
+    @Published private(set) var purgeErrorMessage: String?
 
     private let store: LocalRoomProjectStore
     private let redesignStore: LocalRoomRedesignStore?
     private let propertyStore: LocalRoomPropertyStore?
     private let indexContext: ModelContext?
+    private let purgeCoordinator: any RoomProjectPurging
 
     init(
         store: LocalRoomProjectStore,
         modelContainer: ModelContainer?,
         redesignStore: LocalRoomRedesignStore? = nil,
-        propertyStore: LocalRoomPropertyStore? = nil
+        propertyStore: LocalRoomPropertyStore? = nil,
+        purgeCoordinator: (any RoomProjectPurging)? = nil
     ) {
         self.store = store
         self.redesignStore = redesignStore
         self.propertyStore = propertyStore
         indexContext = modelContainer.map(ModelContext.init)
+        self.purgeCoordinator = purgeCoordinator ?? RoomProjectPurgeCoordinator(
+            store: store,
+            redesignStore: redesignStore,
+            propertyStore: propertyStore,
+            modelContainer: modelContainer
+        )
+    }
+
+    var trashedSummaries: [RoomProjectSummary] {
+        let policy = RoomTrashRetentionPolicy()
+        return summaries.filter(\.isTrashed).sorted {
+            let left = policy.purgeDate(trashedAt: $0.trashedAt!)
+            let right = policy.purgeDate(trashedAt: $1.trashedAt!)
+            return left == right ? $0.projectID < $1.projectID : left < right
+        }
     }
 
     /// Known risk, accepted 2026-08-11: concurrent calls are not coordinated.
@@ -34,7 +52,7 @@ final class RoomLibraryController: ObservableObject {
     /// thumbnails, or the index temporarily stale until the next refresh.
     func refreshLibrary() async {
         do {
-            let listing = try await store.listProjectListing(includeArchived: true)
+            let listing = try await store.listProjectListing(includeArchived: true, includeTrashed: true)
             summaries = listing.summaries
             listingIssues = listing.issues
             libraryErrorMessage = nil
@@ -279,8 +297,43 @@ final class RoomLibraryController: ObservableObject {
     }
 
     func delete(projectID: String) async throws {
-        try await store.delete(projectID: projectID)
+        _ = try await deleteNow(projectID: projectID)
+    }
+
+    func moveToTrash(projectID: String) async throws {
+        try await store.moveToTrash(projectID: projectID)
         await refreshLibrary()
+    }
+
+    func restoreFromTrash(projectID: String) async throws {
+        try await store.restoreFromTrash(projectID: projectID)
+        await refreshLibrary()
+    }
+
+    @discardableResult
+    func deleteNow(projectID: String) async throws -> RoomProjectPurgeReport {
+        let report = await purgeCoordinator.purge(projectID: projectID)
+        recordPurgeReports([report])
+        await refreshLibrary()
+        if case .failed(let message) = report.package {
+            throw RoomProjectStoreError.storageFailure(message)
+        }
+        return report
+    }
+
+    func recordPurgeReports(_ reports: [RoomProjectPurgeReport], listingErrorMessage: String? = nil) {
+        let messages = reports.compactMap { report -> String? in
+            if case .failed = report.package {
+                return "A room in Trash could not be deleted. Its package was preserved."
+            }
+            return report.companionFailureMessage
+        }
+        // A concurrent empty sweep must not clear a previous cleanup warning.
+        if let listingErrorMessage {
+            purgeErrorMessage = listingErrorMessage
+        } else if !reports.isEmpty {
+            purgeErrorMessage = messages.isEmpty ? nil : messages.joined(separator: " ")
+        }
     }
 
     func restore(

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		720100000000000000000001 /* RoomProjectPurgeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */; };
+		720100000000000000000002 /* RoomTrashReaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000002 /* RoomTrashReaper.swift */; };
+		720100000000000000000003 /* RoomTrashLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000003 /* RoomTrashLifecycleTests.swift */; };
 		710100000000000000000001 /* IsolatedTestRoots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000001 /* IsolatedTestRoots.swift */; };
 		710100000000000000000002 /* IsolatedTestRootTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000002 /* IsolatedTestRootTests.swift */; };
 		A40000000000000000000001 /* RoomScanStudioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* RoomScanStudioApp.swift */; };
@@ -155,6 +158,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomProjectPurgeCoordinator.swift; sourceTree = "<group>"; };
+		720000000000000000000002 /* RoomTrashReaper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashReaper.swift; sourceTree = "<group>"; };
+		720000000000000000000003 /* RoomTrashLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashLifecycleTests.swift; sourceTree = "<group>"; };
 		710000000000000000000001 /* IsolatedTestRoots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsolatedTestRoots.swift; sourceTree = "<group>"; };
 		710000000000000000000002 /* IsolatedTestRootTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsolatedTestRootTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* RoomScanStudioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanStudioApp.swift; sourceTree = "<group>"; };
@@ -433,6 +439,7 @@
 		A3000000000000000000000B /* RoomScanStudio/RoomScanStudioTests */ = {
 			isa = PBXGroup;
 			children = (
+				720000000000000000000003 /* RoomTrashLifecycleTests.swift */,
 				710000000000000000000002 /* IsolatedTestRootTests.swift */,
 				A20000000000000000000010 /* RoomScanStudioTests.swift */,
 				E20000000000000000000001 /* RoomCaptureCoordinatorTests.swift */,
@@ -610,6 +617,8 @@
 			children = (
 				B20000000000000000000002 /* RoomProjectIndex.swift */,
 				B20000000000000000000003 /* RoomLibraryController.swift */,
+				720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */,
+				720000000000000000000002 /* RoomTrashReaper.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -857,6 +866,8 @@
 				710100000000000000000001 /* IsolatedTestRoots.swift in Sources */,
 				B40000000000000000000002 /* RoomProjectIndex.swift in Sources */,
 				B40000000000000000000003 /* RoomLibraryController.swift in Sources */,
+				720100000000000000000001 /* RoomProjectPurgeCoordinator.swift in Sources */,
+				720100000000000000000002 /* RoomTrashReaper.swift in Sources */,
 				B40000000000000000000004 /* MockRoomFixtureLoader.swift in Sources */,
 				B4000000000000000000000D /* RescanFixtureLoader.swift in Sources */,
 				B40000000000000000000005 /* RoomDetailView.swift in Sources */,
@@ -930,6 +941,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				720100000000000000000003 /* RoomTrashLifecycleTests.swift in Sources */,
 				710100000000000000000002 /* IsolatedTestRootTests.swift in Sources */,
 				A4000000000000000000000F /* RoomScanStudioTests.swift in Sources */,
 				E40000000000000000000001 /* RoomCaptureCoordinatorTests.swift in Sources */,

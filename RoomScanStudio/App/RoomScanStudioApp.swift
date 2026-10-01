@@ -75,6 +75,11 @@ struct RoomScanStudioApp: App {
                 switch phase {
                 case .active:
                     environment.handleProfessionalLifecycle(.foreground)
+                    Task(priority: .utility) {
+                        // Awaits local retention, then refreshLibrary through
+                        // the unit-tested scene orchestration seam.
+                        await environment.purgeExpiredTrashAndRefreshLibrary()
+                    }
                 case .inactive:
                     environment.handleProfessionalLifecycle(.inactive)
                 case .background:

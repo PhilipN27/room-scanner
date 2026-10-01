@@ -128,11 +128,15 @@ struct HomeView: View {
             }
         }
         .tint(AppPalette.blueprint)
-        .task {
+        .task(priority: .utility) {
             // The Rooms surface shows a live count and the most recent
             // room's thumbnail; ExistingRoomsView refreshed on its own
             // appear, but Home must refresh too or the count/thumbnail go
             // stale until the library screen happens to be opened.
+            let report = await environment.trashReaper.purgeExpiredTrash()
+            environment.libraryController.recordPurgeReports(
+                report.purgeReports, listingErrorMessage: report.listingErrorMessage
+            )
             await environment.libraryController.refreshLibrary()
         }
         .onChange(of: environment.meshNotificationRouter.requestedProjectID) { _, projectID in
@@ -315,7 +319,7 @@ struct HomeView: View {
 
     private var mostRecentRoomSummary: RoomProjectSummary? {
         libraryController.summaries
-            .filter { !$0.archived }
+            .filter { !$0.archived && !$0.isTrashed }
             .max { $0.lastRevisedDate < $1.lastRevisedDate }
     }
 
@@ -376,7 +380,7 @@ struct HomeView: View {
 enum HomeRoomCount {
     static func userVisibleCount(of summaries: [RoomProjectSummary]) -> Int {
         summaries
-            .filter { !$0.archived && !$0.tags.contains("fixture") }
+            .filter { !$0.archived && !$0.isTrashed && !$0.tags.contains("fixture") }
             .count
     }
 }

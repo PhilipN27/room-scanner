@@ -2179,3 +2179,76 @@ the worker handoff includes SHA-256 log bindings.
 Other projects' Xcode runs were allowed to finish before native work. Low
 disk was recovered by shutting down the RoomScan Simulator and removing only
 mission-owned generated DerivedData; retained results were not deleted.
+
+## 2026-09-30 — Slice 7 app purge coordinator and foreground trash reaper
+
+Evidence tiers: macOS Core XCTest, static verification, unsigned generic iOS
+compilation, and scoped iPhone 16 Pro Simulator XCTest/XCUITest (iOS 26.3.1,
+Xcode 26.3). No physical-device, real CloudKit, LiDAR or release proof is claimed.
+
+Permanent deletion now delegates to one coordinator: the optional durable-local
+request hook completes before package deletion; redesign state, ownership-checked
+Concept Sets, property memberships and the professional sync record are removed
+independently, then the local index row. Publication operation audit bytes remain
+unchanged. Missing companions and repeat purges succeed. Unsafe companions remain
+with a non-blocking library warning and never restore the deleted package.
+
+The clock-injected reaper lists all states, removes expired trash in ascending
+project-ID order and shares concurrent Home/scene sweeps. Home uses a utility-priority
+task before library refresh. Scene activation keeps professional lifecycle forwarding
+and awaits the reaper before refreshing through a unit-tested orchestration seam.
+Neither coordinator nor reaper references a backup transport or background scheduler.
+The isolated-only `--trash-clock` drives both the store timestamp and reaper clock.
+The rebuildable index projects `trashedAt`; library trash/restore/delete actions
+refresh their summaries/index, and Trash sorting uses purge date then project ID.
+Home count and its most-recent room exclude trash while retaining prior archive and
+fixture exclusions. The optional backup-deletion hook remains unwired until the
+backup-deletion milestone; this feature performs no remote deletion.
+
+Commands (the Simulator destination is the pinned RoomScan iPhone, represented
+below by the same environment-variable convention as the preceding reconciliation):
+
+```sh
+swift test
+python3 -B Scripts/verify_xcode_scaffold.py
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData -jobs 4
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_SIMULATOR_ID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -only-testing:RoomScanStudioTests/RoomTrashLifecycleTests \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-purge-restored.xcresult
+xcodebuild -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -sdk iphoneos \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+  -derivedDataPath /tmp/roomscan-slice7-gates/DerivedData-unsigned -jobs 4 build
+```
+
+The broader scoped run added `RoomScanStudioTests`, `RoomCloudBackupAppTests`,
+`IsolatedTestRootTests`, `ProfessionalBoundaryTests` and
+`RoomAIRedesignProductionIntegrationTests` plus six existing UI flows: Home actions,
+empty library, token relaunch, metadata/duplicate/archive/delete confirmation,
+default-off backup and explicit fake backup/recovery. It passed **112/112**
+(106 app + 6 UI), with no failures, skips or contention retries. The restored
+new suite passed **18/18**; Core passed **362/362**. Scaffold and unsigned iOS
+build passed. The attachment export includes all 18 new keep-always text proofs,
+covering `VAL-TRASH-008` through `VAL-TRASH-013`, and the unit clauses of
+`VAL-TRASH-016`/`017`/`018`. The scene-refresh proof is unit-level, not a
+background/foreground UI run. User-visible Trash controls and forced-expiry
+relaunch flows remain assigned to subsequent UI features.
+
+TDD: the initial build failed on missing purge/reaper/report APIs; the composition
+test failed on its missing in-memory-index injection seam. A restored mutation
+control disabled the pre-delete hook and post-reap refresh: both targeted tests
+failed, with seven assertions detecting the removed fail-closed/request behavior
+and stale summaries/index. Restoring both paths returned the full new suite to
+18/18. Fixture and privacy-manifest bytes are unchanged. Another project's Xcode
+test run was allowed to finish before Simulator work; its process/device were
+never touched.
+
+Logs, broad/mutation/restored xcresults and exported contract attachments are
+retained under
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-purge-coordinator-reaper/`.
+Their SHA-256 log bindings are recorded in the mission handoff.

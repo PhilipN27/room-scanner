@@ -18,6 +18,7 @@ final class RoomProjectIndexRecord {
     var tagsSearchText: String
     var thumbnailRelativePath: String?
     var archived: Bool
+    var trashedAt: Date?
     var headRevisionID: String
 
     init(summary: RoomProjectSummary) {
@@ -29,6 +30,7 @@ final class RoomProjectIndexRecord {
         tagsSearchText = summary.tags.joined(separator: " ")
         thumbnailRelativePath = summary.thumbnailRelativePath?.value
         archived = summary.archived
+        trashedAt = summary.trashedAt
         headRevisionID = summary.headRevisionID
     }
 
@@ -40,6 +42,7 @@ final class RoomProjectIndexRecord {
         tagsSearchText = summary.tags.joined(separator: " ")
         thumbnailRelativePath = summary.thumbnailRelativePath?.value
         archived = summary.archived
+        trashedAt = summary.trashedAt
         headRevisionID = summary.headRevisionID
     }
 }

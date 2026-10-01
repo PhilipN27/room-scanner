@@ -86,6 +86,12 @@ struct ExistingRoomsView: View {
 
     @ViewBuilder
     private var issueMessages: some View {
+        if let error = controller.purgeErrorMessage {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.amber)
+                .accessibilityIdentifier("library.purgeIssue")
+        }
         if !controller.listingIssues.isEmpty {
             Label(
                 "\(controller.listingIssues.count) package issue\(controller.listingIssues.count == 1 ? "" : "s") isolated. Valid room packages remain available.",

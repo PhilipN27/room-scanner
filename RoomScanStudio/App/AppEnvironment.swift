@@ -8,6 +8,8 @@ import UIKit
 final class AppEnvironment: ObservableObject {
     let capabilityProvider: any DeviceCapabilityProviding
     let libraryController: RoomLibraryController
+    let trashClock: any RoomProjectClock
+    let trashReaper: RoomTrashReaper
     let rescanProvider: any RoomRescanProviding
     let exportCoordinator: RoomExportCoordinator
     let aiRedesignModelFactory: RoomAIRedesignModelFactory
@@ -28,7 +30,8 @@ final class AppEnvironment: ObservableObject {
 
     init(
         arguments: [String] = ProcessInfo.processInfo.arguments,
-        professionalEnvironmentFactory: ProfessionalEnvironmentFactory? = nil
+        professionalEnvironmentFactory: ProfessionalEnvironmentFactory? = nil,
+        indexContainer: ModelContainer? = nil
     ) {
 #if DEBUG
         self.professionalEnvironmentFactory = professionalEnvironmentFactory
@@ -53,8 +56,11 @@ final class AppEnvironment: ObservableObject {
             generator = UUIDRoomProjectIDGenerator()
         }
 
+        let resolvedTrashClock = TrashClockArgument.resolve(arguments: arguments)
+        trashClock = resolvedTrashClock
         let store = LocalRoomProjectStore(
             rootURL: rootURL,
+            clock: resolvedTrashClock,
             idGenerator: generator
         )
         let localExtensionRoots = RoomRedesignLocalRootResolver.resolve(
@@ -64,7 +70,30 @@ final class AppEnvironment: ObservableObject {
         )
         let redesignStore = LocalRoomRedesignStore(rootURL: localExtensionRoots.redesign)
         let propertyStore = LocalRoomPropertyStore(rootURL: localExtensionRoots.properties)
-        let indexBootstrap = RoomProjectIndexBootstrap.makeContainer()
+        let indexBootstrap = indexContainer.map {
+            RoomProjectIndexBootstrap(container: $0, message: nil)
+        } ?? RoomProjectIndexBootstrap.makeContainer()
+        let aiRedesignRoots = RoomAIRedesignRootResolver.resolve(
+            arguments: arguments,
+            projectRootURL: rootURL,
+            fileManager: .default
+        )
+        let syncJournalRoot = localExtensionRoots.redesign.deletingLastPathComponent()
+            .appendingPathComponent("ProfessionalSyncJournal", isDirectory: true)
+        let purgeCoordinator = RoomProjectPurgeCoordinator(
+            store: store,
+            redesignStore: redesignStore,
+            conceptStore: LocalRoomConceptStore(
+                rootURL: aiRedesignRoots.concepts,
+                sourcePackageRootURL: rootURL
+            ),
+            propertyStore: propertyStore,
+            syncJournalRootURL: syncJournalRoot,
+            modelContainer: indexBootstrap.container
+        )
+        trashReaper = RoomTrashReaper(
+            store: store, purgeCoordinator: purgeCoordinator, clock: resolvedTrashClock
+        )
 
         let usesIsolatedUIEnvironment = arguments.contains("--ui-testing")
         let jobRecordStore = RoomMeshColoringJobRecordStore(
@@ -172,7 +201,8 @@ final class AppEnvironment: ObservableObject {
             store: store,
             modelContainer: indexBootstrap.container,
             redesignStore: redesignStore,
-            propertyStore: propertyStore
+            propertyStore: propertyStore,
+            purgeCoordinator: purgeCoordinator
         )
         // Hero snapshots piggyback on the colored-mesh viewer's load, the one
         // moment the colored result is already resident — the profile never
@@ -216,11 +246,6 @@ final class AppEnvironment: ObservableObject {
             ),
             cleaner: exportWorkspaceFactory
         )
-        let aiRedesignRoots = RoomAIRedesignRootResolver.resolve(
-            arguments: arguments,
-            projectRootURL: rootURL,
-            fileManager: .default
-        )
         aiRedesignModelFactory = RoomAIRedesignModelFactory(
             controller: libraryController,
             workspaceFactory: exportWorkspaceFactory,
@@ -235,9 +260,7 @@ final class AppEnvironment: ObservableObject {
             .init(
                 libraryController: libraryController,
                 aiRedesignModelFactory: aiRedesignModelFactory,
-                professionalSyncJournalRoot: localExtensionRoots.redesign
-                    .deletingLastPathComponent()
-                    .appendingPathComponent("ProfessionalSyncJournal", isDirectory: true),
+                professionalSyncJournalRoot: syncJournalRoot,
                 publicationOperationJournalRoot: localExtensionRoots.redesign
                     .deletingLastPathComponent()
                     .appendingPathComponent("PublicationOperationJournal", isDirectory: true)
@@ -314,6 +337,28 @@ final class AppEnvironment: ObservableObject {
         professionalEnvironmentFactory.handleLifecycle(event)
     }
 
+    @discardableResult
+    func purgeExpiredTrashAndRefreshLibrary() async -> RoomTrashReaperReport {
+        await Self.purgeExpiredTrashAndRefreshLibrary(
+            reaper: trashReaper, libraryController: libraryController
+        )
+    }
+
+    /// Shared scene-activation orchestration; the injected seam proves that
+    /// refresh waits for the sweep, including when foreground returns from suspension.
+    @discardableResult
+    static func purgeExpiredTrashAndRefreshLibrary(
+        reaper: any RoomTrashReaping,
+        libraryController: RoomLibraryController
+    ) async -> RoomTrashReaperReport {
+        let report = await reaper.purgeExpiredTrash()
+        libraryController.recordPurgeReports(
+            report.purgeReports, listingErrorMessage: report.listingErrorMessage
+        )
+        await libraryController.refreshLibrary()
+        return report
+    }
+
     private static func simulatedQualityScenario(
         arguments: [String]
     ) -> SimulatedRoomQualityScenario {
@@ -343,6 +388,18 @@ final class AppEnvironment: ObservableObject {
 
     func releaseCaptureCoordinator(_ coordinator: RoomCaptureCoordinator) {
         captureCoordinatorLease.release(coordinator)
+    }
+}
+
+enum TrashClockArgument {
+    static func resolve(arguments: [String]) -> any RoomProjectClock {
+        let prefix = "--trash-clock="
+        guard IsolatedRootSuffix.isIsolatedRun(arguments: arguments),
+              let argument = arguments.first(where: { $0.hasPrefix(prefix) }),
+              let seconds = TimeInterval(argument.dropFirst(prefix.count)),
+              seconds.isFinite
+        else { return SystemRoomProjectClock() }
+        return FixedRoomProjectClock(date: Date(timeIntervalSince1970: seconds))
     }
 }
 
