@@ -508,12 +508,14 @@ final class RoomTrashLifecycleTests: XCTestCase {
         // index, not a second source of project truth.
         let replacement = try RoomProjectIndexFactory.makeContainer(isStoredInMemoryOnly: true)
         XCTAssertTrue(try indexRecords(replacement).isEmpty)
-        try await rebuildIndex(store: store, container: replacement)
+        let reopenedStore = LocalRoomProjectStore(rootURL: root("Projects"))
+        let packageBytes = try bytesUnder(root("Projects"))
+        try await rebuildIndex(store: reopenedStore, container: replacement)
         let rows = try indexRecords(replacement)
         XCTAssertEqual(Set(rows.map(\.projectID)), Set(["active", "trashed"]))
         XCTAssertEqual(rows.first { $0.projectID == "trashed" }?.trashedAt, epoch)
         XCTAssertNil(rows.first { $0.projectID == "active" }?.trashedAt)
-        let reopenedStore = LocalRoomProjectStore(rootURL: root("Projects"))
+        XCTAssertEqual(try bytesUnder(root("Projects")), packageBytes)
         let reopenedListing = try await reopenedStore.listProjectListing(includeArchived: true, includeTrashed: true)
         XCTAssertEqual(reopenedListing.summaries.first { $0.projectID == "trashed" }?.trashedAt, epoch)
         let metadata = try RoomJSONCoding.makeDecoder().decode(
@@ -525,7 +527,8 @@ final class RoomTrashLifecycleTests: XCTestCase {
         try await rebuildIndex(store: store, container: replacement)
         XCTAssertTrue(try indexRecords(replacement).allSatisfy { $0.trashedAt == nil })
         attach("VAL-TRASH-016", "disk-truth-two-memory-indexes",
-               "Existing row updated to disk trashedAt; new empty in-memory index rebuilt identical projection. "
+               "Existing row updated to disk trashedAt; reopened disk store rebuilt a new empty in-memory index "
+               + "with identical projection and unchanged package bytes. "
                + "Reopened store and metadata retain epoch; restore clears projected timestamp. Factory localOnly.")
     }
 

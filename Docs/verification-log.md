@@ -2336,3 +2336,74 @@ Use `m1-trash-ui-order-evidence.xcresult` for the complete three-row order image
 Their attachment manifests bind the `VAL-TRASH-*` screenshot/text names to
 exported files; SHA-256 log bindings are in the mission handoff. Increase
 Contrast was reset and the RoomScan Simulator shut down afterward.
+
+## 2026-10-01 — Slice 7 relaunch test implementation, verification blocked
+
+Scope: static, Core and partial iPhone 16 Pro Simulator evidence only.
+`RoomTrashRelaunchUITests.swift` adds two tests to the existing UI test class,
+with explicit PBX group/source membership and retained `VAL-TRASH-016/027`
+screenshots, synthetic metadata, launch arguments and disk listings. The
+durability test trashes a project, keeps the token root across relaunch, then
+deletes the stopped isolated app's `RoomScanStudioIndex.store` and SQLite
+companions and relaunches again. Package bytes and purge-date text must remain
+identical. The existing index unit test now rebuilds an empty container from a
+newly reopened disk store and checks unchanged package bytes.
+
+The expiry test contains two independent token scenarios: the contract's
+29-day-23-hour retention control followed by expiry at 30 days plus one second
+(empty Trash, only project 002 active), and the feature's midday UTC +31-day
+expiry with recent trash B and active C retained byte-for-byte. Redesign
+companions are saved through UI; Concept Set companions are marker-owned
+synthetic cleanup fixtures. Disk expiry is checked within ten seconds on
+Home, before any library navigation or manual refresh.
+
+Commands run from the repository root:
+
+```sh
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_UDID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData -jobs 4
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio \
+  -destination "platform=iOS Simulator,id=$ROOMSCAN_IPHONE_UDID" \
+  -derivedDataPath /tmp/roomscan-slice7-work/DerivedData \
+  -only-testing:RoomScanStudioTests/RoomTrashLifecycleTests/testFreshIndexRebuildAndExistingRowUpdateProjectTrashStateFromDisk \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashSurvivesTokenRelaunchAndDeletedIndexWithIdenticalPurgeDate \
+  -only-testing:RoomScanStudioUITests/RoomScanStudioUITests/testTrashReaperOnTokenRelaunchHonorsBoundaryAndPreservesRecentTrashAndActiveProject \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -resultBundlePath /tmp/roomscan-slice7-work/m1-trash-relaunch-red.xcresult
+swift test
+python3 -B Scripts/verify_xcode_scaffold.py
+python3 -B -m unittest discover -s Scripts -p 'test_*.py'
+```
+
+Both Simulator builds succeeded. The initial test run deliberately suppressed
+new index-row trash projection and reaping: **2 expected failures / 3 tests**
+(exit 65). The index unit test detected missing `trashedAt`; the expiry UI
+test detected the expired package/companions remaining on Home. The durability
+UI test passed **1/1** in this bundle, including actual index-file deletion
+and its unchanged February 14, 2027 purge date. Its screenshot was reviewed.
+These runtime mutations are fully restored and are not committed.
+
+Core passed **362/362** (exit 0). Scaffold initially rejected the shared
+membership helper's access-level change; keeping its guarded private method
+and using a thin shared wrapper restored scaffold success. Python passed
+**79/79**. Static guards still show `cloudKitDatabase: .none`, no CloudKit,
+transport or background-scheduler references in reaper/coordinator, and an
+empty fixture diff.
+
+**Not complete:** available disk fell from 6 GiB at startup to approximately
+4.2 GiB after Simulator/memory pressure. The worker reclaimed its generated
+DerivedData and shut down the RoomScan Simulator, but `df -g` still reported
+4 GiB, below the mission's 6-GiB native-run minimum. One warm restored build
+had already run before this decrease was noticed; no further native run was
+attempted. Final wrapper edits are statically verified but await compilation.
+The restored app/index unit suite, green expiry test (including its
+three-project scenario), related UI regressions and unsigned generic build
+are **blocked**, not passed. No contention retry, device, iPad or live
+CloudKit claim is made.
+
+Retained partial logs and negative-control bundle:
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-trash-relaunch-tests/`.
+The bundle is intentionally failing overall and must not be cited as a green
+VAL-TRASH-016/027 acceptance run. Its attachment manifest and log SHA-256
+bindings are recorded in the mission handoff.

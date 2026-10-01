@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		730100000000000000000001 /* RoomTrashRelaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730000000000000000000001 /* RoomTrashRelaunchUITests.swift */; };
 		720100000000000000000001 /* RoomProjectPurgeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */; };
 		720100000000000000000002 /* RoomTrashReaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000002 /* RoomTrashReaper.swift */; };
 		720100000000000000000003 /* RoomTrashLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000003 /* RoomTrashLifecycleTests.swift */; };
@@ -158,6 +159,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		730000000000000000000001 /* RoomTrashRelaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashRelaunchUITests.swift; sourceTree = "<group>"; };
 		720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomProjectPurgeCoordinator.swift; sourceTree = "<group>"; };
 		720000000000000000000002 /* RoomTrashReaper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashReaper.swift; sourceTree = "<group>"; };
 		720000000000000000000003 /* RoomTrashLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashLifecycleTests.swift; sourceTree = "<group>"; };
@@ -473,6 +475,7 @@
 				A20000000000000000000011 /* RoomScanStudioUITests.swift */,
 				530000000000000000000029 /* RoomAIRedesignUITests.swift */,
 				610000000000000000000002 /* RoomPublicationUITests.swift */,
+				730000000000000000000001 /* RoomTrashRelaunchUITests.swift */,
 			);
 			path = RoomScanStudio/RoomScanStudioUITests;
 			sourceTree = "<group>";
@@ -975,6 +978,7 @@
 				A40000000000000000000010 /* RoomScanStudioUITests.swift in Sources */,
 				530000000000000000000028 /* RoomAIRedesignUITests.swift in Sources */,
 				610100000000000000000002 /* RoomPublicationUITests.swift in Sources */,
+				730100000000000000000001 /* RoomTrashRelaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

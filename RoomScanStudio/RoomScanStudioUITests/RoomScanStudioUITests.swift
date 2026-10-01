@@ -1378,7 +1378,7 @@ final class RoomScanStudioUITests: XCTestCase {
 
     // MARK: - Slice 7 trash UI regression helpers
 
-    private func attachTrashScreenshot(_ app: XCUIApplication, _ valID: String, _ slug: String) {
+    func attachTrashScreenshot(_ app: XCUIApplication, _ valID: String, _ slug: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "\(valID)-\(slug)"
         attachment.lifetime = .keepAlways
@@ -1401,14 +1401,14 @@ final class RoomScanStudioUITests: XCTestCase {
         return (Double(pixel[0]) + Double(pixel[1]) + Double(pixel[2])) / (3 * 255)
     }
 
-    private func attachTrashText(_ valID: String, _ slug: String, _ text: String) {
+    func attachTrashText(_ valID: String, _ slug: String, _ text: String) {
         let attachment = XCTAttachment(string: text)
         attachment.name = "\(valID)-\(slug)"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
 
-    private func saveTrashTestRooms(_ count: Int, in app: XCUIApplication) {
+    func saveTrashTestRooms(_ count: Int, in app: XCUIApplication) {
         for number in 1...count {
             if number > 1 {
                 XCTAssertTrue(app.navigationBars.buttons.firstMatch.waitForExistence(timeout: 10))
@@ -1421,7 +1421,7 @@ final class RoomScanStudioUITests: XCTestCase {
         }
     }
 
-    private func selectTrashTestFilter(_ filter: String, in app: XCUIApplication) {
+    func selectTrashTestFilter(_ filter: String, in app: XCUIApplication) {
         let button = app.buttons["library.show\(filter)"]
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         scrollIntoView(button, in: app, direction: .backward)
@@ -1444,7 +1444,7 @@ final class RoomScanStudioUITests: XCTestCase {
         }
     }
 
-    private func assertTrashTestEmpty(in app: XCUIApplication) {
+    func assertTrashTestEmpty(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["library.empty"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "library.project.")).count, 0)
     }
@@ -1462,6 +1462,10 @@ final class RoomScanStudioUITests: XCTestCase {
         }
         attachTrashText("VAL-TRASH-017", "row-order-\(ids.joined(separator: "-"))",
                         rows.map { "\($0.identifier): \($0.frame)" }.joined(separator: "\n"))
+    }
+
+    func assertTrashRelaunchMembership(in app: XCUIApplication, present: [String], absent: [String] = []) {
+        assertTrashTestMembership(in: app, present: present, absent: absent)
     }
 
     private func assertTrashTestTarget(_ element: XCUIElement) {
@@ -1508,7 +1512,7 @@ final class RoomScanStudioUITests: XCTestCase {
         selectTrashTestFilter("Active", in: app)
     }
 
-    private func openTrashTestProject(_ id: String, in app: XCUIApplication) {
+    func openTrashTestProject(_ id: String, in app: XCUIApplication) {
         let row = app.buttons["library.project.\(id)"]
         scrollIntoView(row, in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 10))
@@ -1518,7 +1522,7 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.scrollViews["detail.scroll"].waitForExistence(timeout: 10))
     }
 
-    private func backToTrashTestLibrary(in app: XCUIApplication) {
+    func backToTrashTestLibrary(in app: XCUIApplication) {
         let back = app.navigationBars.buttons.firstMatch
         XCTAssertTrue(back.waitForExistence(timeout: 10))
         back.tap()
@@ -1575,7 +1579,7 @@ final class RoomScanStudioUITests: XCTestCase {
         return hittable.first ?? buttons.firstMatch
     }
 
-    private func moveTrashTestProjectToTrash(in app: XCUIApplication, valID: String, slug: String) {
+    func moveTrashTestProjectToTrash(in app: XCUIApplication, valID: String, slug: String) {
         XCTAssertFalse(app.buttons["detail.delete"].exists)
         tapTrashTestDetailAction("detail.trash", in: app)
         let confirm = trashTestConfirmation("trash.confirm", in: app)
@@ -1599,7 +1603,7 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
     }
 
-    private func trashTestPurgeLabel(_ projectID: String, in app: XCUIApplication) -> String {
+    func trashTestPurgeLabel(_ projectID: String, in app: XCUIApplication) -> String {
         let purge = app.staticTexts["library.project.\(projectID).purgeDate"]
         XCTAssertTrue(purge.waitForExistence(timeout: 10))
         scrollIntoView(purge, in: app)
@@ -1715,7 +1719,7 @@ final class RoomScanStudioUITests: XCTestCase {
                        "Finishing a local purge must not require a Cloud Backup sheet.")
     }
 
-    private func seedTrashTestRedesignThroughUI(in app: XCUIApplication) {
+    func seedTrashTestRedesignThroughUI(in app: XCUIApplication) {
         tapTrashTestDetailAction("detail.reviewOrientation", in: app)
         let form = app.collectionViews.firstMatch
         XCTAssertTrue(form.waitForExistence(timeout: 10))
@@ -1733,7 +1737,7 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
     }
 
-    private struct TrashTestRoots {
+    struct TrashTestRoots {
         let temporary: URL
         let token: String
 
@@ -1748,7 +1752,7 @@ final class RoomScanStudioUITests: XCTestCase {
         case invalidSourceBinding
     }
 
-    private func trashTestRoots(token: String) throws -> TrashTestRoots? {
+    func trashTestRoots(token: String) throws -> TrashTestRoots? {
         #if targetEnvironment(simulator)
         // Discover the app's sibling data container from the runner's own
         // Simulator container. No host path or simulator/device ID is baked in.
@@ -1783,7 +1787,7 @@ final class RoomScanStudioUITests: XCTestCase {
         #endif
     }
 
-    private func requireTrashTestSafePath(_ url: URL, under temporary: URL) throws {
+    func requireTrashTestSafePath(_ url: URL, under temporary: URL) throws {
         let base = temporary.standardizedFileURL
         let path = url.standardizedFileURL
         guard path.path.hasPrefix(base.path + "/") else {
@@ -1810,7 +1814,7 @@ final class RoomScanStudioUITests: XCTestCase {
         }
     }
 
-    private func seedTrashTestOwnedConcept(in roots: TrashTestRoots, projectID: String, token: String) throws {
+    func seedTrashTestOwnedConcept(in roots: TrashTestRoots, projectID: String, token: String) throws {
         let redesignRoot = roots.root("RedesignState").appendingPathComponent(projectID, isDirectory: true)
         try requireTrashTestSafePath(redesignRoot, under: roots.temporary)
         let states = try FileManager.default.contentsOfDirectory(at: redesignRoot, includingPropertiesForKeys: nil)
@@ -1855,7 +1859,7 @@ final class RoomScanStudioUITests: XCTestCase {
         XCTAssertFalse(try trashTestBytes(directory, under: roots.temporary).isEmpty)
     }
 
-    private func trashTestBytes(_ directory: URL, under temporary: URL) throws -> [String: Data] {
+    func trashTestBytes(_ directory: URL, under temporary: URL) throws -> [String: Data] {
         try requireTrashTestSafePath(directory, under: temporary)
         guard FileManager.default.fileExists(atPath: directory.path) else { return [:] }
         let entries = try FileManager.default.contentsOfDirectory(
@@ -1888,7 +1892,7 @@ final class RoomScanStudioUITests: XCTestCase {
         return bytes
     }
 
-    private func trashTestProjectAndCompanionBytes(_ roots: TrashTestRoots, projectID: String) throws -> [String: Data] {
+    func trashTestProjectAndCompanionBytes(_ roots: TrashTestRoots, projectID: String) throws -> [String: Data] {
         var bytes = try trashTestCompanionBytes(roots, projectID: projectID)
         let package = try trashTestBytes(roots.root("Projects").appendingPathComponent(projectID), under: roots.temporary)
         XCTAssertFalse(package.isEmpty)
@@ -1896,7 +1900,7 @@ final class RoomScanStudioUITests: XCTestCase {
         return bytes
     }
 
-    private func assertTrashTestPurgeOnDisk(_ roots: TrashTestRoots, projectID: String) throws {
+    func assertTrashTestPurgeOnDisk(_ roots: TrashTestRoots, projectID: String) throws {
         for kind in ["Projects", "RedesignState", "ConceptSets"] {
             let directory = roots.root(kind).appendingPathComponent(projectID)
             try requireTrashTestSafePath(directory, under: roots.temporary)
@@ -1908,7 +1912,7 @@ final class RoomScanStudioUITests: XCTestCase {
                        "Disabled Cloud Backup must not create a deletion request.")
     }
 
-    private func attachTrashTestListing(_ roots: TrashTestRoots, _ valID: String, _ slug: String) throws {
+    func attachTrashTestListing(_ roots: TrashTestRoots, _ valID: String, _ slug: String) throws {
         var lines = ["Synthetic Simulator token=\(roots.token); relative paths, byte counts and SHA-256 only (no file bodies)."]
         for kind in ["Projects", "RedesignState", "ConceptSets", "CloudBackupDeletionJournal"] {
             let root = roots.root(kind)
@@ -1922,7 +1926,7 @@ final class RoomScanStudioUITests: XCTestCase {
         attachTrashText(valID, slug, lines.joined(separator: "\n"))
     }
 
-    private func launchIsolatedApp(
+    func launchIsolatedApp(
         rootToken: String? = nil,
         keepRoot: Bool = false,
         extraArguments: [String] = []
