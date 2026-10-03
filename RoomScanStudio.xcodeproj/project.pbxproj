@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		730100000000000000000001 /* RoomTrashRelaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730000000000000000000001 /* RoomTrashRelaunchUITests.swift */; };
 		720100000000000000000001 /* RoomProjectPurgeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */; };
+		F6000000000000000000000A /* RoomStorageAncestorSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6100000000000000000000A /* RoomStorageAncestorSafety.swift */; };
+		F6000000000000000000000B /* RoomStorageAncestorSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6100000000000000000000B /* RoomStorageAncestorSafetyTests.swift */; };
 		720100000000000000000002 /* RoomTrashReaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000002 /* RoomTrashReaper.swift */; };
 		720100000000000000000003 /* RoomTrashLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720000000000000000000003 /* RoomTrashLifecycleTests.swift */; };
 		710100000000000000000001 /* IsolatedTestRoots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710000000000000000000001 /* IsolatedTestRoots.swift */; };
@@ -93,6 +95,9 @@
 		F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000004 /* AppleCloudBackupTransport.swift */; };
 		F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000005 /* RoomCloudBackupViews.swift */; };
 		F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000006 /* RoomCloudBackupAppTests.swift */; };
+		F60000000000000000000007 /* RoomCloudBackupDeletionJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000007 /* RoomCloudBackupDeletionJournal.swift */; };
+		F60000000000000000000008 /* RoomCloudBackupDeletionAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000008 /* RoomCloudBackupDeletionAppTests.swift */; };
+		F60000000000000000000009 /* RoomSlice7EndToEndUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61000000000000000000009 /* RoomSlice7EndToEndUITests.swift */; };
 		530000000000000000000001 /* RoomAIImageSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000002 /* RoomAIImageSanitizerTests.swift */; };
 		530000000000000000000003 /* RoomAIImageSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000004 /* RoomAIImageSanitizer.swift */; };
 		530000000000000000000006 /* RoomAISensitiveContentAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530000000000000000000007 /* RoomAISensitiveContentAnalyzerTests.swift */; };
@@ -161,6 +166,8 @@
 /* Begin PBXFileReference section */
 		730000000000000000000001 /* RoomTrashRelaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashRelaunchUITests.swift; sourceTree = "<group>"; };
 		720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomProjectPurgeCoordinator.swift; sourceTree = "<group>"; };
+		F6100000000000000000000A /* RoomStorageAncestorSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStorageAncestorSafety.swift; sourceTree = "<group>"; };
+		F6100000000000000000000B /* RoomStorageAncestorSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStorageAncestorSafetyTests.swift; sourceTree = "<group>"; };
 		720000000000000000000002 /* RoomTrashReaper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashReaper.swift; sourceTree = "<group>"; };
 		720000000000000000000003 /* RoomTrashLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTrashLifecycleTests.swift; sourceTree = "<group>"; };
 		710000000000000000000001 /* IsolatedTestRoots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IsolatedTestRoots.swift; sourceTree = "<group>"; };
@@ -184,6 +191,7 @@
 		A20000000000000000000011 /* RoomScanStudioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomScanStudioUITests.swift; sourceTree = "<group>"; };
 		A20000000000000000000012 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		A20000000000000000000013 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = SOURCE_ROOT; };
+		A90000000000000000000102 /* Operator.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Operator.xcconfig; sourceTree = "<group>"; };
 		A20000000000000000000014 /* RoomScanStudio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RoomScanStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000015 /* RoomScanStudioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomScanStudioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000016 /* RoomScanStudioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomScanStudioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -236,6 +244,9 @@
 		F61000000000000000000004 /* AppleCloudBackupTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleCloudBackupTransport.swift; sourceTree = "<group>"; };
 		F61000000000000000000005 /* RoomCloudBackupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupViews.swift; sourceTree = "<group>"; };
 		F61000000000000000000006 /* RoomCloudBackupAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupAppTests.swift; sourceTree = "<group>"; };
+		F61000000000000000000007 /* RoomCloudBackupDeletionJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupDeletionJournal.swift; sourceTree = "<group>"; };
+		F61000000000000000000008 /* RoomCloudBackupDeletionAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCloudBackupDeletionAppTests.swift; sourceTree = "<group>"; };
+		F61000000000000000000009 /* RoomSlice7EndToEndUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSlice7EndToEndUITests.swift; sourceTree = "<group>"; };
 		530000000000000000000002 /* RoomAIImageSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIImageSanitizerTests.swift; sourceTree = "<group>"; };
 		530000000000000000000004 /* RoomAIImageSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAIImageSanitizer.swift; sourceTree = "<group>"; };
 		530000000000000000000007 /* RoomAISensitiveContentAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomAISensitiveContentAnalyzerTests.swift; sourceTree = "<group>"; };
@@ -315,6 +326,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A90000000000000000000101 /* Configs */ = {
+			isa = PBXGroup;
+			children = (
+				A90000000000000000000102 /* Operator.xcconfig */,
+			);
+			path = Configs;
+			sourceTree = "<group>";
+		};
 		A10000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
@@ -327,6 +346,7 @@
 				A3000000000000000000000B /* RoomScanStudio/RoomScanStudioTests */,
 				A3000000000000000000000C /* RoomScanStudio/RoomScanStudioUITests */,
 				A20000000000000000000013 /* Package.swift */,
+				A90000000000000000000101 /* Configs */,
 				A3000000000000000000000D /* Frameworks */,
 				A30000000000000000000002 /* Products */,
 			);
@@ -449,6 +469,8 @@
 				ABCD00000000000000000004 /* RoomViewerEditorAppTests.swift */,
 				ED2000000000000000000005 /* RoomExportAppTests.swift */,
 				F61000000000000000000006 /* RoomCloudBackupAppTests.swift */,
+				F61000000000000000000008 /* RoomCloudBackupDeletionAppTests.swift */,
+				F6100000000000000000000B /* RoomStorageAncestorSafetyTests.swift */,
 				7A000000000000000000000A /* RoomMeshViewerAppTests.swift */,
 				7A000000000000000000000C /* RoomCaptureBundleDepthTests.swift */,
 				7A0000000000000000000010 /* RoomCaptureBundleTrainingExportTests.swift */,
@@ -474,6 +496,7 @@
 			children = (
 				A20000000000000000000011 /* RoomScanStudioUITests.swift */,
 				530000000000000000000029 /* RoomAIRedesignUITests.swift */,
+				F61000000000000000000009 /* RoomSlice7EndToEndUITests.swift */,
 				610000000000000000000002 /* RoomPublicationUITests.swift */,
 				730000000000000000000001 /* RoomTrashRelaunchUITests.swift */,
 			);
@@ -621,6 +644,7 @@
 				B20000000000000000000002 /* RoomProjectIndex.swift */,
 				B20000000000000000000003 /* RoomLibraryController.swift */,
 				720000000000000000000001 /* RoomProjectPurgeCoordinator.swift */,
+				F6100000000000000000000A /* RoomStorageAncestorSafety.swift */,
 				720000000000000000000002 /* RoomTrashReaper.swift */,
 			);
 			path = Persistence;
@@ -704,6 +728,7 @@
 				F61000000000000000000002 /* RoomCloudBackupCoordinator.swift */,
 				F61000000000000000000003 /* RoomCloudBackupService.swift */,
 				F61000000000000000000004 /* AppleCloudBackupTransport.swift */,
+				F61000000000000000000007 /* RoomCloudBackupDeletionJournal.swift */,
 			);
 			path = CloudBackup;
 			sourceTree = "<group>";
@@ -870,6 +895,7 @@
 				B40000000000000000000002 /* RoomProjectIndex.swift in Sources */,
 				B40000000000000000000003 /* RoomLibraryController.swift in Sources */,
 				720100000000000000000001 /* RoomProjectPurgeCoordinator.swift in Sources */,
+				F6000000000000000000000A /* RoomStorageAncestorSafety.swift in Sources */,
 				720100000000000000000002 /* RoomTrashReaper.swift in Sources */,
 				B40000000000000000000004 /* MockRoomFixtureLoader.swift in Sources */,
 				B4000000000000000000000D /* RescanFixtureLoader.swift in Sources */,
@@ -903,6 +929,7 @@
 				F60000000000000000000002 /* RoomCloudBackupCoordinator.swift in Sources */,
 				F60000000000000000000003 /* RoomCloudBackupService.swift in Sources */,
 				F60000000000000000000004 /* AppleCloudBackupTransport.swift in Sources */,
+				F60000000000000000000007 /* RoomCloudBackupDeletionJournal.swift in Sources */,
 				F60000000000000000000005 /* RoomCloudBackupViews.swift in Sources */,
 				530000000000000000000003 /* RoomAIImageSanitizer.swift in Sources */,
 				530000000000000000000008 /* RoomAISensitiveContentAnalyzer.swift in Sources */,
@@ -952,6 +979,8 @@
 				DCBA00000000000000000004 /* RoomViewerEditorAppTests.swift in Sources */,
 				ED5000000000000000000005 /* RoomExportAppTests.swift in Sources */,
 				F60000000000000000000006 /* RoomCloudBackupAppTests.swift in Sources */,
+				F60000000000000000000008 /* RoomCloudBackupDeletionAppTests.swift in Sources */,
+				F6000000000000000000000B /* RoomStorageAncestorSafetyTests.swift in Sources */,
 				7A0000000000000000000009 /* RoomMeshViewerAppTests.swift in Sources */,
 				7A000000000000000000000B /* RoomCaptureBundleDepthTests.swift in Sources */,
 				7A000000000000000000000F /* RoomCaptureBundleTrainingExportTests.swift in Sources */,
@@ -977,6 +1006,7 @@
 			files = (
 				A40000000000000000000010 /* RoomScanStudioUITests.swift in Sources */,
 				530000000000000000000028 /* RoomAIRedesignUITests.swift in Sources */,
+				F60000000000000000000009 /* RoomSlice7EndToEndUITests.swift in Sources */,
 				610100000000000000000002 /* RoomPublicationUITests.swift in Sources */,
 				730100000000000000000001 /* RoomTrashRelaunchUITests.swift in Sources */,
 			);
@@ -1041,16 +1071,18 @@
 		};
 		A62000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";
+				ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "$(inherited)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1059,16 +1091,18 @@
 		};
 		A62000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";
+				ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "$(inherited)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1077,6 +1111,7 @@
 		};
 		A63000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1090,6 +1125,7 @@
 		};
 		A63000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1103,6 +1139,7 @@
 		};
 		A64000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -1115,6 +1152,7 @@
 		};
 		A64000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A90000000000000000000102 /* Operator.xcconfig */;
 			buildSettings = {
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;

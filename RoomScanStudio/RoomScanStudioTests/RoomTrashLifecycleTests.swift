@@ -270,7 +270,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         XCTAssertTrue(requests.isEmpty)
         XCTAssertEqual(try bytesUnder(temporaryRoot), before)
         let controller = RoomLibraryController(store: store, modelContainer: nil, purgeCoordinator: coordinator)
-        let manual = try await controller.deleteNow(projectID: saved.projectID)
+        let manual = try await controller.deleteNow(projectID: saved.projectID, backup: .requestDeletion)
         XCTAssertEqual(manual.package, .removed)
         XCTAssertEqual(requests, [saved.projectID])
         XCTAssertFalse(fileManager.fileExists(atPath: projectURL(saved.projectID).path))
@@ -596,7 +596,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         XCTAssertTrue(controller.trashedSummaries.isEmpty)
         XCTAssertNil(try indexRecords(container).first?.trashedAt)
         try await controller.moveToTrash(projectID: saved.projectID)
-        let report = try await controller.deleteNow(projectID: saved.projectID)
+        let report = try await controller.deleteNow(projectID: saved.projectID, backup: .keep)
         XCTAssertEqual(spy.projectIDs, [saved.projectID], "Delete now must delegate to the injected coordinator.")
         XCTAssertEqual(report.package, .removed)
         XCTAssertTrue(controller.summaries.isEmpty)
@@ -846,7 +846,7 @@ final class RoomTrashLifecycleTests: XCTestCase {
         let controller = RoomLibraryController(store: store, modelContainer: nil, purgeCoordinator: coordinator)
         await controller.refreshLibrary()
 
-        let report = try await controller.deleteNow(projectID: saved.projectID)
+        let report = try await controller.deleteNow(projectID: saved.projectID, backup: .keep)
 
         XCTAssertTrue(report.packageDeleted)
         XCTAssertTrue(report.hasFailures)
@@ -1119,9 +1119,16 @@ private final class TrashRecordingPurger: RoomProjectPurging {
         self.real = real
     }
 
-    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport {
+    private(set) var backups: [RoomProjectBackupDisposition] = []
+
+    func purge(
+        projectID: String,
+        mode: RoomProjectPurgeMode,
+        backup: RoomProjectBackupDisposition
+    ) async -> RoomProjectPurgeReport {
         projectIDs.append(projectID)
-        if let real { return await real.purge(projectID: projectID, mode: mode) }
+        backups.append(backup)
+        if let real { return await real.purge(projectID: projectID, mode: mode, backup: backup) }
         return .init(projectID: projectID, package: .removed)
     }
 }
@@ -1202,6 +1209,20 @@ private final class TrashCloudTransportSpy: RoomCloudBackupTransport {
         record: RoomCloudBackupRemoteRecord, containerIdentifier: String, into destinationURL: URL
     ) async throws {
         calls.append("fetchArchive")
+        throw TrashLifecycleFailure.unexpectedTransport
+    }
+
+    func deleteBackups(
+        projectID: String, knownRecordNames: [String], containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        calls.append("deleteBackups")
+        throw TrashLifecycleFailure.unexpectedTransport
+    }
+
+    func deleteBackupRecords(
+        named recordNames: [String], containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        calls.append("deleteBackupRecords")
         throw TrashLifecycleFailure.unexpectedTransport
     }
 }

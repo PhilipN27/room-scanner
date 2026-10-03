@@ -679,3 +679,32 @@ superseded historical checkpoint, not current acceptance evidence.
 Physical-device, real-browser-provider, email, AWS/CDN/domain, credential,
 deployment, retention/legal, load, and production-release evidence remain
 separate authorized gates.
+
+## 17. Slice 7 redefined as local personal release — 2026-10-01
+
+Slice 7 is redefined from the original hosted "retention, deletion, operations,
+and release proof" slice into a local personal release: a build the operator
+can sign, archive, and install on their own iPhone under their own Apple
+Developer account. The scope, task ledger, deferral reasons, and acceptance
+clauses are in `Docs/superpowers/plans/2026-09-30-ai-redesign-platform-slice-7.md`.
+
+In scope: a 30-day local Trash with Restore, an explicit "Delete now", and a
+foreground automatic purge that removes the package and its companions;
+explicit, journaled, retryable deletion of the user's private CloudKit backup
+records, with copy stating that Apple completes erasure later and the app
+cannot verify physical erasure; an operator signing channel
+(`Configs/Operator.xcconfig` with git-ignored local files); the
+`ITSAppUsesNonExemptEncryption` declaration; the device runpath fix; and a
+composed Simulator end-to-end UI test.
+
+Hosted lifecycle work is deferred, not implemented: hosted trash, purge and
+backup expiry, hosted deletion routes, migration `0010`, contracts v4,
+cancellation grace, load tests, subscriber quotas and pricing, App Store
+disclosures and nutrition labels, and AWS deployment.
+
+Slice 7 closure is documented in the dated evidence record
+(Docs/evidence/2026-10-01-ai-redesign-slice-7-personal-release.md, written at
+final acceptance) plus `Docs/verification-log.md`, not by an aggregate
+verifier script. Physical-device runs and the signed archive await operator
+approval. No TestFlight upload, App Store submission, CloudKit Production schema
+deployment, hosted change, or deployment is claimed.

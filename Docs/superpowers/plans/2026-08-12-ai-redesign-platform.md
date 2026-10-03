@@ -320,6 +320,34 @@ iPhone and iPad plus the supported desktop/mobile browser matrix.
 **Rollback:** Cancellation and export grace remain available if new uploads or
 publishing are suspended. Purge jobs are idempotent, auditable, and replayable.
 
+### 2026-10-01 Slice 7 reconciliation: redefined as a local personal release
+
+The six checklist items above are preserved unchanged and remain unchecked.
+Slice 7 is redefined as a local personal release; see the
+[Slice 7 plan](2026-09-30-ai-redesign-platform-slice-7.md) for scope, ledger,
+deferral reasons, and acceptance clauses.
+
+- Item 1 is redefined locally: 30-day local Trash, Restore, "Delete now", a
+  foreground automatic purge, and explicit private CloudKit backup deletion.
+  Immediate link revocation already exists from Slice 6. Hosted active-copy
+  purge, hosted backup purge, and cancellation's export grace are deferred.
+- Item 2 is redefined locally: the app shows Trash state, pending backup
+  deletions ("still in iCloud"), and states that it cannot verify physical
+  erasure. Hosted purge and backup-expiry states are deferred.
+- Items 3 and 4 (load tests, cost measurement, quotas) are deferred: no hosted
+  service is deployed.
+- Item 5 is partly redefined: privacy, threat model, export format, release
+  checklist, device plan, and a compatibility matrix gain Slice 7 additions;
+  App Store disclosures and nutrition labels are deferred because the release
+  is a personal TestFlight (internal) scope with no App Store listing.
+- Item 6 is redefined as a composed Simulator end-to-end UI test with isolated
+  fixture and fake-backup launch arguments. The hosted migration, second-device
+  recovery, publish/feedback/revoke, and LiDAR iPhone/iPad legs of the original
+  scenario are not claimed.
+
+The oracle above is not satisfied by this redefinition; it remains the target
+for a future hosted lifecycle slice.
+
 ## Program completion gate
 
 The program is not complete until all of these claims have direct evidence:

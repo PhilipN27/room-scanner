@@ -424,3 +424,11 @@ workspace flag rollback. A physical iPhone/iPad must cover local unlock and
 background/resume. A real-browser provider should repeat desktop/mobile
 accessibility and revocation. No production price, load, retention cleanup, or
 Slice 7 lifecycle claim belongs in this gate.
+
+## Slice 7 deferral note — 2026-10-01
+
+Slice 7 was redefined as a local personal release. Hosted trash, purge, and
+backup-expiry lifecycle and hosted deletion routes are deferred from Slice 7.
+No hosted operational procedure in this runbook changed, and no new live
+procedure is added. Local Trash and private iCloud backup deletion are
+documented in `Docs/privacy.md` and `Docs/icloud-setup.md`.

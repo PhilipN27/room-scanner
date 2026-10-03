@@ -1932,14 +1932,15 @@ def verify_project(pbx: str, errors: list[str]) -> None:
             "DCBA00000000000000000001", "DCBA00000000000000000002", "DCBA00000000000000000003",
             "ED5000000000000000000001", "ED5000000000000000000002", "ED5000000000000000000003", "ED5000000000000000000004",
             "F60000000000000000000001", "F60000000000000000000002", "F60000000000000000000003", "F60000000000000000000004", "F60000000000000000000005",
+            "F60000000000000000000007",
         ],
         "A80000000000000000000004": [
             "A4000000000000000000000F", "E40000000000000000000001", "F40000000000000000000003",
             "DCBA00000000000000000004",
             "ED5000000000000000000005",
-            "F60000000000000000000006",
+            "F60000000000000000000006", "F60000000000000000000008",
         ],
-        "A80000000000000000000007": ["A40000000000000000000010"],
+        "A80000000000000000000007": ["A40000000000000000000010", "F60000000000000000000009"],
         "A80000000000000000000002": [
             "A40000000000000000000007", "A40000000000000000000008", "A40000000000000000000009", "A4000000000000000000000A", "A4000000000000000000000B", "A4000000000000000000000C", "A4000000000000000000000D", "A4000000000000000000000E", "B40000000000000000000009",
             "C40000000000000000000001", "C40000000000000000000003",
@@ -2018,6 +2019,9 @@ def verify_project(pbx: str, errors: list[str]) -> None:
         "F60000000000000000000004": "F61000000000000000000004",
         "F60000000000000000000005": "F61000000000000000000005",
         "F60000000000000000000006": "F61000000000000000000006",
+        "F60000000000000000000007": "F61000000000000000000007",
+        "F60000000000000000000008": "F61000000000000000000008",
+        "F60000000000000000000009": "F61000000000000000000009",
     }
     for build_file_id, file_reference_id in file_reference_map.items():
         build_file = object_body(pbx, build_file_id) or ""
@@ -2037,6 +2041,7 @@ def verify_project(pbx: str, errors: list[str]) -> None:
     expect("ABCD00000000000000000004" in unit_test_group, "unit-test group misses RoomViewerEditorAppTests.swift", errors)
     expect("ED2000000000000000000005" in unit_test_group, "unit-test group misses RoomExportAppTests.swift", errors)
     expect("F61000000000000000000006" in unit_test_group, "unit-test group misses RoomCloudBackupAppTests.swift", errors)
+    expect("F61000000000000000000008" in unit_test_group, "unit-test group misses RoomCloudBackupDeletionAppTests.swift", errors)
     expect("F20000000000000000000001" in capture_group, "capture group misses AppleCaptureDependencies.swift", errors)
     expect("F20000000000000000000002" in capture_group, "capture group misses AppleRoomCaptureDriver.swift", errors)
     file_storage_group = object_body(pbx, "B30000000000000000000003") or ""
@@ -2067,6 +2072,7 @@ def verify_project(pbx: str, errors: list[str]) -> None:
     expect(
         all(identifier in cloud_backup_group for identifier in (
             "F61000000000000000000001", "F61000000000000000000002", "F61000000000000000000003", "F61000000000000000000004",
+            "F61000000000000000000007",
         )),
         "CloudBackup group misses backup infrastructure sources",
         errors,
@@ -2078,7 +2084,6 @@ def verify_project(pbx: str, errors: list[str]) -> None:
             "INFOPLIST_FILE = RoomScanStudio/Resources/Info.plist;",
             "IPHONEOS_DEPLOYMENT_TARGET = 18.0;",
             "PRODUCT_BUNDLE_IDENTIFIER = org.roomscanstudio.app;",
-            'ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "";',
             'TARGETED_DEVICE_FAMILY = "1,2";',
             "GENERATE_INFOPLIST_FILE = NO;",
         ):
@@ -2095,14 +2100,130 @@ def verify_project(pbx: str, errors: list[str]) -> None:
         errors,
     )
     expect(pbx.count("SWIFT_VERSION = 5.0;") == 2, "project Swift language version is not 5.0 in both project configurations", errors)
-    forbidden_settings = (
-        "DEVELOPMENT_TEAM", "PROVISIONING_PROFILE", "PROVISIONING_PROFILE_SPECIFIER", "CODE_SIGN_ENTITLEMENTS", "com.apple.developer.icloud", "SystemCapabilities",
-    )
-    for setting in forbidden_settings:
-        expect(setting not in pbx, f"forbidden active signing/cloud setting: {setting}", errors)
+    errors.extend(forbidden_project_setting_errors(pbx))
     expect(not re.search(r"(?m)^\s*path\s*=\s*(?:[A-Za-z]:[\\/]|/)", pbx), "project contains an absolute path", errors)
     verify_package_wiring(pbx, errors)
     verify_remote_package_pin(pbx, errors)
+
+
+FORBIDDEN_PROJECT_SETTINGS = (
+    "DEVELOPMENT_TEAM", "PROVISIONING_PROFILE", "PROVISIONING_PROFILE_SPECIFIER", "CODE_SIGN_ENTITLEMENTS",
+    "CODE_SIGN_STYLE", "CODE_SIGN_IDENTITY", "com.apple.developer.icloud", "SystemCapabilities",
+)
+APP_CONFIGURATION_IDS = ("A62000000000000000000001", "A62000000000000000000002")
+TEST_CONFIGURATION_IDS = (
+    "A63000000000000000000001", "A63000000000000000000002",
+    "A64000000000000000000001", "A64000000000000000000002",
+)
+PROJECT_CONFIGURATION_IDS = ("A61000000000000000000001", "A61000000000000000000002")
+APP_RUNPATH_SETTING = 'LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";'
+TEST_RUNPATH_VALUE = '"$(inherited) @executable_path/Frameworks @loader_path/Frameworks"'
+INHERITED_PRIVACY_URL_SETTING = 'ROOMSCANSTUDIO_PRIVACY_POLICY_URL = "$(inherited)";'
+OPERATOR_XCCONFIG = ROOT / "Configs" / "Operator.xcconfig"
+OPERATOR_LOCAL_INCLUDE = '#include? "Operator.local.xcconfig"'
+SETUP_SIGNING_CHANNEL_MARKERS = (
+    "Slice 7 operator signing channel",
+    "Configs/Operator.xcconfig",
+    "Configs/Operator.local.xcconfig",
+    "Configs/RoomScanStudio.local.entitlements",
+    OPERATOR_LOCAL_INCLUDE,
+)
+
+
+def forbidden_project_setting_errors(pbx: str) -> list[str]:
+    """Signing identity, team, entitlements and capabilities come only from the
+    git-ignored operator xcconfig, never from the committed project."""
+    return [
+        f"forbidden active signing/cloud setting: {setting}"
+        for setting in FORBIDDEN_PROJECT_SETTINGS
+        if setting in pbx
+    ]
+
+
+def slice7_release_configuration_errors(pbx: str, operator_xcconfig: str | None, setup: str) -> list[str]:
+    errors: list[str] = []
+    references = re.findall(
+        r"(?m)^\s*([0-9A-F]{24}) /\* Operator\.xcconfig \*/ = \{isa = PBXFileReference; "
+        r"lastKnownFileType = text\.xcconfig; path = ((?:Configs/)?Operator\.xcconfig); sourceTree = ([^;]+);",
+        pbx,
+    )
+    expect(len(references) == 1, "project needs exactly one relative Operator.xcconfig file reference", errors)
+    reference_id = references[0][0] if len(references) == 1 else None
+    for config_id in APP_CONFIGURATION_IDS + TEST_CONFIGURATION_IDS:
+        body = object_body(pbx, config_id) or ""
+        expect(
+            reference_id is not None
+            and f"baseConfigurationReference = {reference_id} /* Operator.xcconfig */;" in body,
+            f"target configuration {config_id} must use Configs/Operator.xcconfig as baseConfigurationReference",
+            errors,
+        )
+    for config_id in PROJECT_CONFIGURATION_IDS:
+        body = object_body(pbx, config_id) or ""
+        expect(
+            "baseConfigurationReference" not in body,
+            f"project configuration {config_id} must not use a base configuration",
+            errors,
+        )
+    expect(
+        pbx.count("baseConfigurationReference") == len(APP_CONFIGURATION_IDS + TEST_CONFIGURATION_IDS),
+        "project must have exactly one baseConfigurationReference per target configuration",
+        errors,
+    )
+    for config_id in APP_CONFIGURATION_IDS:
+        body = object_body(pbx, config_id) or ""
+        expect(APP_RUNPATH_SETTING in body, f"app configuration {config_id} must declare {APP_RUNPATH_SETTING}", errors)
+        expect(
+            INHERITED_PRIVACY_URL_SETTING in body,
+            f"app configuration {config_id} must inherit ROOMSCANSTUDIO_PRIVACY_POLICY_URL from the xcconfig chain",
+            errors,
+        )
+    for config_id in TEST_CONFIGURATION_IDS:
+        body = object_body(pbx, config_id) or ""
+        for value in re.findall(r"LD_RUNPATH_SEARCH_PATHS = ([^;]*);", body):
+            expect(
+                value == TEST_RUNPATH_VALUE,
+                f"test configuration {config_id} has an unexpected LD_RUNPATH_SEARCH_PATHS value",
+                errors,
+            )
+    privacy_values = re.findall(r"ROOMSCANSTUDIO_PRIVACY_POLICY_URL = ([^;]*);", pbx)
+    expect(
+        all(value == '"$(inherited)"' for value in privacy_values),
+        "project must not assign a literal ROOMSCANSTUDIO_PRIVACY_POLICY_URL",
+        errors,
+    )
+    if operator_xcconfig is None:
+        errors.append("missing Configs/Operator.xcconfig")
+    else:
+        lines = [line.strip() for line in operator_xcconfig.splitlines()]
+        expect(OPERATOR_LOCAL_INCLUDE in lines, f"Configs/Operator.xcconfig must contain {OPERATOR_LOCAL_INCLUDE}", errors)
+        expect(
+            not any(re.match(r"^[A-Za-z_][A-Za-z0-9_\[\]=*,. ]*=", line) for line in lines if not line.startswith("//")),
+            "Configs/Operator.xcconfig must not assign build settings",
+            errors,
+        )
+    for marker in SETUP_SIGNING_CHANNEL_MARKERS:
+        expect(marker in setup, f"Docs/setup.md must document the operator signing channel: {marker}", errors)
+    return errors
+
+
+def active_entitlements_errors(root: Path) -> list[str]:
+    """Only the operator's git-ignored local entitlements, directly inside
+    Configs/, may exist on disk; any other entitlements file fails."""
+    configs = root / "Configs"
+    active = sorted(
+        path for path in root.rglob("*.entitlements")
+        if not (path.parent == configs and path.name.endswith(".local.entitlements"))
+    )
+    if not active:
+        return []
+    return ["active entitlements file present: " + ", ".join(str(path.relative_to(root)) for path in active)]
+
+
+def verify_slice7_release_configuration(pbx: str, errors: list[str]) -> None:
+    operator = OPERATOR_XCCONFIG.read_text(encoding="utf-8") if OPERATOR_XCCONFIG.is_file() else None
+    setup_path = ROOT / "Docs" / "setup.md"
+    setup = setup_path.read_text(encoding="utf-8") if setup_path.is_file() else ""
+    errors.extend(slice7_release_configuration_errors(pbx, operator, setup))
 
 
 def verify_scheme(errors: list[str]) -> None:
@@ -2364,6 +2485,11 @@ def verify_plists(errors: list[str]) -> None:
     expect("Prepare capture" in str(info.get("NSCameraUsageDescription", "")), "camera permission copy must describe the explicit Prepare capture action", errors)
     expect("Request GPS" in str(info.get("NSLocationWhenInUseUsageDescription", "")), "location permission copy must describe the explicit Request GPS action", errors)
     expect("RoomScanStudioCloudBackupContainerIdentifier" in info, "missing operator-owned CloudKit container build-setting key", errors)
+    expect(
+        info.get("ITSAppUsesNonExemptEncryption") is False,
+        "Info.plist must declare ITSAppUsesNonExemptEncryption as boolean false",
+        errors,
+    )
     expect(
         info.get("RoomScanStudioPrivacyPolicyURL") == "$(ROOMSCANSTUDIO_PRIVACY_POLICY_URL)",
         "missing operator-owned Privacy Policy URL build-setting key",
@@ -5715,9 +5841,10 @@ def main() -> int:
         verify_phase7_release(pbx, errors)
     if pbx:
         verify_memory_only_negative_controls(pbx, errors)
+    if pbx:
+        verify_slice7_release_configuration(pbx, errors)
 
-    entitlements = list(ROOT.rglob("*.entitlements"))
-    expect(not entitlements, "active entitlements file present: " + ", ".join(str(path.relative_to(ROOT)) for path in entitlements), errors)
+    errors.extend(active_entitlements_errors(ROOT))
     expect(
         not (ROOT / "Package.resolved").exists(),
         "Package.resolved is only permitted at the committed Xcode workspace resolution path",

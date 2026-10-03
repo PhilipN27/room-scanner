@@ -184,6 +184,19 @@ protocol RoomCloudBackupTransport {
         containerIdentifier: String,
         into destinationURL: URL
     ) async throws
+    /// Deletes every record for `projectID` found by an uncapped zone listing,
+    /// plus `knownRecordNames`. Missing records and a missing zone count as
+    /// deleted; per-record failures are reported, not hidden.
+    func deleteBackups(
+        projectID: String,
+        knownRecordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome
+    /// Deletes exactly the named records and never widens to the project.
+    func deleteBackupRecords(
+        named recordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome
 }
 
 @MainActor
@@ -198,17 +211,95 @@ final class RoomCloudBackupService: RoomCloudBackupProviding {
     private let controller: RoomLibraryController
     private let workspaceFactory: RoomCloudBackupWorkspaceFactory
     private let transport: any RoomCloudBackupTransport
+    private let deletionJournal: RoomCloudBackupDeletionJournal?
+    private let clock: any RoomProjectClock
     private var pendingRecoveries: [String: PendingRecovery] = [:]
     private var cleanupLeases: Set<URL> = []
 
     init(
         controller: RoomLibraryController,
         workspaceFactory: RoomCloudBackupWorkspaceFactory,
-        transport: any RoomCloudBackupTransport
+        transport: any RoomCloudBackupTransport,
+        deletionJournal: RoomCloudBackupDeletionJournal? = nil,
+        clock: any RoomProjectClock = SystemRoomProjectClock()
     ) {
         self.controller = controller
         self.workspaceFactory = workspaceFactory
         self.transport = transport
+        self.deletionJournal = deletionJournal
+        self.clock = clock
+    }
+
+    func requestBackupDeletion(projectID: String, displayName: String, containerIdentifier: String) throws {
+        guard let deletionJournal else { throw RoomCloudBackupDeletionServiceError.journalUnavailable }
+        if var existing = try deletionJournal.load(projectID: projectID) {
+            // A repeated request keeps its attempt history but follows the
+            // latest container and name the user confirmed against.
+            existing.containerIdentifier = containerIdentifier
+            existing.displayName = Self.boundedDisplayName(displayName, fallback: existing.displayName)
+            try deletionJournal.replace(existing)
+            return
+        }
+        try deletionJournal.replace(RoomCloudBackupDeletionRequest(
+            projectID: projectID,
+            containerIdentifier: containerIdentifier,
+            displayName: Self.boundedDisplayName(displayName, fallback: projectID),
+            requestedAt: clock.now()
+        ))
+    }
+
+    func performBackupDeletion(projectID: String) async throws -> RoomCloudBackupDeletionOutcome {
+        guard let deletionJournal else { throw RoomCloudBackupDeletionServiceError.journalUnavailable }
+        guard let request = try deletionJournal.load(projectID: projectID) else {
+            throw RoomCloudBackupDeletionServiceError.requestNotFound(projectID)
+        }
+        let outcome: RoomCloudBackupDeletionOutcome
+        do {
+            outcome = try await transport.deleteBackups(
+                projectID: request.projectID,
+                knownRecordNames: request.knownRecordNames,
+                containerIdentifier: request.containerIdentifier
+            )
+        } catch {
+            let message = (error as? RoomCloudBackupTransportError)?.deletionFailureDescription
+                ?? "The deletion attempt did not finish."
+            try deletionJournal.replace(request.recordingFailure(at: clock.now(), message: message))
+            throw error
+        }
+        if outcome.isComplete {
+            // If this removal is interrupted, the next attempt finds nothing
+            // remote, reports zero remaining, and removes the record then.
+            try deletionJournal.remove(projectID: projectID)
+        } else {
+            try deletionJournal.replace(request.recordingAttempt(at: clock.now(), outcome: outcome))
+        }
+        return outcome
+    }
+
+    func pendingBackupDeletions() throws -> [RoomCloudBackupDeletionRequest] {
+        try deletionJournal?.pendingRequests() ?? []
+    }
+
+    func deleteBackupRecord(
+        _ record: RoomCloudBackupRemoteRecord,
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        try await transport.deleteBackupRecords(
+            named: [record.descriptor.recordName],
+            containerIdentifier: containerIdentifier
+        )
+    }
+
+    private static func boundedDisplayName(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = trimmed.isEmpty ? fallback : trimmed
+        var result = ""
+        for character in candidate {
+            guard result.utf8.count + String(character).utf8.count
+                <= RoomCloudBackupDeletionRequest.maximumDisplayNameUTF8Bytes else { break }
+            result.append(character)
+        }
+        return result
     }
 
     func checkAccount(containerIdentifier: String) async throws -> RoomCloudBackupAccountStatus {

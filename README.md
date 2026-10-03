@@ -527,3 +527,52 @@ acceptance clauses pass, including 337/337 tests on each full native scheme.
 Local verification does not establish physical-device, mobile Safari,
 live-provider, deployment, or production-release behavior. Slice 7 lifecycle
 and release work remains separate.
+
+## Slice 7: local personal release — 2026-10-01
+
+Slice 7 is redefined as a local personal release: a build the operator can
+sign and install on their own iPhone. Its status is a locally verified personal
+release in progress; it is not an App Store release, not deployed, and no
+TestFlight distribution has occurred. Final status will be recorded in the
+dated Slice 7 evidence record and `Docs/verification-log.md`.
+
+**Trash.** Moving a room to Trash keeps it restorable for 30 days. Restore
+returns it unchanged. "Delete now" deletes it permanently before the period
+ends, and an automatic foreground purge deletes rooms whose 30 days have
+passed the next time the app is active. Permanent deletion removes the package
+and its local companions.
+
+**iCloud backup deletion.** Deleting private CloudKit backups is a separate,
+explicit choice: per backup after confirmation, or "Delete now and remove
+iCloud backup" in Trash. Requests are journaled and shown as "Backup still in
+iCloud" until a deletion succeeds; they never run at launch or from the
+automatic purge. Apple completes erasure on its servers later, and this app
+cannot verify physical erasure.
+
+**Operator signing channel.** Each target uses `Configs/Operator.xcconfig`,
+which only includes the git-ignored `Configs/Operator.local.xcconfig`. Copy
+`Configs/Operator.example.xcconfig` and
+`Configs/RoomScanStudio.example-entitlements.plist` to the git-ignored local
+files on your own Mac; the repository names no team, container, or
+privacy-policy URL. See `Docs/setup.md` and `Docs/icloud-setup.md`.
+
+**Run and test.** Use the commands in root `AGENTS.md`, for example:
+
+```sh
+python3 -B Scripts/verify_xcode_scaffold.py
+swift test
+xcodebuild -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -sdk iphoneos -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+```
+
+Signed device runs follow the Slice 7 section of `Docs/setup.md` and are
+awaiting operator approval. See the
+[Slice 7 plan](Docs/superpowers/plans/2026-09-30-ai-redesign-platform-slice-7.md),
+[compatibility matrix](Docs/compatibility-matrix.md),
+[release checklist](Docs/release-checklist.md), and
+[known limitations](Docs/known-limitations.md).
+
+2026-10-02: with operator approval, the scoped device UI tests passed on the
+operator's iPhone and a development-signed Release archive was built without
+export. No real iCloud operation, TestFlight upload or App Store submission was
+performed. See the 2026-10-02 reconciliation in the
+[Slice 7 evidence record](Docs/evidence/2026-10-01-ai-redesign-slice-7-personal-release.md).

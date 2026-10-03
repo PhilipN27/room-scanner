@@ -1,0 +1,28 @@
+// Template for the git-ignored Configs/Operator.local.xcconfig.
+//
+// Copy this file to Configs/Operator.local.xcconfig and replace the
+// placeholders on your own Mac. Never commit the local copy: it names your
+// Apple Developer team and your private iCloud container. See Docs/setup.md.
+
+// Your 10-character Apple Developer team identifier.
+DEVELOPMENT_TEAM =
+
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+
+// Copy Configs/RoomScanStudio.example-entitlements.plist to this git-ignored
+// path. It requests only the private CloudKit container named below.
+// This file is the base configuration of the test bundles too, and their
+// provisioning profiles cannot carry iCloud. Only the app target
+// (WRAPPER_EXTENSION = app) resolves a path; .xctest bundles get none.
+ROOMSCANSTUDIO_ENTITLEMENTS_app = Configs/RoomScanStudio.local.entitlements
+CODE_SIGN_ENTITLEMENTS = $(ROOMSCANSTUDIO_ENTITLEMENTS_$(WRAPPER_EXTENSION))
+
+// The iCloud container you created and assigned to the App ID, for example
+// iCloud.<your-reverse-domain>.roomscanstudio. Leave blank to keep Cloud
+// Backup unconfigured.
+ROOMSCANSTUDIO_CLOUD_BACKUP_CONTAINER_IDENTIFIER =
+
+// Leave blank until a published privacy policy exists; Settings then says
+// the policy is not configured.
+ROOMSCANSTUDIO_PRIVACY_POLICY_URL =

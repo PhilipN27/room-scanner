@@ -2622,3 +2622,213 @@ SHA-256 bindings beneath the retained root:
 - `test-trash-contrast-iphone.log`: `1a47739d6b82bb6a17b51bc87c7b4d7fdfcd7ea8f634bb8e8ac4154734c4267b`
 - `mutation-test.log`: `8b49d902018181351be8fa137ea0eb4c0f23ad80f1639aa7af7e805b41b1c44c`
 - `red-test.log`: `b160b27e292f695f0d5cd2ab4ff5ff69a89cf932ba603b6b82301b0c94c4a6a6`
+
+## 2026-10-01 — Slice 7 Milestone 1 UI synchronization, full gate still blocked
+
+Evidence tier: iPhone 16 Pro / iOS 26.3 Simulator, macOS Core tests and static
+checks only. This is **not full-scheme acceptance**.
+
+Only `RoomScanStudioUITests.swift` changed. The single `navigationWait`
+constant is 20 seconds and is used only for positive existence waits following
+navigation or the explicit backup Check action. Info-panel opening waits for
+its scroll view before the close button, with at most one activity-logged
+re-tap when the panel remains absent and the toggle remains hittable.
+Saving waits for `library.showActive` before scrolling to the project row.
+Settings waits for its containing screen before the error and its hittability.
+AXXXL checks re-query after scrolling, wait for hittability before frames, and
+enumerate accessibility order by query index instead of stale identity bindings.
+
+Development runs also exposed a filter tap that left Active selected and a
+missed second mock-review tap. Filter helpers now check the whole target frame
+and wait for selected state with a 10-second predicate. Mock-review navigation
+re-queries after scrolling and uses the existing Home helper's 0.15-second
+press pattern. No app/layout, identifier, fixture or screenshot source changed.
+All 43 negative-assertion/absence-wait lines in the edited file are unchanged
+from `44604e5`; `RoomTrashRelaunchUITests.swift`, including its disk-removal
+oracles, is byte-unchanged. The retained `oracle-preservation.json` records
+the comparison and every use of the shared constant.
+
+| Command/selection | Result |
+| --- | --- |
+| `services.yaml: build-for-testing-iphone`, final source | Passed |
+| Scoped `testTrashAccessibilityXXXLKeepsFiltersRowsBannerAndActionsReachableInOrder` | 3/3 passed |
+| Scoped `testMetadataDuplicateArchiveAndUnarchiveRemainExplicit` | 3/3 passed |
+| Scoped `testTrashOrderingUsesTrashDateNotProjectIDOrLastRevision` | 3/3 passed |
+| Scoped `testCloudBackupIsDisabledAndUnconfiguredWithoutAutomaticLaunchOperation` | 3/3 passed |
+| `test-trash-ui-iphone` | 29 passed, zero failures, one expected contrast skip (30 total) |
+| `test-trash-relaunch-iphone` | 25 passed, zero failures |
+| `test-trash-library-backup-regressions-iphone` | 13 passed, one existing empty-Library visibility timeout (14 total); single unchanged scoped retry passed 1/1 |
+| `test-screenshot-matrices-iphone` | 2/2 passed, all 20 original matrix attachments retained |
+| `typecheck` | Scaffold and Simulator-selector self-test passed |
+| Core / Python portions of `services.yaml: test` | 362 Core tests and 79 Python tests passed |
+| Full iPhone portion of `services.yaml: test` | Interrupted, exit 73: 343 passed, one cancellation, zero skips (344 reported, not the complete 379-test scheme) |
+
+The Library/backup retry was
+`testIsolatedTokenKeepsSavedRoomAcrossRelaunchAndResetStartsEmpty`, with
+Increase Contrast enabled as in the original selection and restored to disabled
+afterward. Its first run timed out on `library.empty`; foreign builds were
+observed during that selection. This disclosed retry is not a new full gate.
+Two earlier development failures and the subsequent intermediate passes are
+also retained, separately from the final twelve green scoped runs.
+
+All Xcode tests used the pinned RoomScan iPhone, explicit destination and
+`/tmp/roomscan-slice7-work/DerivedData`, `-parallel-testing-enabled NO`,
+`-collect-test-diagnostics never`, and distinct result bundles. The twelve
+repetitions used `test-scoped-iphone` with one method filter per invocation.
+`commands.jsonl` retains the exact executed commands, exit codes and disk
+checks; no output pipeline masked their exit status.
+
+The full command was dispatched after five consecutive 60-second idle polls,
+with 11 GiB free (above the 8 GiB gate floor). However, PlateLog builds started
+again during the Core/Python prelude and later PlateLog Simulator tests overlapped
+the RoomScan scheme. The 60-second snapshots in `concurrency.log` record both.
+Only the worker-owned RoomScan `xcodebuild` was interrupted; foreign processes
+were never signaled. The result's sole failure says **“Testing was canceled”**
+in `testFakeCloudAccountUnavailableIsVisibleOnlyAfterExplicitCheck`, not a
+completed behavioral failure. No full scoped retry or second full run was
+attempted. A coordinated window with no foreign builds throughout the prelude
+and scheme is still required to collect a valid 0-failure/1-skip full gate
+(or the permitted single completed failure with its immediate scoped pass).
+
+Retained root:
+`.artifacts/slice7-personal-release-2026-09-30/gates/m1-ui-test-stability/`.
+`scoped-*-final-N-summary.json` names the twelve final repetitions.
+`full-iphone-summary.json` is explicitly an interrupted-run summary, not
+acceptance. Exported attachment manifests include original names, test bindings
+and SHA-256 digests. The interrupted full run retained 32 contract attachments.
+AXXXL screenshots were inspected for the full purge date and unclipped banner;
+the order attachment remains
+`["detail.trashBanner", "detail.restore", "detail.delete"]`.
+Summaries and attachments were promoted and byte-verified before deleting all
+session-generated raw scratch xcresults and exports. `SHA256SUMS` binds retained
+logs, summaries and attachment manifests. The RoomScan iPhone was shut down
+with Increase Contrast disabled; reusable DerivedData remains.
+
+No iPad, unsigned generic iOS build, physical device, signed archive, LiDAR,
+real CloudKit, upload or hosted-service check was performed in this feature.
+
+## 2026-10-01 — Slice 7 personal release Simulator gate, device gates pending
+
+Evidence record:
+`Docs/evidence/2026-10-01-ai-redesign-slice-7-personal-release.md`. Tiers:
+static, macOS compilation and Simulator only. The physical-device, signed
+archive and iCloud container gates were **not run** and await operator
+approval, so Slice 7 is not closed as a personal release.
+
+This run covers backup deletion (journal, explicit per-record and whole-project
+deletion, pending retry, journal-only purge and reaper hooks), release
+engineering (operator xcconfig channel, runpath, inherited privacy URL,
+encryption flag, verifier controls) and the composed end-to-end XCUITest. It
+also fixes a Slice 3 defect: the AI package workspace's Close button was never
+rendered, which trapped the sheet once review started. The first end-to-end
+run is the retained failing control.
+
+Environment: macOS 26.3.1, Xcode 26.3 (17C529), iOS 26.3.1 Simulators. Full
+schemes and builds used fresh DerivedData under `/tmp/roomscan-s7-final/`.
+Retained root: `.artifacts/slice7-personal-release-2026-09-30/`. A 60-second
+monitor saw no foreign `xcodebuild` during the final matrix.
+
+| Check | Command | Result | Tier | Artifact |
+| --- | --- | --- | --- | --- |
+| Scaffold verifier | `python3 -B Scripts/verify_xcode_scaffold.py` | `Static structure passed` | static | `gates/final-2026-10-01/scaffold.log` |
+| Python unit tests | `python3 -B -m unittest discover -s Scripts -p 'test_*.py'` | `Ran 89 tests`, `OK` | static | `gates/final-2026-10-01/python-unittest.log` |
+| Core | `swift test` | 366 tests, 0 failures | macOS | `gates/final-2026-10-01/swift-test.log` |
+| Unsigned generic iOS build | `xcodebuild -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath /tmp/roomscan-s7-final/generic CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -jobs 4 build` | `** BUILD SUCCEEDED **`; inspector exit 0; `LC_RPATH @executable_path/Frameworks` | macOS compile | `gates/final-2026-10-01/unsigned-generic-build.log` |
+| Full iPhone scheme | `xcodebuild test -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -destination 'platform=iOS Simulator,id=9BF8FA07-B824-4C7A-AD7C-A7C09B4D23A1' -derivedDataPath /tmp/roomscan-s7-final/sim -parallel-testing-enabled NO -collect-test-diagnostics never -resultBundlePath <bundle> CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO` | 403 total, 402 passed, 0 failed, 1 skipped (Increase Contrast) | Simulator, iPhone 16 Pro | `gates/final-2026-10-01/iphone-full.xcresult` |
+| Full iPad scheme | same with `-destination 'platform=iOS Simulator,id=FDDEC0DB-DB75-4FBA-8344-69E2A2819531'` | 403 total, 402 passed, 0 failed, 1 skipped (Increase Contrast) | Simulator, iPad (10th generation) | `gates/final-2026-10-01/ipad-full.xcresult` |
+| Device runpath proof | `xcodebuild build-for-testing ... -destination 'id=<device-udid>'` plus one scoped UI test | not run, awaiting approval | physical device | `m1-device-runpath/` (empty) |
+| Milestone 3 device lifecycle | signed `build-for-testing` and scoped lifecycle UI tests with `-destination 'id=<device-udid>'` | not run, awaiting approval | physical device | `m3-device-lifecycle/` (empty) |
+| Release archive | `xcodebuild archive -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -destination 'generic/platform=iOS' -allowProvisioningUpdates ...` | not run, awaiting approval | signed archive | `archive/` (empty) |
+
+Additional runs:
+
+- End-to-end single method
+  (`-only-testing:RoomScanStudioUITests/RoomSlice7EndToEndUITests/testSlice7PersonalReleaseEndToEnd`,
+  iPhone 16 Pro Simulator): 1 passed, 0 failed, 18 valid `slice7-e2e-01`
+  through `-18` PNG attachments, promoted with a SHA-256 manifest to
+  `Docs/evidence/2026-10-01-ai-redesign-slice-7-screenshots/`. Attempt 1
+  failed at its first navigation (a launch-time press was dropped; no foreign
+  build ran) and is retained as diagnostic. The test now re-presses only while
+  the source control is still on screen.
+- Pre-change baseline, same iPhone scheme: 379 total, 378 passed, 0 failed,
+  1 skipped (`gates/baseline-2026-10-01/`). The final total adds 17 deletion
+  unit tests and 7 UI tests.
+- Mutation controls (`mutations-2026-10-01/summary.json`): treating every
+  deletion outcome as complete, skipping the journal's symlinked-ancestor
+  check, journaling after package removal, and performing a remote delete
+  from the purge requester each failed their target test. Every file was
+  restored by digest and the restored class passed 17/17.
+
+The concept-import step of the end-to-end test relaunches the same isolated
+root with `--slice3-ui-fixture`, because the production import needs the
+system file picker. No LiDAR capture, Face ID, live iCloud, physical erasure,
+system share, TestFlight upload, App Store submission, CloudKit Production
+schema change or hosted-service change was performed.
+
+## 2026-10-02 — Slice 7 device lifecycle, signed archive and device storage defect
+
+Evidence record: the 2026-10-02 reconciliation in
+`Docs/evidence/2026-10-01-ai-redesign-slice-7-personal-release.md`. Tiers:
+static, macOS compilation, Simulator, physical device and signed archive. With
+operator approval this pass ran the Milestone 3 device lifecycle tests and the
+end-to-end test on the operator's iPhone 17 Pro (iOS 26.6, 23G71), and built a
+Release archive without export or upload. No real iCloud operation was
+performed.
+
+The device run found a production defect the Simulator cannot show. On a
+device every storage root passes through the system link `/var ->
+private/var`, and six private ancestor walkers rejected any symlinked
+ancestor: the cloud-backup deletion journal, the AI package provenance
+registry, the professional sync journal, recovery coordinator and sync
+service, and the publication operation journal. Delete now with backup removal
+failed and the AI workspace never opened. All six now use
+`RoomStorageAncestorSafety`, which trusts only a root-owned link directly
+under `/`. Red control: 6 of 7 new tests failed with the device errors.
+Green: app unit suite 352/352 on Simulator. Mutations M5 (accept all links),
+M6 (drop the top-level condition) and M7 (drop the root-owner condition) each
+failed their target tests; M7 survived a first round until a fake-`FileManager`
+test was added. The helper was restored by digest.
+
+| Check | Command | Result | Tier | Artifact |
+| --- | --- | --- | --- | --- |
+| Device lifecycle, 3 tests | `xcodebuild test-without-building -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -destination 'id=<paired-device>' -derivedDataPath /tmp/roomscan-s7-device <only-testing list>` | 3 passed in attempt 8 (also in attempts 5 and 7) | physical device | `m3-device-lifecycle/attempt8-lifecycle-3-passed-e2e-device-moved.log` |
+| Device end-to-end | same with `-only-testing:RoomScanStudioUITests/RoomSlice7EndToEndUITests/testSlice7PersonalReleaseEndToEnd` | 1 passed (350.7 s), same build as attempt 8 | physical device | `m3-device-lifecycle/attempt9-device-e2e.xcresult` |
+| Device cleanup | `xcrun devicectl device uninstall app --device <paired-device> <bundle id>` for the app and the UI test runner | both uninstalled; no RoomScan app listed after | physical device | `m3-device-lifecycle/device-uninstall.txt` |
+| Release archive | `xcodebuild archive -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -configuration Release -destination 'generic/platform=iOS' -archivePath <archive> -derivedDataPath /tmp/roomscan-s7-archive -allowProvisioningUpdates` | `** ARCHIVE SUCCEEDED **`; strict signature valid, team matches the local xcconfig, CloudKit container entitlement, encryption flag false, 0 `@rpath` dependencies; development-signed (`get-task-allow` true); not exported | signed archive | `archive/archive-inspection.txt` |
+| Scaffold, Python, Core | `python3 -B Scripts/verify_xcode_scaffold.py`; `python3 -B -m unittest discover -s Scripts -p 'test_*.py'`; `swift test` | `Static structure passed`; `Ran 89 tests`, `OK`; 366 tests, 0 failures | static, macOS | `gates/final-2026-10-02b-repo-config/` |
+| Unsigned generic iOS build | root `AGENTS.md` command with `-derivedDataPath /tmp/roomscan-s7-final3/generic -jobs 4` | `** BUILD SUCCEEDED **`; no signing lines; inspector exit 0 | macOS compile | `gates/final-2026-10-02b-repo-config/unsigned-generic-build.log` |
+| Full iPhone scheme | `xcodebuild test -project RoomScanStudio.xcodeproj -scheme RoomScanStudio -destination 'platform=iOS Simulator,id=9BF8FA07-B824-4C7A-AD7C-A7C09B4D23A1' -derivedDataPath /tmp/roomscan-s7-final3/sim -parallel-testing-enabled NO -collect-test-diagnostics never -resultBundlePath <bundle> CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO` | 412 total, 411 passed, 0 failed, 1 skipped (Increase Contrast) | Simulator, iPhone 16 Pro, iOS 26.3.1 | `gates/final-2026-10-02b-repo-config/iphone-full.xcresult` |
+| Full iPad scheme | `xcodebuild test-without-building` with the same flags and `-destination 'platform=iOS Simulator,id=FDDEC0DB-DB75-4FBA-8344-69E2A2819531'` | 412 total, 411 passed, 0 failed, 1 skipped (Increase Contrast) | Simulator, iPad (10th generation), iOS 26.3.1 | `gates/final-2026-10-02b-repo-config/ipad-full.xcresult` |
+
+Artifact paths are relative to `.artifacts/slice7-personal-release-2026-09-30/`;
+`gates/final-2026-10-02b-repo-config/SHA256SUMS` (SHA-256
+`9e37011bc359a523180e658663e1d5e85f3625050f9a5a78d74c7857a86475b6`) binds 56
+retained files. The matrix process was killed from outside during the iPad
+lane's last test (411 of 412 reported, none failed). The iPad lane was rerun in
+full with `test-without-building` on the same build products, and the
+interrupted log is retained. The end-to-end test passed in both full schemes.
+
+Nine device attempts were made. Attempts 1–4 and 6 were blocked or invalid
+(test-bundle entitlements, a locked phone, defect 2, an incoming call, a
+landscape phone). Attempts 5 and 7 failed the end-to-end test at its
+raw-consent switch, whose knob sat below the screen edge while XCUITest
+reported the row hittable. The test now scrolls the whole switch into view and
+waits for the value to change before one retry; the assertion is unchanged.
+Attempt 8 passed that step but lost the device mid-test. Bundles that showed
+content outside the app were deleted with operator approval after review,
+keeping redacted logs. The device identifier is redacted from all retained
+text files.
+
+The archive's provisioning profile lists `iCloud.org.roomscanstudio.app`, so
+the container is assigned to the App ID. A first Simulator matrix that ran
+with the git-ignored operator xcconfig present failed one test: the unsigned
+build had the container identifier but no entitlement, so Check account
+trapped in `CKContainer(identifier:)` (412 total, 410 passed, 1 failed,
+1 skipped on iPhone; retained as
+`gates/final-2026-10-02-diagnostic-operator-config-present/`). The final
+matrix hid that file, matching CI, and `Docs/setup.md` now warns about it.
+
+Not verified: real iCloud account, upload, recovery or deletion; physical
+erasure; LiDAR capture; Face ID; system share; TestFlight or App Store
+distribution; CloudKit Production schema. The privacy-policy URL is still not
+configured.

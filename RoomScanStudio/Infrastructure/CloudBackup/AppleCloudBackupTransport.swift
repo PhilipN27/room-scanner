@@ -217,6 +217,166 @@ final class AppleCloudBackupTransport: RoomCloudBackupTransport {
         }
     }
 
+    func deleteBackups(
+        projectID: String,
+        knownRecordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        let database = database(named: containerIdentifier)
+        let known = RoomCloudBackupDeletionRequest.normalizedRecordNames(knownRecordNames)
+        guard try await backupZoneExists(database: database) else {
+            // No zone means no backup record can remain for this project.
+            return RoomCloudBackupDeletionOutcome(deletedRecordNames: known)
+        }
+        var targets = Set(known)
+        targets.formUnion(try await projectRecordNames(projectID: projectID, database: database))
+        return try await deleteRecords(named: targets.sorted(), database: database)
+    }
+
+    func deleteBackupRecords(
+        named recordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        let database = database(named: containerIdentifier)
+        let names = RoomCloudBackupDeletionRequest.normalizedRecordNames(recordNames)
+        guard try await backupZoneExists(database: database) else {
+            return RoomCloudBackupDeletionOutcome(deletedRecordNames: names)
+        }
+        return try await deleteRecords(named: names, database: database)
+    }
+
+    private static let maximumDeleteBatchSize = 400
+
+    private func backupZoneExists(database: CKDatabase) async throws -> Bool {
+        let zoneID = backupZoneID
+        do {
+            let results = try await database.recordZones(for: [zoneID])
+            guard let result = results[zoneID] else { return false }
+            switch result {
+            case .success: return true
+            case let .failure(error):
+                if isZoneMissing(error) { return false }
+                throw mapped(error)
+            }
+        } catch let error as RoomCloudBackupTransportError {
+            throw error
+        } catch {
+            if isZoneMissing(error) { return false }
+            throw mapped(error)
+        }
+    }
+
+    /// Reuses the listing query shape so no new Queryable index is needed.
+    /// Unlike the bounded UI listing, this path pages every cursor: deletion
+    /// must not silently leave records beyond a presentation cap.
+    private func projectRecordNames(projectID: String, database: CKDatabase) async throws -> Set<String> {
+        let query = CKQuery(recordType: Self.recordType, predicate: NSPredicate(value: true))
+        let desiredKeys: [CKRecord.FieldKey] = ["projectID"]
+        var names = Set<String>()
+        func collect(_ results: [(CKRecord.ID, Result<CKRecord, Error>)]) throws {
+            for (recordID, result) in results {
+                switch result {
+                case let .success(record):
+                    if record["projectID"] as? String == projectID,
+                       RoomCloudBackupDeletionRequest.isRecordName(recordID.recordName) {
+                        names.insert(recordID.recordName)
+                    }
+                case let .failure(error): throw mapped(error)
+                }
+            }
+        }
+        do {
+            var response = try await database.records(
+                matching: query,
+                inZoneWith: backupZoneID,
+                desiredKeys: desiredKeys,
+                resultsLimit: 100
+            )
+            try collect(response.matchResults)
+            while let cursor = response.queryCursor {
+                try Task.checkCancellation()
+                response = try await database.records(
+                    continuingMatchFrom: cursor,
+                    desiredKeys: desiredKeys,
+                    resultsLimit: 100
+                )
+                try collect(response.matchResults)
+            }
+        } catch let error as RoomCloudBackupTransportError {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            if isZoneMissing(error) { return [] }
+            throw mapped(error)
+        }
+        return names
+    }
+
+    private func deleteRecords(
+        named names: [String],
+        database: CKDatabase
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        var deleted: [String] = []
+        var remaining: [String] = []
+        var failures: [String: String] = [:]
+        var batchSize = Self.maximumDeleteBatchSize
+        var index = 0
+        while index < names.count {
+            let batch = Array(names[index..<min(index + batchSize, names.count)])
+            let ids = batch.map { CKRecord.ID(recordName: $0, zoneID: backupZoneID) }
+            do {
+                let result = try await database.modifyRecords(
+                    saving: [],
+                    deleting: ids,
+                    atomically: false
+                )
+                for id in ids {
+                    switch result.deleteResults[id] {
+                    case .success?:
+                        deleted.append(id.recordName)
+                    case let .failure(error)?:
+                        if isRecordMissing(error) {
+                            deleted.append(id.recordName)
+                        } else {
+                            remaining.append(id.recordName)
+                            failures[id.recordName] = mapped(error).deletionFailureDescription
+                        }
+                    case nil:
+                        remaining.append(id.recordName)
+                        failures[id.recordName] = RoomCloudBackupTransportError
+                            .transportFailure("missing result").deletionFailureDescription
+                    }
+                }
+                index += batch.count
+            } catch {
+                if (error as? CKError)?.code == .limitExceeded, batchSize > 1 {
+                    batchSize = max(1, batchSize / 2)
+                    continue
+                }
+                if isZoneMissing(error) {
+                    deleted.append(contentsOf: batch)
+                    index += batch.count
+                    continue
+                }
+                let failure = (error as? RoomCloudBackupTransportError) ?? mapped(error)
+                // Nothing removed yet: surface the error so the shared retry
+                // policy can classify it. After progress, report honestly.
+                if deleted.isEmpty && remaining.isEmpty { throw failure }
+                for name in names[index...] {
+                    remaining.append(name)
+                    failures[name] = failure.deletionFailureDescription
+                }
+                break
+            }
+        }
+        return RoomCloudBackupDeletionOutcome(
+            deletedRecordNames: deleted,
+            remainingRecordNames: remaining,
+            failures: failures
+        )
+    }
+
     private var backupZoneID: CKRecordZone.ID {
         CKRecordZone.ID(zoneName: Self.zoneName, ownerName: CKCurrentUserDefaultName)
     }

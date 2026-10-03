@@ -483,3 +483,67 @@ Until every required row has an actual result and retained digest, formal status
 is physical Face ID/passcode **pending owner worksheet**. This worksheet does
 not authorize a provider call, real data, production provisioning, a commit,
 push, PR or deployment, and it is not release approval.
+
+## 2026-10-01 Slice 7 personal release device protocol
+
+Device: iPhone 17 Pro, iOS 26.6 (identifier withheld; use `<device-udid>`).
+Status: the scoped device runs below are planned and await operator approval.
+None of the operator checklist items in this section were executed by this
+mission.
+
+### (a) Scoped UI test protocol
+
+Device runs use only the operator signing channel in `Docs/setup.md`
+(`Configs/Operator.xcconfig` with the git-ignored
+`Configs/Operator.local.xcconfig`); never pass a team on the command line.
+
+1. Build once for testing with the local xcconfig:
+
+   ```sh
+   xcodebuild build-for-testing -project RoomScanStudio.xcodeproj \
+     -scheme RoomScanStudio -destination 'id=<device-udid>' \
+     -allowProvisioningUpdates -derivedDataPath <fresh-derived-data>
+   ```
+
+2. Run each selection with `test-without-building`:
+
+   ```sh
+   xcodebuild test-without-building -project RoomScanStudio.xcodeproj \
+     -scheme RoomScanStudio -destination 'id=<device-udid>' \
+     -derivedDataPath <fresh-derived-data> \
+     -only-testing:RoomScanStudioUITests/<Class>/<test> \
+     -parallel-testing-enabled NO -collect-test-diagnostics never
+   ```
+
+   Selections: the Trash test
+   `RoomScanStudioUITests/RoomScanStudioUITests/testTrashLifecycleConfirmationRestoreArchiveAndDeleteNowPreserveOtherProject`;
+   the cloud backup deletion tests in the `RoomScanStudioUITests` class (for example
+   `testBackupRecordDeletionRequiresConfirmationAndReportsHonestOutcome` and
+   `testDeleteNowWithBackupRemovalGoesPendingOnOfflineFailureAndRetryDeletes`);
+   and the end-to-end test
+   `RoomScanStudioUITests/RoomSlice7EndToEndUITests/testSlice7PersonalReleaseEndToEnd`.
+3. These tests launch the app with isolated arguments only
+   (`--ui-testing --reset-local-store --use-mock-fixture --use-fake-cloud-backup`
+   and an isolated root token). They use no real container, network endpoint,
+   or professional configuration, so the resulting device xcresults are
+   isolated fixture and fake-backup runs, not LiDAR, Face ID or live-iCloud
+   evidence.
+4. Afterward, uninstall the test build from the device.
+
+### (b) Operator manual checklist (not executed)
+
+- [ ] Real LiDAR scan → Save → export the archive via the Share Sheet.
+- [ ] Enable Cloud Backup with the real container from a signed Development
+  build; the first backup creates the schema in CloudKit Development.
+- [ ] Deploy schema to Production in CloudKit Console.
+- [ ] Back up a room, delete the backup, and verify the pending state and then
+  the deleted state.
+- [ ] With networking off, delete a backup, confirm "Backup still in iCloud"
+  while pending, then Retry online.
+- [ ] Trash, Restore, and Delete now on the device with a real room.
+- [ ] Archive in Xcode and upload the archive to TestFlight (internal) from
+  the Xcode Organizer.
+
+Record the date, build, and observed result beside each item when it is
+performed. The app cannot verify physical erasure of deleted CloudKit records,
+so the backup items record only what the app and CloudKit Console show.

@@ -15,14 +15,13 @@ struct RoomAIRedesignHostView: View {
     @State private var hostError: String?
 
     var body: some View {
-        RoomAIRedesignView(model: model)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { close() }
-                        .accessibilityIdentifier("ai.close")
-                        .disabled(model.sharePresentationRequest != nil || model.reviewState == .approved)
-                }
-            }
+        RoomAIRedesignView(
+            model: model,
+            closeAction: RoomAIRedesignCloseAction(
+                isDisabled: model.sharePresentationRequest != nil || model.reviewState == .approved,
+                perform: close
+            )
+        )
             .fileImporter(
                 isPresented: importPresentation,
                 allowedContentTypes: allowedContentTypes,

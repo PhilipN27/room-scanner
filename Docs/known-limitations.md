@@ -137,3 +137,24 @@ status is:
 
 No external action, real data, Slice 5 implementation, Slice 7 resource,
 commit, push, PR or deployment is claimed by this update.
+
+## 2026-10-01 Slice 7 personal release limitations
+
+- Hosted trash, purge, and backup-expiry lifecycle is deferred and not
+  implemented, as are hosted deletion routes, migration `0010`, contracts v4,
+  cancellation grace, load tests, subscriber quotas and pricing, App Store
+  disclosures and nutrition labels, and AWS deployment. See the
+  [Slice 7 plan](superpowers/plans/2026-09-30-ai-redesign-platform-slice-7.md).
+- The app cannot prove physical erasure of CloudKit records. A successful
+  deletion means CloudKit accepted the request; Apple completes erasure later,
+  and this app cannot verify physical erasure.
+- Backup deletions requested by the automatic Trash reaper stay pending until
+  the user taps Retry or "Delete pending backups". No deletion runs at launch.
+- The iOS 18 deployment floor is compile-only verified; there is no iOS 18
+  runtime evidence.
+- Simulator evidence is distinct from physical device evidence. Planned device
+  runs are isolated `--use-mock-fixture` / `--use-fake-cloud-backup` UI test
+  runs and await operator approval. No live-iCloud, LiDAR, Face ID, or
+  TestFlight-upload evidence was produced for Slice 7.
+- Trash purge is foreground-only: an expired room is deleted the next time the
+  app becomes active, not at exactly 30 days while the app is closed.

@@ -16,6 +16,15 @@ and the latest dated evidence record. Current references:
 - `Scripts/verify_slice5_sync.py`
 - `Scripts/verify_slice6_publication.py`
 - `Scripts/verify_slice6_mutation_controls.py`
+- `Docs/superpowers/plans/2026-09-30-ai-redesign-platform-slice-7.md`
+
+Slice 7 note (2026-10-01): Slice 7 is a local personal release with no
+aggregate verifier. There is no `verify_slice7_*.py` script in the Scripts
+directory.
+Slice 7 acceptance is the dated Slice 7 personal-release evidence record
+(Docs/evidence/2026-10-01-ai-redesign-slice-7-personal-release.md, written at
+final acceptance) plus `Docs/verification-log.md`. The Slice 5 and Slice 6
+workflows below are unchanged.
 
 Confirm whether the user wants component proof or full acceptance. Use exact
 Node 24.15.0, disposable PostgreSQL 16, macOS/Xcode and available iPhone/iPad

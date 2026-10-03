@@ -233,3 +233,53 @@ release pending by design. The repository is **not production-ready or
 release-approved**. This reconciliation performed no external action, used no
 real data, added no Slice 5 implementation or Slice 7 resource, and made no
 commit, push, PR or deployment.
+
+## 2026-10-01 Slice 7 personal release reconciliation
+
+Slice 7 is a local personal release (see the
+[Slice 7 plan](superpowers/plans/2026-09-30-ai-redesign-platform-slice-7.md)).
+Its gates are listed here unchecked; results are recorded in
+`Docs/verification-log.md` and in the dated Slice 7 evidence record written at
+final acceptance, not in this checklist.
+
+- [ ] Structural scaffold: `python3 -B Scripts/verify_xcode_scaffold.py`.
+- [ ] Python verifier tests:
+  `python3 -B -m unittest discover -s Scripts -p 'test_*.py'`.
+- [ ] Core tests: `swift test`.
+- [ ] Unsigned iOS build with the root `AGENTS.md` command.
+- [ ] Full `RoomScanStudio` scheme on the iPhone 16 Pro Simulator (iOS 26.3).
+- [ ] Full `RoomScanStudio` scheme on the iPad (10th generation) Simulator
+  (iOS 26.3).
+- [ ] Scoped device UI tests on the iPhone 17 Pro (iOS 26.6) through the
+  operator signing channel, using only isolated `--use-mock-fixture` /
+  `--use-fake-cloud-backup` launch arguments. Awaiting operator approval.
+- [ ] Signed Release archive built through `Configs/Operator.xcconfig` and the
+  git-ignored local files, inspected with `codesign -dvv` (team, entitlements
+  and identifier recorded without secrets). Awaiting operator approval.
+
+Personal TestFlight path (operator manual step; this mission did not perform
+it):
+
+1. Deploy the CloudKit schema to Production in CloudKit Console (see
+   [iCloud setup](icloud-setup.md)).
+2. In Xcode, choose Product → Archive with the signed Release configuration.
+3. In the Organizer, choose Distribute App → TestFlight (internal testing
+   only), and upload.
+4. Add the operator's own Apple ID as an internal tester. Internal testing
+   needs no App Store review, and no App Store listing is created.
+
+App Store disclosures and privacy nutrition labels are deferred: there is no
+App Store listing in this release. No TestFlight upload, App Store submission,
+CloudKit Production schema change, or deployment is claimed by this
+reconciliation.
+
+2026-10-02 status (the boxes above stay unchecked, as recorded): with operator
+approval, the scoped device UI tests passed on the iPhone 17 Pro, and a signed
+Release archive was built and inspected without export. The archive is
+development-signed (Apple Development identity, team provisioning profile,
+`get-task-allow` true), so it is not a TestFlight build. The iPhone and iPad
+Simulator schemes passed (412 total, 411 passed, 0 failed, 1 skipped on each),
+as did the scaffold, Python, Core and unsigned-build checks. Results and artifact digests are in the 2026-10-02 reconciliation
+of the
+[Slice 7 evidence record](evidence/2026-10-01-ai-redesign-slice-7-personal-release.md).
+The TestFlight path above was not performed.

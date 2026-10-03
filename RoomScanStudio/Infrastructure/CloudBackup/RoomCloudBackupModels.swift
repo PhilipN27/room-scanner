@@ -187,6 +187,23 @@ enum RoomCloudBackupTransportError: Error, Equatable {
             return false
         }
     }
+
+    /// Vendor-neutral text safe to persist in the local deletion journal.
+    var deletionFailureDescription: String {
+        switch self {
+        case .notConfigured: return "The iCloud container is not configured."
+        case .accountUnavailable: return "The iCloud account is unavailable."
+        case .zoneMissing: return "The private backup zone is missing."
+        case .serviceUnavailable: return "The iCloud service is unavailable."
+        case .networkUnavailable: return "The network is unavailable."
+        case .rateLimited: return "iCloud asked the app to wait before retrying."
+        case .limitExceeded: return "The request exceeded an iCloud limit."
+        case .recordConflict: return "The backup record changed on the server."
+        case .cancellationOutcomeUnknown: return "The outcome of a cancelled request is unknown."
+        case .malformedRemoteRecord: return "The backup record is malformed."
+        case .transportFailure: return "iCloud did not complete the request."
+        }
+    }
 }
 
 /// A prepared recovery keeps the underlying app-owned scratch lease opaque.
@@ -215,6 +232,23 @@ protocol RoomCloudBackupProviding {
     ) async throws -> RoomBackupRecoveryResult
     func discardPreparedRecovery(_ preparation: RoomCloudBackupPreparedRecovery) async throws
     func retryCleanup() async throws -> Bool
+    /// Durable local journal write only; never a network call.
+    func requestBackupDeletion(projectID: String, displayName: String, containerIdentifier: String) throws
+    /// One transport attempt for a journaled request, then a journal update.
+    func performBackupDeletion(projectID: String) async throws -> RoomCloudBackupDeletionOutcome
+    /// Local journal read only; never a network call.
+    func pendingBackupDeletions() throws -> [RoomCloudBackupDeletionRequest]
+    /// Explicit single-record deletion. Not journaled: on failure the record
+    /// simply remains listed.
+    func deleteBackupRecord(
+        _ record: RoomCloudBackupRemoteRecord,
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome
+}
+
+enum RoomCloudBackupDeletionServiceError: Error, Equatable {
+    case journalUnavailable
+    case requestNotFound(String)
 }
 
 @MainActor
@@ -239,13 +273,50 @@ struct ImmediateCloudBackupSleeper: RoomCloudBackupSleeping {
 /// argument and never substitutes for a production CloudKit container.
 @MainActor
 final class DeterministicCloudBackupTransport: RoomCloudBackupTransport {
+    struct DeleteInvocation: Equatable {
+        let projectID: String?
+        let recordNames: [String]
+    }
+
+    private struct PersistedState: Codable {
+        let zoneExists: Bool
+        let descriptors: [RoomCloudBackupDescriptor]
+    }
+
+    private static let recordsFilename = "records.json"
+    private static let archivesDirectoryName = "archives"
+
     private var records: [String: RoomCloudBackupRemoteRecord] = [:]
     private var archiveDataBySnapshotID: [String: Data] = [:]
     private var zoneExists = false
     private let accountStatus: RoomCloudBackupAccountStatus
+    private let persistenceRootURL: URL?
+    /// FIFO of whole-call failures; each delete call consumes at most one.
+    var deleteErrors: [RoomCloudBackupTransportError]
+    /// Partial-failure seam: this many existing targets (last in sorted
+    /// order) stay remote and are reported as failures on every delete call.
+    var partialDeleteFailureCount = 0
+    private(set) var deleteInvocations: [DeleteInvocation] = []
 
-    init(accountStatus: RoomCloudBackupAccountStatus = .available) {
+    /// With `persistenceRootURL` (token-isolated UI runs only) records and
+    /// archives survive a relaunch; without it the fake is purely in memory.
+    init(
+        accountStatus: RoomCloudBackupAccountStatus = .available,
+        deleteErrors: [RoomCloudBackupTransportError] = [],
+        persistenceRootURL: URL? = nil
+    ) {
         self.accountStatus = accountStatus
+        self.deleteErrors = deleteErrors
+        self.persistenceRootURL = persistenceRootURL?.standardizedFileURL
+        loadPersistedState()
+    }
+
+    var persistedRecordsURL: URL? {
+        persistenceRootURL?.appendingPathComponent(Self.recordsFilename)
+    }
+
+    var storedRecordNames: [String] {
+        records.values.map(\.descriptor.recordName).sorted()
     }
 
     func checkAccount(containerIdentifier: String) async throws -> RoomCloudBackupAccountStatus {
@@ -264,6 +335,7 @@ final class DeterministicCloudBackupTransport: RoomCloudBackupTransport {
     func ensureBackupZone(containerIdentifier: String) async throws {
         _ = containerIdentifier
         zoneExists = true
+        try persistState()
     }
 
     func save(snapshot: RoomBackupSnapshot, containerIdentifier: String) async throws -> RoomCloudBackupRemoteRecord {
@@ -280,6 +352,7 @@ final class DeterministicCloudBackupTransport: RoomCloudBackupTransport {
         archiveDataBySnapshotID[key] = try Data(contentsOf: snapshot.archiveURL)
         let record = RoomCloudBackupRemoteRecord(descriptor: snapshot.descriptor)
         records[key] = record
+        try persistState()
         return record
     }
 
@@ -294,5 +367,97 @@ final class DeterministicCloudBackupTransport: RoomCloudBackupTransport {
             throw RoomCloudBackupTransportError.malformedRemoteRecord
         }
         try data.write(to: destinationURL, options: [.withoutOverwriting])
+    }
+
+    func deleteBackups(
+        projectID: String,
+        knownRecordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        _ = containerIdentifier
+        let known = RoomCloudBackupDeletionRequest.normalizedRecordNames(knownRecordNames)
+        deleteInvocations.append(.init(projectID: projectID, recordNames: known))
+        if !deleteErrors.isEmpty { throw deleteErrors.removeFirst() }
+        let projectNames = records.values
+            .filter { $0.descriptor.projectID == projectID }
+            .map(\.descriptor.recordName)
+        return try delete(targets: Set(known).union(projectNames))
+    }
+
+    func deleteBackupRecords(
+        named recordNames: [String],
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        _ = containerIdentifier
+        let names = RoomCloudBackupDeletionRequest.normalizedRecordNames(recordNames)
+        deleteInvocations.append(.init(projectID: nil, recordNames: names))
+        if !deleteErrors.isEmpty { throw deleteErrors.removeFirst() }
+        return try delete(targets: Set(names))
+    }
+
+    private func delete(targets: Set<String>) throws -> RoomCloudBackupDeletionOutcome {
+        // A never-created zone has nothing to delete: the end state holds.
+        guard zoneExists else {
+            return RoomCloudBackupDeletionOutcome(deletedRecordNames: Array(targets))
+        }
+        let snapshotIDByName = Dictionary(
+            uniqueKeysWithValues: records.values.map { ($0.descriptor.recordName, $0.descriptor.snapshotID) }
+        )
+        let existing = targets.filter { snapshotIDByName[$0] != nil }.sorted()
+        let failing = Set(existing.suffix(max(0, partialDeleteFailureCount)))
+        var deleted = targets.subtracting(existing)
+        for name in existing where !failing.contains(name) {
+            guard let snapshotID = snapshotIDByName[name] else { continue }
+            records.removeValue(forKey: snapshotID)
+            archiveDataBySnapshotID.removeValue(forKey: snapshotID)
+            deleted.insert(name)
+        }
+        try persistState()
+        return RoomCloudBackupDeletionOutcome(
+            deletedRecordNames: Array(deleted),
+            remainingRecordNames: Array(failing),
+            failures: Dictionary(uniqueKeysWithValues: failing.map {
+                ($0, RoomCloudBackupTransportError.networkUnavailable(retryAfterSeconds: nil).deletionFailureDescription)
+            })
+        )
+    }
+
+    private func loadPersistedState() {
+        guard let persistenceRootURL, let recordsURL = persistedRecordsURL,
+              let data = try? Data(contentsOf: recordsURL),
+              let state = try? JSONDecoder().decode(PersistedState.self, from: data)
+        else { return }
+        zoneExists = state.zoneExists
+        let archives = persistenceRootURL.appendingPathComponent(Self.archivesDirectoryName, isDirectory: true)
+        for descriptor in state.descriptors {
+            guard (try? RoomProjectBackupArchive.validate(descriptor: descriptor)) != nil else { continue }
+            records[descriptor.snapshotID] = RoomCloudBackupRemoteRecord(descriptor: descriptor)
+            archiveDataBySnapshotID[descriptor.snapshotID] = try? Data(
+                contentsOf: archives.appendingPathComponent("\(descriptor.snapshotID).zip")
+            )
+        }
+    }
+
+    private func persistState() throws {
+        guard let persistenceRootURL, let recordsURL = persistedRecordsURL else { return }
+        let manager = FileManager.default
+        let archives = persistenceRootURL.appendingPathComponent(Self.archivesDirectoryName, isDirectory: true)
+        try manager.createDirectory(at: archives, withIntermediateDirectories: true)
+        let liveSnapshotIDs = Set(records.keys)
+        for entry in try manager.contentsOfDirectory(atPath: archives.path)
+        where entry.hasSuffix(".zip") && !liveSnapshotIDs.contains(String(entry.dropLast(4))) {
+            try manager.removeItem(at: archives.appendingPathComponent(entry))
+        }
+        for (snapshotID, data) in archiveDataBySnapshotID {
+            let url = archives.appendingPathComponent("\(snapshotID).zip")
+            if !manager.fileExists(atPath: url.path) {
+                try data.write(to: url, options: .atomic)
+            }
+        }
+        let state = PersistedState(
+            zoneExists: zoneExists,
+            descriptors: records.values.map(\.descriptor).sorted { $0.snapshotID < $1.snapshotID }
+        )
+        try RoomCloudBackupDeletionJournal.canonicalData(for: state).write(to: recordsURL, options: .atomic)
     }
 }

@@ -49,7 +49,11 @@ struct RoomProjectPurgeReport: Equatable {
 
 @MainActor
 protocol RoomProjectPurging {
-    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport
+    func purge(
+        projectID: String,
+        mode: RoomProjectPurgeMode,
+        backup: RoomProjectBackupDisposition
+    ) async -> RoomProjectPurgeReport
 }
 
 enum RoomProjectPurgeMode {
@@ -57,9 +61,21 @@ enum RoomProjectPurgeMode {
     case automatic
 }
 
+/// Whether the pre-delete hook may journal a private backup deletion request.
+/// `.keep` never invokes it; `.requestDeletion` still journals nothing while
+/// backup is disabled or unconfigured (the hook decides).
+enum RoomProjectBackupDisposition: Equatable {
+    case keep
+    case requestDeletion
+}
+
 extension RoomProjectPurging {
+    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport {
+        await purge(projectID: projectID, mode: mode, backup: .requestDeletion)
+    }
+
     func purge(projectID: String) async -> RoomProjectPurgeReport {
-        await purge(projectID: projectID, mode: .manual)
+        await purge(projectID: projectID, mode: .manual, backup: .requestDeletion)
     }
 }
 
@@ -103,7 +119,11 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
         self.retentionPolicy = retentionPolicy
     }
 
-    func purge(projectID: String, mode: RoomProjectPurgeMode) async -> RoomProjectPurgeReport {
+    func purge(
+        projectID: String,
+        mode: RoomProjectPurgeMode,
+        backup: RoomProjectBackupDisposition
+    ) async -> RoomProjectPurgeReport {
         // Validate/load first, so an invalid ID or unsafe package never reaches
         // the request hook. A repeated purge still retries companion cleanup.
         var packageExists = true
@@ -116,7 +136,7 @@ final class RoomProjectPurgeCoordinator: RoomProjectPurging {
         } catch {
             return .init(projectID: projectID, package: .failed(error.localizedDescription))
         }
-        if packageExists, let deletionRequest {
+        if packageExists, backup == .requestDeletion, let deletionRequest {
             do {
                 try await deletionRequest(projectID)
             } catch {

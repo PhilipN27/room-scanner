@@ -695,15 +695,8 @@ final class PublicationOperationJournal: PublicationOperationJournaling {
     }
 
     private func requireNoSymlinkInExistingAncestors(of url: URL) throws {
-        let standardized = url.standardizedFileURL
-        guard standardized.path.hasPrefix("/") else { throw PublicationOperationJournalError.unsafeStorage }
-        var current = URL(fileURLWithPath: "/", isDirectory: true)
-        for component in standardized.pathComponents.dropFirst() {
-            current.appendPathComponent(component, isDirectory: false)
-            if (try? fileManager.destinationOfSymbolicLink(atPath: current.path)) != nil {
-                throw PublicationOperationJournalError.unsafeStorage
-            }
-            guard fileManager.fileExists(atPath: current.path) else { return }
+        guard RoomStorageAncestorSafety.existingAncestorsAreSafe(of: url, fileManager: fileManager) else {
+            throw PublicationOperationJournalError.unsafeStorage
         }
     }
 }

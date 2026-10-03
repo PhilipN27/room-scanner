@@ -3,6 +3,8 @@ import UIKit
 import XCTest
 
 final class RoomScanStudioUITests: XCTestCase {
+    private let navigationWait: TimeInterval = 20
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -444,32 +446,42 @@ final class RoomScanStudioUITests: XCTestCase {
         selectTrashTestFilter("Trash", in: app)
         let row = app.buttons["library.project.ui-project-001"]
         scrollIntoView(row, in: app)
-        XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertGreaterThanOrEqual(row.frame.height, 44)
-        let purge = app.staticTexts["library.project.ui-project-001.purgeDate"]
+        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForHittable(app.buttons["library.project.ui-project-001"], in: app.scrollViews.firstMatch))
+        XCTAssertGreaterThanOrEqual(app.buttons["library.project.ui-project-001"].frame.height, 44)
+        var purge = app.staticTexts["library.project.ui-project-001.purgeDate"]
         XCTAssertTrue(purge.waitForExistence(timeout: 10))
         scrollIntoView(purge, in: app)
+        purge = app.staticTexts["library.project.ui-project-001.purgeDate"]
         assertTrashTestFullyVisible(purge, in: app.scrollViews.firstMatch)
+        purge = app.staticTexts["library.project.ui-project-001.purgeDate"]
         XCTAssertFalse(purge.label.contains("…"))
         XCTAssertFalse(purge.label.contains("..."))
         attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-row-full-purge-date")
         openTrashTestProject("ui-project-001", in: app)
-        let banner = identifiedElement("detail.trashBanner", in: app)
+        var banner = identifiedElement("detail.trashBanner", in: app)
         XCTAssertTrue(banner.waitForExistence(timeout: 10))
         scrollIntoView(banner, in: app.scrollViews["detail.scroll"], direction: .backward)
+        banner = identifiedElement("detail.trashBanner", in: app)
         assertTrashTestFullyVisible(banner, in: app.scrollViews["detail.scroll"])
+        banner = identifiedElement("detail.trashBanner", in: app)
         XCTAssertFalse(banner.label.contains("…"))
         attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-full-trash-banner")
         for id in ["detail.restore", "detail.delete"] {
-            let action = app.buttons[id]
+            var action = app.buttons[id]
             XCTAssertTrue(action.waitForExistence(timeout: 10))
             scrollIntoView(action, in: app.scrollViews["detail.scroll"])
-            assertTrashTestTarget(action)
+            action = app.buttons[id]
             assertTrashTestFullyVisible(action, in: app.scrollViews["detail.scroll"])
+            assertTrashTestTarget(app.buttons[id])
             attachTrashScreenshot(app, "VAL-TRASH-029", "axxxl-\(id)")
         }
-        let order = app.descendants(matching: .any).allElementsBoundByAccessibilityElement
-            .map(\.identifier).filter { ["detail.trashBanner", "detail.restore", "detail.delete"].contains($0) }
+        // Index queries preserve accessibility order without binding an entire
+        // pre-scroll snapshot to identities that SwiftUI may have replaced.
+        let orderedElements = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier IN %@", ["detail.trashBanner", "detail.restore", "detail.delete"])
+        )
+        let order = (0..<orderedElements.count).map { orderedElements.element(boundBy: $0).identifier }
         XCTAssertEqual(order, ["detail.trashBanner", "detail.restore", "detail.delete"])
         attachTrashText("VAL-TRASH-029", "accessibility-order-and-frames",
                         "order=\(order)\n\(trashTestElementInventory(in: app))")
@@ -1178,9 +1190,9 @@ final class RoomScanStudioUITests: XCTestCase {
         let app = launchIsolatedApp()
         XCTAssertTrue(app.buttons["home.cloudBackupSettings"].waitForExistence(timeout: 5))
         app.buttons["home.cloudBackupSettings"].tap()
-        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: navigationWait))
         let settingsScroll = app.scrollViews["cloudBackup.scroll"]
-        XCTAssertTrue(settingsScroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(settingsScroll.waitForExistence(timeout: navigationWait))
         let enable = app.switches["cloudBackup.enable"]
         XCTAssertTrue(enable.waitForExistence(timeout: 5))
         scrollIntoView(enable, in: settingsScroll)
@@ -1193,9 +1205,12 @@ final class RoomScanStudioUITests: XCTestCase {
         scrollIntoView(check, in: settingsScroll)
         XCTAssertTrue(check.isHittable)
         check.tap()
+        XCTAssertTrue(app.scrollViews["cloudBackup.scroll"].waitForExistence(timeout: navigationWait))
         let error = app.descendants(matching: .any)["cloudBackup.error"]
-        XCTAssertTrue(waitForHittable(error, in: settingsScroll))
-        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(error.waitForExistence(timeout: navigationWait))
+        XCTAssertTrue(waitForHittable(app.descendants(matching: .any)["cloudBackup.error"],
+                                      in: app.scrollViews["cloudBackup.scroll"]))
+        XCTAssertTrue(app.descendants(matching: .any)["cloudBackup.error"].waitForExistence(timeout: 5))
         // No account/list/backup screen is auto-triggered merely by opening or
         // enabling the local setting; the error is the explicit Check action.
     }
@@ -1391,6 +1406,388 @@ final class RoomScanStudioUITests: XCTestCase {
         attachSlice5Screenshot(named: "slice5-stale-head-comparison", app: conflict)
     }
 
+    // MARK: - Slice 7 backup deletion
+
+    func testBackupRecordDeletionRequiresConfirmationAndReportsHonestOutcome() {
+        executionTimeAllowance = 240
+        let app = launchIsolatedApp(extraArguments: ["--use-fake-cloud-backup"])
+        defer { app.terminate() }
+        saveMockRoom(in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        let scroll = openBackupSheetFromDetail(in: app)
+        assertNoPendingDeletionControls(in: app)
+        backUpOpenProject(in: app, scroll: scroll)
+        assertNoPendingDeletionControls(in: app)
+
+        let delete = app.buttons["cloudBackup.delete"]
+        scrollIntoView(delete, in: scroll)
+        XCTAssertTrue(delete.isHittable)
+        assertMinimumTarget(delete)
+        delete.tap()
+        let confirm = app.buttons["cloudBackup.delete.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "cannot verify physical erasure"))
+            .firstMatch.exists)
+        attachTrashScreenshot(app, "VAL-BACKUP-018", "record-delete-confirmation")
+        let cancel = app.alerts.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 10), "Cancel keeps the record.")
+        XCTAssertFalse(identifiedElement("cloudBackup.deletionOutcome", in: app).exists)
+
+        scrollIntoView(delete, in: scroll)
+        delete.tap()
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        trashTestConfirmation("cloudBackup.delete.confirm", in: app).tap()
+        let outcome = identifiedElement("cloudBackup.deletionOutcome", in: app)
+        XCTAssertTrue(outcome.waitForExistence(timeout: 15))
+        XCTAssertTrue(outcome.label.contains("Apple"), outcome.label)
+        XCTAssertTrue(outcome.label.contains("cannot verify physical erasure"), outcome.label)
+        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForNonExistence(timeout: 10))
+        attachTrashScreenshot(app, "VAL-BACKUP-018", "record-delete-outcome")
+        attachTrashText("VAL-BACKUP-018", "record-delete-outcome-label", outcome.label)
+        tapBackupControl("cloudBackup.list", in: app, scroll: scroll)
+        let status = app.staticTexts["cloudBackup.listStatus"]
+        XCTAssertTrue(waitForLabel(status, equals: "No private backup records were found.", timeout: 15), status.label)
+        assertNoPendingDeletionControls(in: app)
+    }
+
+    func testDeleteNowWithBackupRemovalGoesPendingOnOfflineFailureAndRetryDeletes() throws {
+        executionTimeAllowance = 360
+        let token = String(UUID().uuidString.prefix(12))
+        let app = launchIsolatedApp(
+            rootToken: token, extraArguments: ["--use-fake-cloud-backup", "--fake-cloud-delete-fails-once"]
+        )
+        defer { app.terminate() }
+        let roots = try backUpAndTrashFirstProject(in: app, token: token, valID: "VAL-BACKUP-019")
+        openTrashTestProject("ui-project-001", in: app)
+        confirmDeleteNow(removingBackup: true, in: app, valID: "VAL-BACKUP-019")
+        assertProjectAbsentUnderEveryFilter("ui-project-001", in: app)
+        if let roots {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: roots.root("Projects").appendingPathComponent("ui-project-001").path
+            ))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: journalRecordURL(roots).path))
+            try attachTrashTestListing(roots, "VAL-BACKUP-019", "journal-pending-after-failed-delete")
+        }
+
+        let scroll = openBackupSheetFromHome(in: app)
+        let pending = identifiedElement("cloudBackup.deletionPending", in: app)
+        XCTAssertTrue(waitForHittable(pending, in: scroll))
+        XCTAssertTrue(pending.label.lowercased().contains("still in icloud"), pending.label)
+        XCTAssertTrue(pending.label.contains("Attempts: 1"), pending.label)
+        XCTAssertTrue(app.buttons["cloudBackup.runPendingDeletions"].exists)
+        let retry = app.buttons["cloudBackup.retryDeletion"]
+        XCTAssertTrue(waitForHittable(retry, in: scroll))
+        attachTrashScreenshot(app, "VAL-BACKUP-019", "pending-entry-after-offline-failure")
+        attachTrashText("VAL-BACKUP-019", "pending-label", pending.label)
+        retry.tap()
+        let outcome = identifiedElement("cloudBackup.deletionOutcome", in: app)
+        XCTAssertTrue(outcome.waitForExistence(timeout: 15))
+        XCTAssertTrue(outcome.label.hasPrefix("Deleted 1 backup record"), outcome.label)
+        XCTAssertTrue(pending.waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["cloudBackup.runPendingDeletions"].exists)
+        attachTrashScreenshot(app, "VAL-BACKUP-019", "retry-outcome")
+        if let roots {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: journalRecordURL(roots).path))
+            try attachTrashTestListing(roots, "VAL-BACKUP-019", "journal-empty-after-retry")
+        }
+    }
+
+    func testPendingBackupDeletionSurvivesRelaunchWithoutLaunchCallAndRetries() throws {
+        executionTimeAllowance = 360
+        let token = String(UUID().uuidString.prefix(12))
+        let arguments = ["--use-fake-cloud-backup", "--fake-cloud-delete-fails-once"]
+        let first = launchIsolatedApp(rootToken: token, extraArguments: arguments)
+        let roots = try backUpAndTrashFirstProject(in: first, token: token, valID: "VAL-BACKUP-020")
+        openTrashTestProject("ui-project-001", in: first)
+        confirmDeleteNow(removingBackup: true, in: first, valID: "VAL-BACKUP-020")
+        first.terminate()
+
+        let relaunched = launchIsolatedApp(rootToken: token, keepRoot: true, extraArguments: arguments)
+        defer { relaunched.terminate() }
+        attachTrashText("VAL-BACKUP-020", "relaunch-arguments", relaunched.launchArguments.joined(separator: " "))
+        let scroll = openBackupSheetFromHome(in: relaunched)
+        let pending = identifiedElement("cloudBackup.deletionPending", in: relaunched)
+        XCTAssertTrue(waitForHittable(pending, in: scroll))
+        XCTAssertTrue(pending.label.contains("Mock Studio Room"), pending.label)
+        XCTAssertTrue(pending.label.contains("Attempts: 1"), pending.label)
+        XCTAssertFalse(identifiedElement("cloudBackup.deletionOutcome", in: relaunched).exists)
+        XCTAssertFalse(relaunched.staticTexts["cloudBackup.accountStatus"].exists)
+        attachTrashScreenshot(relaunched, "VAL-BACKUP-020", "pending-entry-after-relaunch")
+        attachTrashText("VAL-BACKUP-020", "pending-label-after-relaunch", pending.label)
+        if let roots {
+            XCTAssertTrue(try fakeBackupRecords(roots).contains("ui-project-001"))
+        }
+        let retry = relaunched.buttons["cloudBackup.retryDeletion"]
+        XCTAssertTrue(waitForHittable(retry, in: scroll))
+        retry.tap()
+        // The relaunched fake queues its one injected failure again; the shared
+        // retry policy absorbs it, so the explicit Retry still completes.
+        let outcome = identifiedElement("cloudBackup.deletionOutcome", in: relaunched)
+        XCTAssertTrue(outcome.waitForExistence(timeout: 15))
+        XCTAssertTrue(pending.waitForNonExistence(timeout: 10))
+        attachTrashScreenshot(relaunched, "VAL-BACKUP-020", "retry-outcome-after-relaunch")
+        if let roots {
+            XCTAssertFalse(try fakeBackupRecords(roots).contains("ui-project-001"))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: journalRecordURL(roots).path))
+            try attachTrashTestListing(roots, "VAL-BACKUP-020", "fake-records-and-journal-after-retry")
+        }
+    }
+
+    func testReaperPurgeOnlyJournalsBackupDeletionUntilExplicitRun() throws {
+        executionTimeAllowance = 360
+        let token = String(UUID().uuidString.prefix(12))
+        let trashTime = 1_800_000_000
+        let first = launchIsolatedApp(
+            rootToken: token, extraArguments: ["--use-fake-cloud-backup", "--trash-clock=\(trashTime)"]
+        )
+        let roots = try backUpAndTrashFirstProject(in: first, token: token, valID: "VAL-BACKUP-021")
+        first.terminate()
+
+        let relaunched = launchIsolatedApp(
+            rootToken: token, keepRoot: true,
+            extraArguments: ["--use-fake-cloud-backup", "--trash-clock=\(trashTime + 2_592_001)"]
+        )
+        defer { relaunched.terminate() }
+        attachTrashText("VAL-BACKUP-021", "relaunch-arguments", relaunched.launchArguments.joined(separator: " "))
+        XCTAssertTrue(relaunched.buttons["home.newRoomScan"].waitForExistence(timeout: navigationWait))
+        let scroll = openBackupSheetFromHome(in: relaunched)
+        let pending = identifiedElement("cloudBackup.deletionPending", in: relaunched)
+        XCTAssertTrue(waitForHittable(pending, in: scroll))
+        XCTAssertTrue(pending.label.contains("Attempts: 0"), pending.label)
+        XCTAssertFalse(identifiedElement("cloudBackup.deletionOutcome", in: relaunched).exists)
+        attachTrashScreenshot(relaunched, "VAL-BACKUP-021", "pending-after-reaper")
+        attachTrashText("VAL-BACKUP-021", "pending-label-after-reaper", pending.label)
+        if let roots {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: roots.root("Projects").appendingPathComponent("ui-project-001").path
+            ))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: journalRecordURL(roots).path))
+            XCTAssertTrue(try fakeBackupRecords(roots).contains("ui-project-001"), "The reaper deletes no record.")
+        }
+        tapBackupControl("cloudBackup.list", in: relaunched, scroll: scroll)
+        XCTAssertTrue(relaunched.buttons["cloudBackup.prepare"].waitForExistence(timeout: 15))
+        attachTrashScreenshot(relaunched, "VAL-BACKUP-021", "record-still-listed-before-run")
+
+        let run = relaunched.buttons["cloudBackup.runPendingDeletions"]
+        XCTAssertTrue(waitForHittable(run, in: scroll, direction: .backward, searchBothDirections: true))
+        run.tap()
+        let outcome = identifiedElement("cloudBackup.deletionOutcome", in: relaunched)
+        XCTAssertTrue(outcome.waitForExistence(timeout: 15))
+        XCTAssertTrue(pending.waitForNonExistence(timeout: 10))
+        attachTrashScreenshot(relaunched, "VAL-BACKUP-021", "run-pending-outcome")
+        tapBackupControl("cloudBackup.list", in: relaunched, scroll: scroll)
+        let status = relaunched.staticTexts["cloudBackup.listStatus"]
+        XCTAssertTrue(waitForLabel(status, equals: "No private backup records were found.", timeout: 15), status.label)
+        XCTAssertFalse(relaunched.buttons["cloudBackup.prepare"].exists)
+        if let roots {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: journalRecordURL(roots).path))
+        }
+    }
+
+    func testDeleteNowKeepBackupNeverJournalsAndLeavesRecordListed() throws {
+        executionTimeAllowance = 300
+        let token = String(UUID().uuidString.prefix(12))
+        let app = launchIsolatedApp(rootToken: token, extraArguments: ["--use-fake-cloud-backup"])
+        defer { app.terminate() }
+        let roots = try backUpAndTrashFirstProject(in: app, token: token, valID: "VAL-BACKUP-022")
+        openTrashTestProject("ui-project-001", in: app)
+        confirmDeleteNow(removingBackup: false, in: app, valID: "VAL-BACKUP-022")
+        assertProjectAbsentUnderEveryFilter("ui-project-001", in: app)
+        let scroll = openBackupSheetFromHome(in: app)
+        assertNoPendingDeletionControls(in: app)
+        tapBackupControl("cloudBackup.list", in: app, scroll: scroll)
+        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 15))
+        assertNoPendingDeletionControls(in: app)
+        attachTrashScreenshot(app, "VAL-BACKUP-022", "record-still-listed-after-keep")
+        if let roots {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: roots.root("CloudBackupDeletionJournal").path),
+                           "The keep path never creates the deletion journal.")
+            XCTAssertTrue(try fakeBackupRecords(roots).contains("ui-project-001"))
+            try attachTrashTestListing(roots, "VAL-BACKUP-022", "no-journal-after-keep")
+        }
+    }
+
+    func testBackupDeletionControlsStayReachableAtAccessibilityXXXL() throws {
+        executionTimeAllowance = 600
+        let token = String(UUID().uuidString.prefix(12))
+        let app = launchIsolatedApp(rootToken: token, extraArguments: [
+            "--use-fake-cloud-backup", "--fake-cloud-delete-fails-once",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        defer { app.terminate() }
+        saveMockRoom(in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        let scroll = openBackupSheetFromDetail(in: app)
+        backUpOpenProject(in: app, scroll: scroll)
+        let delete = app.buttons["cloudBackup.delete"]
+        XCTAssertTrue(waitForHittable(delete, in: scroll))
+        var frames = ["cloudBackup.delete: \(delete.frame)"]
+        assertMinimumTarget(delete)
+        attachTrashScreenshot(app, "VAL-BACKUP-025", "axxxl-record-delete")
+        delete.tap()
+        let confirm = app.buttons["cloudBackup.delete.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        XCTAssertTrue(trashTestConfirmation("cloudBackup.delete.confirm", in: app).isHittable)
+        attachTrashScreenshot(app, "VAL-BACKUP-025", "axxxl-record-delete-confirmation")
+        let cancel = app.alerts.buttons["Cancel"]
+        revealPresentedChoice(cancel, in: app)
+        cancel.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 10))
+        closeBackupSheet(in: app)
+
+        moveTrashTestProjectToTrash(in: app, valID: "VAL-BACKUP-025", slug: "axxxl-trash")
+        selectTrashTestFilter("Trash", in: app)
+        openTrashTestProject("ui-project-001", in: app)
+        confirmDeleteNow(removingBackup: true, in: app, valID: "VAL-BACKUP-025")
+        let pendingScroll = openBackupSheetFromHome(in: app)
+        for identifier in ["cloudBackup.retryDeletion", "cloudBackup.runPendingDeletions"] {
+            let control = app.buttons[identifier]
+            XCTAssertTrue(control.waitForExistence(timeout: 15), identifier)
+            // The pending section already exists and sits thousands of points
+            // down the XXXL page; a forward scan reaches it without the
+            // direction-alternating sweep that exhausts the default budget.
+            XCTAssertTrue(waitForHittable(control, in: pendingScroll, timeout: 90), identifier)
+            assertMinimumTarget(control)
+            frames.append("\(identifier): \(control.frame)")
+            attachTrashScreenshot(app, "VAL-BACKUP-025", "axxxl-\(identifier.replacingOccurrences(of: ".", with: "-"))")
+        }
+        attachTrashText("VAL-BACKUP-025", "axxxl-control-frames", frames.joined(separator: "\n"))
+    }
+
+    // MARK: - Slice 7 backup deletion helpers
+
+    private func openBackupSheetFromDetail(in app: XCUIApplication) -> XCUIElement {
+        openTrashTestInfo(in: app)
+        let backup = app.buttons["detail.backup"]
+        XCTAssertTrue(backup.waitForExistence(timeout: 10))
+        scrollIntoView(backup, in: app.scrollViews["detail.infoPanel.scroll"])
+        XCTAssertTrue(backup.isHittable)
+        backup.tap()
+        let scroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: navigationWait))
+        return scroll
+    }
+
+    private func openBackupSheetFromHome(in app: XCUIApplication) -> XCUIElement {
+        let settings = app.buttons["home.cloudBackupSettings"]
+        for _ in 0..<3 where !settings.exists {
+            let back = app.navigationBars.buttons.firstMatch
+            guard back.waitForExistence(timeout: 10) else { break }
+            back.tap()
+            _ = settings.waitForExistence(timeout: 10)
+        }
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        scrollIntoView(settings, in: app)
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings & privacy"].waitForExistence(timeout: navigationWait))
+        let scroll = app.scrollViews["cloudBackup.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: navigationWait))
+        return scroll
+    }
+
+    private func closeBackupSheet(in app: XCUIApplication) {
+        let close = app.buttons["cloudBackup.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.tap()
+        XCTAssertTrue(app.scrollViews["cloudBackup.scroll"].waitForNonExistence(timeout: 10))
+    }
+
+    private func tapBackupControl(_ identifier: String, in app: XCUIApplication, scroll: XCUIElement) {
+        let control = app.buttons[identifier]
+        XCTAssertTrue(control.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForHittable(control, in: scroll, searchBothDirections: true), identifier)
+        control.tap()
+    }
+
+    /// Check, list and back up through explicit actions only.
+    private func backUpOpenProject(in app: XCUIApplication, scroll: XCUIElement) {
+        tapBackupControl("cloudBackup.check", in: app, scroll: scroll)
+        XCTAssertTrue(app.staticTexts["cloudBackup.accountStatus"].waitForExistence(timeout: 15))
+        tapBackupControl("cloudBackup.list", in: app, scroll: scroll)
+        XCTAssertTrue(app.staticTexts["cloudBackup.listStatus"].waitForExistence(timeout: 15))
+        tapBackupControl("cloudBackup.backup", in: app, scroll: scroll)
+        XCTAssertTrue(app.buttons["cloudBackup.prepare"].waitForExistence(timeout: 15))
+    }
+
+    private func backUpAndTrashFirstProject(
+        in app: XCUIApplication,
+        token: String,
+        valID: String
+    ) throws -> TrashTestRoots? {
+        saveMockRoom(in: app)
+        let roots = try trashTestRoots(token: token)
+        openTrashTestProject("ui-project-001", in: app)
+        let scroll = openBackupSheetFromDetail(in: app)
+        backUpOpenProject(in: app, scroll: scroll)
+        attachTrashScreenshot(app, valID, "backed-up-record")
+        closeBackupSheet(in: app)
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForExistence(timeout: 10))
+        moveTrashTestProjectToTrash(in: app, valID: valID, slug: "trash-backed-up-room")
+        selectTrashTestFilter("Trash", in: app)
+        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
+        return roots
+    }
+
+    private func confirmDeleteNow(removingBackup: Bool, in app: XCUIApplication, valID: String) {
+        tapTrashTestDetailAction("detail.delete", in: app)
+        let withBackup = trashTestConfirmation("delete.confirmWithBackup", in: app)
+        let keep = trashTestConfirmation("delete.confirm", in: app)
+        XCTAssertEqual(withBackup.label, "Delete now and remove iCloud backup")
+        XCTAssertEqual(keep.label, "Delete now, keep iCloud backup")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "cannot verify physical erasure"))
+            .firstMatch.exists)
+        attachTrashScreenshot(app, valID, "delete-now-two-choice-confirmation")
+        let choice = removingBackup ? withBackup : keep
+        revealPresentedChoice(choice, in: app)
+        choice.tap()
+        XCTAssertTrue(app.buttons["library.showTrash"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["detail.roomName"].waitForNonExistence(timeout: 10))
+    }
+
+    private func assertProjectAbsentUnderEveryFilter(_ projectID: String, in app: XCUIApplication) {
+        for filter in ["Trash", "Archived", "Active"] {
+            selectTrashTestFilter(filter, in: app)
+            XCTAssertTrue(app.buttons["library.project.\(projectID)"].waitForNonExistence(timeout: 10), filter)
+        }
+    }
+
+    private func assertNoPendingDeletionControls(in app: XCUIApplication) {
+        XCTAssertFalse(identifiedElement("cloudBackup.deletionPending", in: app).exists)
+        XCTAssertFalse(app.buttons["cloudBackup.runPendingDeletions"].exists)
+        XCTAssertFalse(app.buttons["cloudBackup.retryDeletion"].exists)
+    }
+
+    /// At accessibility sizes a system alert or action sheet scrolls its long
+    /// message and choices. Reach a choice the way a user would, by scrolling.
+    private func revealPresentedChoice(_ choice: XCUIElement, in app: XCUIApplication) {
+        let container = app.alerts.firstMatch.exists ? app.alerts.firstMatch : app.sheets.firstMatch
+        for _ in 0..<6 where choice.exists && !choice.isHittable && container.exists {
+            container.swipeUp()
+        }
+        for _ in 0..<6 where choice.exists && !choice.isHittable && container.exists {
+            container.swipeDown()
+        }
+    }
+
+    private func assertMinimumTarget(_ element: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertGreaterThanOrEqual(element.frame.height, 44, "\(element.identifier) \(element.frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(element.frame.width, 44, "\(element.identifier) \(element.frame)", file: file, line: line)
+    }
+
+    private func journalRecordURL(_ roots: TrashTestRoots) -> URL {
+        roots.root("CloudBackupDeletionJournal").appendingPathComponent("records/ui-project-001.json")
+    }
+
+    /// Project IDs named by the persisted fake transport's records.
+    private func fakeBackupRecords(_ roots: TrashTestRoots) throws -> String {
+        let url = roots.root("FakeCloudBackup").appendingPathComponent("records.json")
+        try requireTrashTestSafePath(url, under: roots.temporary)
+        return String(decoding: try Data(contentsOf: url), as: UTF8.self)
+    }
+
     // MARK: - Slice 7 trash UI regression helpers
 
     func attachTrashScreenshot(_ app: XCUIApplication, _ valID: String, _ slug: String) {
@@ -1440,8 +1837,13 @@ final class RoomScanStudioUITests: XCTestCase {
         let button = app.buttons["library.show\(filter)"]
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         scrollIntoView(button, in: app, direction: .backward)
-        XCTAssertTrue(button.isHittable)
-        button.tap()
+        assertTrashTestFullyVisible(app.buttons["library.show\(filter)"], in: app.scrollViews.firstMatch)
+        let current = app.buttons["library.show\(filter)"]
+        XCTAssertTrue(current.isHittable)
+        current.tap()
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"),
+                                                object: app.buttons["library.show\(filter)"])
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed)
     }
 
     private func assertTrashTestMembership(
@@ -1497,20 +1899,27 @@ final class RoomScanStudioUITests: XCTestCase {
         // Hittable includes partially visible targets. Scroll until the whole
         // element fits, then assert its frame instead of accepting that proxy.
         let app = XCUIApplication()
+        let identifier = element.identifier
+        var current = identifiedElement(identifier, in: app)
+        XCTAssertTrue(waitForHittable(current, in: scrollView))
+        current = identifiedElement(identifier, in: app)
         let window = app.windows.firstMatch.frame
         let navigationBottom = app.navigationBars.firstMatch.frame.maxY
         let viewport = scrollView.frame.intersection(window)
         let visible = CGRect(x: viewport.minX, y: max(viewport.minY, navigationBottom),
                              width: viewport.width,
                              height: viewport.maxY - max(viewport.minY, navigationBottom))
-        for _ in 0..<6 where !visible.insetBy(dx: -1, dy: -1).contains(element.frame) {
-            swipe(scrollView, direction: element.frame.maxY > visible.maxY ? .forward : .backward)
+        for _ in 0..<6 where !visible.insetBy(dx: -1, dy: -1).contains(current.frame) {
+            swipe(scrollView, direction: current.frame.maxY > visible.maxY ? .forward : .backward)
+            current = identifiedElement(identifier, in: app)
+            XCTAssertTrue(waitForHittable(current, in: scrollView))
+            current = identifiedElement(identifier, in: app)
         }
-        XCTAssertTrue(element.isHittable)
-        XCTAssertGreaterThan(element.frame.width, 0)
-        XCTAssertGreaterThan(element.frame.height, 0)
-        XCTAssertTrue(visible.insetBy(dx: -1, dy: -1).contains(element.frame),
-                      "\(element.identifier) must fit without clipping: element=\(element.frame), viewport=\(visible)")
+        XCTAssertTrue(current.isHittable)
+        XCTAssertGreaterThan(current.frame.width, 0)
+        XCTAssertGreaterThan(current.frame.height, 0)
+        XCTAssertTrue(visible.insetBy(dx: -1, dy: -1).contains(current.frame),
+                      "\(identifier) must fit without clipping: element=\(current.frame), viewport=\(visible)")
     }
 
     private func assertTrashTestFilterTargets(in app: XCUIApplication, valID: String = "VAL-TRASH-019") {
@@ -1548,8 +1957,16 @@ final class RoomScanStudioUITests: XCTestCase {
         let toggle = app.buttons["detail.infoToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         toggle.tap()
-        XCTAssertTrue(app.buttons["detail.infoPanel.close"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.scrollViews["detail.infoPanel.scroll"].waitForExistence(timeout: 10))
+        let panel = app.scrollViews["detail.infoPanel.scroll"]
+        var panelAppeared = panel.waitForExistence(timeout: navigationWait)
+        if !panelAppeared && !panel.exists && app.buttons["detail.infoToggle"].isHittable {
+            XCTContext.runActivity(named: "Info panel absent after navigation wait; re-tap toggle once") { _ in
+                app.buttons["detail.infoToggle"].tap()
+                panelAppeared = app.scrollViews["detail.infoPanel.scroll"].waitForExistence(timeout: navigationWait)
+            }
+        }
+        XCTAssertTrue(panelAppeared)
+        XCTAssertTrue(app.buttons["detail.infoPanel.close"].waitForExistence(timeout: navigationWait))
     }
 
     private func closeTrashTestInfo(in app: XCUIApplication) {
@@ -1586,6 +2003,7 @@ final class RoomScanStudioUITests: XCTestCase {
     private func trashTestConfirmation(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         let buttons = app.buttons.matching(identifier: identifier)
         XCTAssertTrue(buttons.firstMatch.waitForExistence(timeout: 10))
+        revealPresentedChoice(buttons.firstMatch, in: app)
         let hittable = buttons.allElementsBoundByAccessibilityElement.filter(\.isHittable)
         // iOS 26 can expose the same SwiftUI confirmation as a button inside
         // a button. Collapse only exact label/frame aliases, not real choices.
@@ -1663,7 +2081,7 @@ final class RoomScanStudioUITests: XCTestCase {
     }
 
     private func trashTestElementInventory(in app: XCUIApplication) -> String {
-        app.descendants(matching: .any).allElementsBoundByAccessibilityElement
+        app.descendants(matching: .any).allElementsBoundByIndex
             .filter { $0.identifier.hasPrefix("detail.") || $0.identifier.hasPrefix("ai.") }
             .map { "\($0.identifier): type=\($0.elementType.rawValue), enabled=\($0.isEnabled), frame=\($0.frame)" }
             .joined(separator: "\n")
@@ -2225,9 +2643,9 @@ final class RoomScanStudioUITests: XCTestCase {
         let mockReview = app.buttons["newScan.openMockReview"]
         XCTAssertTrue(mockReview.waitForExistence(timeout: 10))
         scrollIntoView(mockReview, in: app)
-        XCTAssertTrue(mockReview.isHittable)
-        mockReview.tap()
-        XCTAssertTrue(app.staticTexts["mockReview.title"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["newScan.openMockReview"].isHittable)
+        app.buttons["newScan.openMockReview"].press(forDuration: 0.15)
+        XCTAssertTrue(app.staticTexts["mockReview.title"].waitForExistence(timeout: navigationWait))
     }
 
     private func saveMockRoom(in app: XCUIApplication) {
@@ -2243,7 +2661,8 @@ final class RoomScanStudioUITests: XCTestCase {
         scrollIntoView(openLibrary, in: app, direction: .backward)
         XCTAssertTrue(openLibrary.isHittable)
         openLibrary.tap()
+        XCTAssertTrue(app.buttons["library.showActive"].waitForExistence(timeout: navigationWait))
         scrollIntoView(app.buttons["library.project.ui-project-001"], in: app)
-        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["library.project.ui-project-001"].waitForExistence(timeout: navigationWait))
     }
 }

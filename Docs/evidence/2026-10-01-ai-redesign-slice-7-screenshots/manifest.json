@@ -1,0 +1,128 @@
+[
+  {
+    "name": "slice7-e2e-01-home.png",
+    "source_attachment": "slice7-e2e-01-home_0_2D29D658-0698-43AE-B34D-5507EE6DC9FC.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 226345,
+    "sha256": "70d7fa11580c5a3117c380fe559625566ef9f5b9813045215d64cb62ee840c58"
+  },
+  {
+    "name": "slice7-e2e-02-mock-review.png",
+    "source_attachment": "slice7-e2e-02-mock-review_0_426C83A5-D8AD-4FFB-9408-092666952BF7.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 207197,
+    "sha256": "dbcc81c5fd6a67299d87d46c3094d2dcab7f2059194a39c4c1e560125b6c3fbf"
+  },
+  {
+    "name": "slice7-e2e-03-saved-library.png",
+    "source_attachment": "slice7-e2e-03-saved-library_0_7CE30133-518A-4742-95DF-54E811868186.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 190120,
+    "sha256": "0f2d58eac81aa036efd0c05f0d5ae6bca71355709703e667ffa0833711093d88"
+  },
+  {
+    "name": "slice7-e2e-04-ai-package-review-prepared.png",
+    "source_attachment": "slice7-e2e-04-ai-package-review-prepared_0_90E5D89D-8639-492A-8328-7AC5E9416A62.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 570100,
+    "sha256": "4b34a28c19da6034ae317249b3c615f0c32308ab58ccac83c5180e156b35a22b"
+  },
+  {
+    "name": "slice7-e2e-05-ai-package-approved.png",
+    "source_attachment": "slice7-e2e-05-ai-package-approved_0_2DD7AF76-4502-494A-8747-6BC52D079698.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 320538,
+    "sha256": "ae8786e6a9516dd98a3145ee7ad0de26bc3614e48ae407d4c6980d0be3642b32"
+  },
+  {
+    "name": "slice7-e2e-06-concept-set-imported.png",
+    "source_attachment": "slice7-e2e-06-concept-set-imported_0_DA6B7BDF-100C-44C1-BE91-EFA3021316D2.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 324428,
+    "sha256": "a11b21c0d90bb26953d93f96119d3b3291d52d982ab425086b16f089f176ef12"
+  },
+  {
+    "name": "slice7-e2e-07-usdz-pdf-head-export-ready.png",
+    "source_attachment": "slice7-e2e-07-usdz-pdf-head-export-ready_0_8EFD93AC-8C89-427D-BC77-D6CB5851D605.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 238848,
+    "sha256": "902ad870149820e3e67acd01dabfa3e420db3fbddf66b1c3144f4ae75b47736f"
+  },
+  {
+    "name": "slice7-e2e-08-fake-backup-completed.png",
+    "source_attachment": "slice7-e2e-08-fake-backup-completed_0_94E48550-F637-4305-AE38-7155F440E619.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 467202,
+    "sha256": "dde774e3119cca8e14c19a675101e545e547d99fc8ce146249fa4db700a58aeb"
+  },
+  {
+    "name": "slice7-e2e-09-recovery-copy-outcome.png",
+    "source_attachment": "slice7-e2e-09-recovery-copy-outcome_0_82003219-C86F-41D5-8AA8-8AE6D15CF8EB.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 424358,
+    "sha256": "4a401111a8edfc10a438209662b09da5f2435526fcfd951c272672c9c9ce8d68"
+  },
+  {
+    "name": "slice7-e2e-10-trashed-detail-banner.png",
+    "source_attachment": "slice7-e2e-10-trashed-detail-banner_0_4BD70EAB-F098-42C6-8DBC-A6E18F0247E8.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 215847,
+    "sha256": "c2ea0a678ce73807363df6f6286a95f197ad33709a65ddddafe673da15eb998e"
+  },
+  {
+    "name": "slice7-e2e-11-restored-detail.png",
+    "source_attachment": "slice7-e2e-11-restored-detail_0_9FBB23EF-037D-486E-9FE2-321CE4E4E019.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 211354,
+    "sha256": "db48772d1c183b588d1cdfc2c37a7d5391151b0d8cb81cfafedf306e7db6f813"
+  },
+  {
+    "name": "slice7-e2e-12-trashed-again.png",
+    "source_attachment": "slice7-e2e-12-trashed-again_0_1F85E753-B196-447E-80F9-D345133522DE.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 203681,
+    "sha256": "1dca5888e8ca6a99ec1799cff76fc9501f160ed1aa5e836e3f0a454d18a0d94d"
+  },
+  {
+    "name": "slice7-e2e-13-delete-now-confirmation-with-backup-option.png",
+    "source_attachment": "slice7-e2e-13-delete-now-confirmation-with-backup-option_0_40494598-A609-4084-A941-03C16353C932.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 509339,
+    "sha256": "3299bc6257b83e3082d0f339824d72bf08b7a6cd4ed40af0c3b33dcb7d5484aa"
+  },
+  {
+    "name": "slice7-e2e-14-delete-now-backup-removal-outcome.png",
+    "source_attachment": "slice7-e2e-14-delete-now-backup-removal-outcome_0_4EB43EA1-70BA-419D-A24D-EE2370DCB431.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 406566,
+    "sha256": "c6e1e0af0f56ed2ecb156cc09d5408574f95d766376398416ae24a8b2cb362fe"
+  },
+  {
+    "name": "slice7-e2e-15-second-project-trashed.png",
+    "source_attachment": "slice7-e2e-15-second-project-trashed_0_421AB4AB-36AD-4D48-8B19-A051A474FEC6.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 204229,
+    "sha256": "05bce32709b14e615cbe44f4cf9072a1b7444b17e9366df21c9d4da48fd4eaeb"
+  },
+  {
+    "name": "slice7-e2e-16-relaunch-with-trash-clock.png",
+    "source_attachment": "slice7-e2e-16-relaunch-with-trash-clock_0_A129D009-7B65-422E-B81D-B7DDD582E34F.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 226558,
+    "sha256": "e819f0ca687ea1872d9e2d069f3f3e0b88d803ebd486da49ca978208d73bc7cf"
+  },
+  {
+    "name": "slice7-e2e-17-purge-observed-empty-trash.png",
+    "source_attachment": "slice7-e2e-17-purge-observed-empty-trash_0_B609FB82-22C4-4989-B7F0-121D6D9AA8F5.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 213158,
+    "sha256": "bdaca27048a56451cd93a0e632cb2308b44093dd70d9d4f67fb2b600262d64cc"
+  },
+  {
+    "name": "slice7-e2e-18-no-project-remains.png",
+    "source_attachment": "slice7-e2e-18-no-project-remains_0_720D852F-5B41-487E-8F3E-5FAD6B4B45F6.png",
+    "source_bundle": ".artifacts/slice7-personal-release-2026-09-30/gates/e2e-iphone-2026-10-01/e2e-iphone.xcresult",
+    "bytes": 195964,
+    "sha256": "21810c049ea696d9e668e0f01be6b3e85515edf82998a9560127bcdcf824652f"
+  }
+]

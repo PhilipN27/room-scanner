@@ -1171,21 +1171,9 @@ final class RoomAIConceptPackageProvenanceRegistry {
         ) != nil
     }
 
-    /// `FileManager.fileExists` follows symlinks, so inspect every existing
-    /// path component with `destinationOfSymbolicLink` first. A missing
-    /// component ends the walk; no deeper component can exist without it.
     private func requireNoSymbolicLinkInExistingAncestors(of url: URL) throws {
-        let standardized = url.standardizedFileURL
-        guard standardized.path.hasPrefix("/") else {
+        guard RoomStorageAncestorSafety.existingAncestorsAreSafe(of: url, fileManager: fileManager) else {
             throw RoomAIConceptPackageProvenanceError.unsafeStorage
-        }
-        var current = URL(fileURLWithPath: "/", isDirectory: true)
-        for component in standardized.pathComponents.dropFirst() {
-            current.appendPathComponent(component, isDirectory: false)
-            if (try? fileManager.destinationOfSymbolicLink(atPath: current.path)) != nil {
-                throw RoomAIConceptPackageProvenanceError.unsafeStorage
-            }
-            guard fileManager.fileExists(atPath: current.path) else { return }
         }
     }
 }

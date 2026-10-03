@@ -232,3 +232,41 @@ request-independent CSP. No real customer, room, biometric, GPS, identity,
 billing, email, or provider data was used in local verification, and no AWS,
 CDN, domain, email, credential, deployment, legal, retention-cleanup, or release
 claim is made.
+
+## Slice 7 local deletion and personal release addendum — 2026-10-01
+
+**Trash.** Moving a room to Trash records a `trashedAt` date in the local
+package. A trashed room stays on the device for a 30-day Trash period and can
+be restored at any time during it. While in Trash it cannot be edited,
+exported, backed up, sent to AI redesign, or used as a professional working
+copy.
+
+**Permanent deletion.** After the 30-day period, a foreground reaper deletes
+the room automatically the next time the app is active. "Delete now" in Trash
+is an explicit bypass that deletes the room before the period ends. Permanent
+deletion removes the local package with its revision history and its local
+companions: redesign state, Concept Sets, property membership, the
+professional sync journal record, and the local search index entry. Unsafe or
+unowned companion files are preserved and reported rather than followed.
+
+**Private iCloud backup deletion.** Local deletion does not touch iCloud
+unless the user chooses it. The Delete-now dialog offers "Delete now and remove
+iCloud backup" or "Delete now, keep iCloud backup", and individual backups can
+be deleted from the backup list after confirmation. Backup deletion removes
+the backup records from the user's private CloudKit database. Apple completes
+erasure on its servers later, and this app cannot verify physical erasure.
+Until a deletion succeeds, the request is kept in a local journal and the room
+is listed as "Backup still in iCloud". The app never runs these deletions at
+launch or from the automatic reaper; the reaper may only record a request,
+which waits for the user to tap Retry or "Delete pending backups".
+
+**Release scope.** Slice 7 is a personal TestFlight (internal) scope for the
+operator's own devices. There is no App Store listing, so App Store privacy
+disclosures and nutrition labels are deferred. No TestFlight upload has been
+performed by this documentation update.
+
+**Privacy manifest.** `RoomScanStudio/Resources/PrivacyInfo.xcprivacy` is
+unchanged: tracking is false, and the declared required-reason APIs remain
+`C617.1` and `CA92.1`. Private CloudKit backup data lives in the user's own
+private database and is not accessible to the developer, so it is not
+developer collection, and no hosted collection ships in this release.

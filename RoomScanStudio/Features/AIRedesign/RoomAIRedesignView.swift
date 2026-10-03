@@ -137,10 +137,18 @@ protocol RoomAIRedesignScreenModel: ObservableObject {
     func dismissComparison()
 }
 
+struct RoomAIRedesignCloseAction {
+    var isDisabled: Bool
+    var perform: () -> Void
+}
+
 /// A reusable, adapter-free screen. It deliberately accepts an observable
 /// model rather than owning any package files, photo pickers, or provider API.
 struct RoomAIRedesignView<Model: RoomAIRedesignScreenModel>: View {
     @ObservedObject var model: Model
+    /// A host's Close action. Toolbar items only render inside the navigation
+    /// container that owns them, so a host cannot attach Close from outside.
+    var closeAction: RoomAIRedesignCloseAction?
     @State private var selectedTab = 0
     @State private var showingDeleteConfirmation = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -170,6 +178,15 @@ struct RoomAIRedesignView<Model: RoomAIRedesignScreenModel>: View {
             .background(AppPalette.paper.ignoresSafeArea())
             .navigationTitle(selectedTab == 0 ? "AI Room Package" : "Concept Sets")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let closeAction {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close", action: closeAction.perform)
+                            .accessibilityIdentifier("ai.close")
+                            .disabled(closeAction.isDisabled)
+                    }
+                }
+            }
         }
         .confirmationDialog(
             "Delete this Concept Set?",

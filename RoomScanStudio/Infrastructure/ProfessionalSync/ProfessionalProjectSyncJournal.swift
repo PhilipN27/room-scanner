@@ -199,17 +199,8 @@ final class ProfessionalProjectSyncJournal: @unchecked Sendable {
     }
 
     private func requireNoSymlinkInExistingAncestors(of url: URL) throws {
-        let standardized = url.standardizedFileURL
-        guard standardized.path.hasPrefix("/") else {
+        guard RoomStorageAncestorSafety.existingAncestorsAreSafe(of: url, fileManager: fileManager) else {
             throw ProfessionalProjectSyncError.unsafeScratch
-        }
-        var current = URL(fileURLWithPath: "/", isDirectory: true)
-        for component in standardized.pathComponents.dropFirst() {
-            current.appendPathComponent(component, isDirectory: false)
-            if (try? fileManager.destinationOfSymbolicLink(atPath: current.path)) != nil {
-                throw ProfessionalProjectSyncError.unsafeScratch
-            }
-            guard fileManager.fileExists(atPath: current.path) else { return }
         }
     }
 }

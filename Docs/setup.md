@@ -101,6 +101,36 @@ directory siblings older than 60 minutes, excluding their current roots,
 symlinks, regular files and unrelated names. This is test-only cleanup, not
 production data retention.
 
+Kept token roots (`RoomScanStudio-UI-Testing-*-<token>`) therefore accumulate
+in the Simulator's tmp until a later non-kept launch sweeps them after 60
+minutes or the Simulator is erased. That is acceptable because each root holds
+only synthetic fixture data inside the Simulator sandbox, and keeping a root
+alive across relaunches is the point of the relaunch proofs.
+
+`--trash-clock=<epochSeconds>` replaces both the project store clock and the
+Trash reaper clock with that fixed time. It is honored only in isolated
+`--ui-testing --reset-local-store` runs; otherwise both use the system clock.
+Relaunching a kept token with a clock at least 30 days after the trash time
+proves automatic purge without waiting.
+
+`--use-fake-cloud-backup` selects the deterministic in-process backup
+transport only together with `--ui-testing`. With a valid token, its records
+persist in the `RoomScanStudio-UI-Testing-FakeCloudBackup-<token>` sibling so
+a kept relaunch sees earlier backups; without a token they stay in memory.
+`--fake-cloud-delete-fails-once` makes the first fake backup deletion fail
+with a network-unavailable error, under the same two gates. The deletion
+journal of an isolated run lives in the
+`RoomScanStudio-UI-Testing-CloudBackupDeletionJournal-<token>` sibling.
+
+The composed Slice 7 test
+(`RoomSlice7EndToEndUITests.testSlice7PersonalReleaseEndToEnd`) uses one
+token for four launches. Its concept-import step relaunches the kept token
+with `--slice3-ui-fixture`, because production concept import opens the
+system file picker, which XCUITest cannot drive. That fixture screen has no
+picker or network boundary and persists no project companions, so it proves
+the import and Concept Set screens, not a stored Concept Set import. The
+other launches use the normal Home flow.
+
 ## Optional private backup configuration
 
 Cloud backup remains disabled by default. A build operator may supply an exact
@@ -154,3 +184,82 @@ python3 -B Scripts/verify_slice4_hosted.py \
 
 It exited 0/PASS under Node v24.15.0 across 13 steps. Its exact verification,
 SBOM and artifact-manifest hashes are recorded in the Slice 4 evidence ledger.
+
+## 2026-10-01 Slice 7 operator signing channel
+
+The committed project still names no team, signing identity, entitlements,
+container or privacy-policy URL. Each app and test target configuration uses
+`Configs/Operator.xcconfig` as its base configuration. That committed file
+assigns nothing and contains only:
+
+```text
+#include? "Operator.local.xcconfig"
+```
+
+The optional include is silent when the local file is absent, so CI and the
+unsigned commands above keep building with `CODE_SIGNING_ALLOWED=NO`.
+
+To sign on your own Mac:
+
+1. Copy `Configs/Operator.example.xcconfig` to
+   `Configs/Operator.local.xcconfig` and fill in `DEVELOPMENT_TEAM`. Keep
+   `CODE_SIGN_STYLE = Automatic` and `CODE_SIGN_IDENTITY = Apple Development`.
+2. Copy `Configs/RoomScanStudio.example-entitlements.plist` to
+   `Configs/RoomScanStudio.local.entitlements`. It requests CloudKit for
+   `$(ROOMSCANSTUDIO_CLOUD_BACKUP_CONTAINER_IDENTIFIER)` only. The local
+   xcconfig names it through `ROOMSCANSTUDIO_ENTITLEMENTS_app` and sets
+   `CODE_SIGN_ENTITLEMENTS = $(ROOMSCANSTUDIO_ENTITLEMENTS_$(WRAPPER_EXTENSION))`,
+   so only the app target gets entitlements. The test bundles share this base
+   configuration, and a signed device build fails if they request iCloud,
+   because their provisioning profiles cannot include it.
+3. Set `ROOMSCANSTUDIO_CLOUD_BACKUP_CONTAINER_IDENTIFIER` to the iCloud
+   container assigned to the App ID (see [iCloud setup](icloud-setup.md)), or
+   leave it blank to keep Cloud Backup unconfigured.
+4. Leave `ROOMSCANSTUDIO_PRIVACY_POLICY_URL` blank until a published policy
+   exists. The app targets now set this value to `"$(inherited)"` so the
+   local xcconfig is its only source; with no local value it is still blank.
+
+Both local files are git-ignored (`Configs/Operator.local.xcconfig` and
+`Configs/*.local.entitlements`). The scaffold verifier spares only a
+`*.local.entitlements` file directly inside `Configs/` and still rejects any
+other entitlements file and any team, signing or capability setting in the
+project file.
+
+The local xcconfig also applies to the unsigned commands above. With a
+container identifier set and `CODE_SIGNING_ALLOWED=NO`, the app has no iCloud
+entitlement, and the Check account action traps inside
+`CKContainer(identifier:)`. Move `Configs/Operator.local.xcconfig` out of
+`Configs/` while running the unsigned build or the Simulator schemes, so they
+build the same repository configuration as CI. Put it back afterwards
+(2026-10-02 evidence:
+[Slice 7 personal release](evidence/2026-10-01-ai-redesign-slice-7-personal-release.md)).
+
+Other Slice 7 release settings:
+
+- `RoomScanStudio/Resources/Info.plist` declares
+  `ITSAppUsesNonExemptEncryption` as `false`: the app uses only Apple's
+  operating-system encryption (HTTPS and CloudKit).
+- Both app configurations declare
+  `LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks"`.
+  Without it, a signed Debug build crashed at launch on a physical device
+  with `dyld: Library not loaded: @rpath/RoomScanCore_…_PackageProduct.framework`,
+  because the binary had no `@executable_path/Frameworks` rpath for the
+  embedded package framework. Unsigned builds compile either way.
+
+A signed device run uses only this channel; never pass `DEVELOPMENT_TEAM=` on
+the command line. Replace `<device-udid>` with your device identifier:
+
+```sh
+xcodebuild build-for-testing -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio -destination 'id=<device-udid>' \
+  -allowProvisioningUpdates -derivedDataPath <fresh-derived-data>
+xcodebuild test-without-building -project RoomScanStudio.xcodeproj \
+  -scheme RoomScanStudio -destination 'id=<device-udid>' \
+  -derivedDataPath <fresh-derived-data> \
+  -only-testing:RoomScanStudioUITests/<Class>/<test> \
+  -parallel-testing-enabled NO -collect-test-diagnostics never
+```
+
+Uninstall the test build from the device afterward. Device runs use the
+isolated `--use-mock-fixture` and `--use-fake-cloud-backup` launch arguments;
+they are not LiDAR, real-iCloud or TestFlight evidence.

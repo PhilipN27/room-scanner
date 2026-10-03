@@ -1,0 +1,8 @@
+// Base configuration for the RoomScanStudio app and test targets.
+//
+// This committed file assigns nothing. An operator who signs builds on their
+// own Mac copies Operator.example.xcconfig to the git-ignored
+// Operator.local.xcconfig and fills in local values. When that file is absent
+// (CI and every unsigned build), the optional include below is silent and the
+// project builds unsigned with empty container and privacy-policy settings.
+#include? "Operator.local.xcconfig"

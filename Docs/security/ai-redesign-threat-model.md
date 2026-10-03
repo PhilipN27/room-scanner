@@ -305,3 +305,26 @@ seams. This is local synthetic/Simulator/disposable PostgreSQL evidence, not an
 independent audit or live provider assessment. Physical device, hosted browser
 provider, email, AWS/CDN/domain, credential, deployment, load, and release gates
 remain open.
+
+## 2026-10-01 Slice 7 local lifecycle addendum
+
+Slice 7 is a local personal release. Hosted lifecycle threats (hosted purge
+jobs, backup expiry, hosted deletion routes, cancellation grace) are deferred
+with that work and are not addressed here. Evidence below is Core, app XCTest
+and Simulator XCUITest coverage; it is not physical-device or live-iCloud
+evidence. The table covers accidental deletion, stale trash access, deletion
+journal tampering, backup residue, and companion cleanup outside owned roots;
+every evidence cell names an existing Core, app, or UI test.
+
+| Threat | Control | Evidence |
+| --- | --- | --- |
+| Accidental deletion | Move to Trash requires confirmation (`trash.confirm`); rooms stay restorable for 30 days; "Delete now" requires a second confirmation (`delete.confirm` / `delete.confirmWithBackup`) that states whether the iCloud backup is removed or kept. | UI: `testTrashLifecycleConfirmationRestoreArchiveAndDeleteNowPreserveOtherProject`, `testDeleteNowKeepBackupNeverJournalsAndLeavesRecordListed`, `testTrashForcedClockRendersExactlyThirtyDayPurgeDate`; Core: `LocalRoomProjectStoreTrashTests.testRestoreKeepsOriginalSortPositionHeadAndDatesAndRejectsActiveRestore`; app: `RoomTrashLifecycleTests.testAutomaticPurgeRechecksNewTrashDateButManualDeleteNowDoesNotRequireExpiry`. |
+| Stale trash access | Store mutations and outbound inputs on a trashed project throw `projectTrashed`; the trashed room detail shows only Restore and Delete now, with no edit or export actions; the reaper rechecks the trash date from disk before purging. | Core: `LocalRoomProjectStoreTrashTests` (for example `testAppendRevisionRejectsTrash`, `testHeadExportRejectsTrash`, `testBackupArchiveInputRejectsTrash`); app: `RoomTrashLifecycleTests.testPurgeSkipsProjectRestoredAfterExpiryWasComputedAndPreservesAllLocalState`, `RoomTrashLifecycleTests.testPurgeRechecksDiskAfterSuspendingDeletionRequest`. |
+| Deletion journal tampering | Journal root carries an ownership marker; records are canonical JSON re-encoded and compared on read; symlinks and non-regular files are rejected; request identifiers are validated. | Core: `RoomCloudBackupDeletionTests.testValidationRejectsUnsafeOrNonCanonicalRequests`; app: `RoomCloudBackupDeletionAppTests.testJournalWritesOwnershipMarkerAndCanonicalRecordsOutsideProjects`, `RoomCloudBackupDeletionAppTests.testJournalRejectsUnsafeIdentifiersSymlinksAndNonRegularFiles`. |
+| Backup residue | A journal record is removed only when an attempt reports zero remaining records; partial failures keep the record and its last error; pending entries read "Backup still in iCloud"; copy says the app cannot verify physical erasure; no deletion runs at launch or from the reaper. | App: `RoomCloudBackupDeletionAppTests.testPerformRemovesRecordOnlyWhenNothingRemains`, `RoomCloudBackupDeletionAppTests.testInterruptedCompletionFinishesIdempotentlyOnNextAttempt`, `RoomCloudBackupDeletionAppTests.testReaperOnlyJournalsAndNeverCallsTheTransport`; UI: `testDeleteNowWithBackupRemovalGoesPendingOnOfflineFailureAndRetryDeletes`, `testPendingBackupDeletionSurvivesRelaunchWithoutLaunchCallAndRetries`, `testReaperPurgeOnlyJournalsBackupDeletionUntilExplicitRun`, `testBackupRecordDeletionRequiresConfirmationAndReportsHonestOutcome`, `testBackupDeletionControlsStayReachableAtAccessibilityXXXL`. |
+| Companion cleanup outside owned roots | Purge removes companions only through each companion store, whose ownership markers and symlink rejection gate removal; unowned or unsafe files are preserved and reported as a cleanup failure; package symlinks are not followed. | App: `RoomTrashLifecycleTests.testPurgeRemovesEveryRealCompanionAndIndexButPreservesPublishedOperationAuditBytes`, `RoomTrashLifecycleTests.testMixedConceptOwnershipReportsFailureRemovesSafeChildAndNeverResurrectsPackage`, `RoomTrashLifecycleTests.testPackageDeletionFailureReturnsReportWithoutFollowingPackageSymlink`; composed: `RoomSlice7EndToEndUITests.testSlice7PersonalReleaseEndToEnd`. |
+
+Residual risks: physical erasure of CloudKit records cannot be verified by the
+app; a malicious process with the app's sandbox access can still delete local
+files directly; device-only behavior awaits the operator manual checklist in
+`Docs/real-device-test-plan.md`.

@@ -38,6 +38,17 @@ snapshots reject trashed packages. Recovery retains the metadata in an existing
 backup, including its trash state; restore makes the local project eligible
 for outbound work again.
 
+#### 2026-10-01 — `trashedAt` compatibility clarifications
+
+- `trashedAt` is optional. When absent or `null`, the package is not trashed.
+- Older packages and checked-in fixtures, which have no `trashedAt`, decode as
+  not trashed; their fixture IDs, timestamps and bytes are unchanged.
+- Moving to Trash or restoring changes neither `lastRevisedDate`, the package
+  manifest, nor the head revision.
+- Backup archives copy package `metadata.json` verbatim. New backup snapshots
+  reject trashed packages, but recovery keeps whatever `metadata.json` an
+  archive holds, so a recovered backup may carry `trashedAt`.
+
 ## Archive profile
 
 The final file is classic ZIP32 with STORE (no compression). Archive entry

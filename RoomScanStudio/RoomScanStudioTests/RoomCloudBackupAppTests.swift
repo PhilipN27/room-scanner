@@ -407,7 +407,7 @@ final class RoomCloudBackupAppTests: XCTestCase {
 }
 
 @MainActor
-private final class FakeCloudBackupProvider: RoomCloudBackupProviding {
+final class FakeCloudBackupProvider: RoomCloudBackupProviding {
     var accountStatus: RoomCloudBackupAccountStatus = .available
     var listResult: RoomCloudBackupListResult = .backups(RoomCloudBackupListedRecords(records: []))
     var listErrors: [RoomCloudBackupTransportError] = []
@@ -426,7 +426,68 @@ private final class FakeCloudBackupProvider: RoomCloudBackupProviding {
     private(set) var copyRecoveryRequests = 0
     private(set) var cleanupRetries = 0
 
-    var callCount: Int { accountChecks.count + listRequests.count + backupRequests.count + zoneCreates }
+    var deleteErrors: [RoomCloudBackupTransportError] = []
+    var deleteOutcomes: [RoomCloudBackupDeletionOutcome] = []
+    var requestErrors: [Error] = []
+    var pending: [String: RoomCloudBackupDeletionRequest] = [:]
+    var now = Date(timeIntervalSince1970: 1_790_000_000)
+    private(set) var deleteRequests: [String] = []
+    private(set) var performRequests: [String] = []
+    private(set) var recordDeleteRequests: [String] = []
+    private(set) var recordedOutcomes: [RoomCloudBackupDeletionOutcome] = []
+    private(set) var pendingReads = 0
+
+    var callCount: Int {
+        accountChecks.count + listRequests.count + backupRequests.count + zoneCreates
+            + performRequests.count + recordDeleteRequests.count
+    }
+
+    func requestBackupDeletion(projectID: String, displayName: String, containerIdentifier: String) throws {
+        if !requestErrors.isEmpty { throw requestErrors.removeFirst() }
+        deleteRequests.append(projectID)
+        if pending[projectID] == nil {
+            pending[projectID] = RoomCloudBackupDeletionRequest(
+                projectID: projectID,
+                containerIdentifier: containerIdentifier,
+                displayName: displayName,
+                requestedAt: now
+            )
+        }
+    }
+
+    func performBackupDeletion(projectID: String) async throws -> RoomCloudBackupDeletionOutcome {
+        performRequests.append(projectID)
+        guard let request = pending[projectID] else {
+            throw RoomCloudBackupDeletionServiceError.requestNotFound(projectID)
+        }
+        if !deleteErrors.isEmpty {
+            let error = deleteErrors.removeFirst()
+            pending[projectID] = request.recordingFailure(at: now, message: error.deletionFailureDescription)
+            throw error
+        }
+        let outcome = deleteOutcomes.isEmpty ? RoomCloudBackupDeletionOutcome() : deleteOutcomes.removeFirst()
+        recordedOutcomes.append(outcome)
+        pending[projectID] = outcome.isComplete ? nil : request.recordingAttempt(at: now, outcome: outcome)
+        return outcome
+    }
+
+    func pendingBackupDeletions() throws -> [RoomCloudBackupDeletionRequest] {
+        pendingReads += 1
+        return pending.values.sorted { ($0.requestedAt, $0.projectID) < ($1.requestedAt, $1.projectID) }
+    }
+
+    func deleteBackupRecord(
+        _ record: RoomCloudBackupRemoteRecord,
+        containerIdentifier: String
+    ) async throws -> RoomCloudBackupDeletionOutcome {
+        recordDeleteRequests.append(record.descriptor.recordName)
+        if !deleteErrors.isEmpty { throw deleteErrors.removeFirst() }
+        let outcome = deleteOutcomes.isEmpty
+            ? RoomCloudBackupDeletionOutcome(deletedRecordNames: [record.descriptor.recordName])
+            : deleteOutcomes.removeFirst()
+        recordedOutcomes.append(outcome)
+        return outcome
+    }
 
     func checkAccount(containerIdentifier: String) async throws -> RoomCloudBackupAccountStatus {
         accountChecks.append(containerIdentifier)

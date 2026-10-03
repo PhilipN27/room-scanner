@@ -15,3 +15,5 @@ xcuserdata/
 *.mode2v3
 *.xccheckout
 *.xcscmblueprint
+Configs/Operator.local.xcconfig
+Configs/*.local.entitlements

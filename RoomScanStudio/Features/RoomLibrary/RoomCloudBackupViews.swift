@@ -10,6 +10,7 @@ struct RoomCloudBackupSettingsView: View {
     let expectedHeadRevisionID: String?
     let privacyPolicyURL: URL?
     @Environment(\.dismiss) private var dismiss
+    @State private var recordPendingDeletion: RoomCloudBackupRemoteRecord?
 
     init(
         coordinator: RoomCloudBackupCoordinator,
@@ -41,6 +42,8 @@ struct RoomCloudBackupSettingsView: View {
                     privacyPolicy
                     configuration
                     explicitOperations
+                    deletionOutcome
+                    pendingDeletions
                     backupRecords
                     if let result = coordinator.lastRecoveryResult {
                         Label(recoveryOutcomeCopy(result), systemImage: "checkmark.seal")
@@ -80,6 +83,120 @@ struct RoomCloudBackupSettingsView: View {
         }
         .accessibilityIdentifier("cloudBackup.settings")
         .interactiveDismissDisabled(preventsDismissal)
+        // Local journal read only; presenting this sheet never contacts iCloud.
+        .onAppear { coordinator.refreshPendingDeletions() }
+        .alert(
+            "Delete this iCloud backup?",
+            isPresented: Binding(
+                get: { recordPendingDeletion != nil },
+                set: { if !$0 { recordPendingDeletion = nil } }
+            ),
+            presenting: recordPendingDeletion
+        ) { record in
+            Button("Delete backup", role: .destructive) {
+                recordPendingDeletion = nil
+                Task { await coordinator.deleteBackupRecord(record) }
+            }
+            .accessibilityIdentifier("cloudBackup.delete.confirm")
+            Button("Cancel", role: .cancel) { recordPendingDeletion = nil }
+        } message: { record in
+            Text("Only this backup of \(record.descriptor.displayName) is deleted. Local room packages are not changed. \(RoomCloudBackupCoordinator.deletionDisclosure)")
+        }
+    }
+
+    @ViewBuilder
+    private var deletionOutcome: some View {
+        if let message = coordinator.deletionOutcomeMessage {
+            Label(message, systemImage: "trash.circle")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.blueprint)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("cloudBackup.deletionOutcome")
+        }
+    }
+
+    @ViewBuilder
+    private var pendingDeletions: some View {
+        if let message = coordinator.pendingDeletionsErrorMessage {
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(AppTypography.measurement)
+                .foregroundStyle(AppPalette.amber)
+                .accessibilityIdentifier("cloudBackup.pendingDeletionsError")
+        }
+        if !coordinator.pendingDeletions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("PENDING BACKUP DELETIONS")
+                    .font(AppTypography.section)
+                Text("These rooms were deleted on this device, but their backups are still in iCloud until a deletion succeeds. \(RoomCloudBackupCoordinator.deletionDisclosure)")
+                    .font(AppTypography.measurement)
+                    .foregroundStyle(AppPalette.mutedInk)
+                ForEach(coordinator.pendingDeletions) { request in
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(request.displayName)
+                                .font(AppTypography.bodyEmphasized)
+                            Text("Requested \(Self.requestDate(request.requestedAt))")
+                                .font(AppTypography.measurement)
+                                .foregroundStyle(AppPalette.mutedInk)
+                            Text("Attempts: \(request.attempts)")
+                                .font(AppTypography.measurement)
+                                .foregroundStyle(AppPalette.mutedInk)
+                            if let lastError = request.lastErrorMessage {
+                                Text("Last error: \(lastError)")
+                                    .font(AppTypography.measurement)
+                                    .foregroundStyle(AppPalette.amber)
+                            }
+                            Text("Backup still in iCloud")
+                                .font(AppTypography.measurement)
+                                .foregroundStyle(AppPalette.amber)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Self.pendingLabel(request))
+                        .accessibilityIdentifier("cloudBackup.deletionPending")
+                        Button {
+                            Task { await coordinator.retryPendingDeletion(projectID: request.projectID) }
+                        } label: {
+                            Text("Retry")
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Retry deleting the iCloud backup of \(request.displayName)")
+                        .accessibilityIdentifier("cloudBackup.retryDeletion")
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                Button(role: .destructive) {
+                    Task { await coordinator.runPendingDeletions() }
+                } label: {
+                    Text("Delete pending backups")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("cloudBackup.runPendingDeletions")
+            }
+            .disabled(!canStartDeletion)
+        }
+    }
+
+    private var canStartDeletion: Bool {
+        coordinator.state == .idle || coordinator.state == .failed
+    }
+
+    static func requestDate(_ date: Date) -> String {
+        date.formatted(.dateTime.year().month().day().hour().minute())
+    }
+
+    static func pendingLabel(_ request: RoomCloudBackupDeletionRequest) -> String {
+        var parts = [
+            request.displayName,
+            "Requested \(requestDate(request.requestedAt))",
+            "Attempts: \(request.attempts)",
+        ]
+        if let lastError = request.lastErrorMessage { parts.append("Last error: \(lastError)") }
+        parts.append("Backup still in iCloud until deletion succeeds")
+        return parts.joined(separator: ". ")
     }
 
     @ViewBuilder
@@ -270,7 +387,7 @@ struct RoomCloudBackupSettingsView: View {
                 Text("PRIVATE BACKUP RECORDS")
                     .font(AppTypography.section)
                 ForEach(coordinator.backups) { record in
-                    HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(record.descriptor.displayName)
                                 .font(AppTypography.bodyEmphasized)
@@ -281,13 +398,25 @@ struct RoomCloudBackupSettingsView: View {
                                 .font(AppTypography.measurement)
                                 .foregroundStyle(AppPalette.mutedInk)
                         }
-                        Spacer()
-                        Button("Prepare recovery") {
-                            Task { await coordinator.prepareRecovery(record: record) }
+                        AdaptiveActionRow(alignment: .leading, spacing: 10) {
+                            Button("Prepare recovery") {
+                                Task { await coordinator.prepareRecovery(record: record) }
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("cloudBackup.prepare")
+                            Button(role: .destructive) {
+                                recordPendingDeletion = record
+                            } label: {
+                                Text("Delete backup")
+                                    .frame(minHeight: 44)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!canStartDeletion)
+                            .accessibilityLabel("Delete backup of \(record.descriptor.displayName)")
+                            .accessibilityIdentifier("cloudBackup.delete")
                         }
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("cloudBackup.prepare")
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
                     .background(AppPalette.raisedSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
@@ -313,6 +442,7 @@ struct RoomCloudBackupSettingsView: View {
             || coordinator.state == .backingUp
             || coordinator.state == .preparingRecovery
             || coordinator.state == .recovering
+            || coordinator.state == .deletingBackup
             || coordinator.state == .cleanupFailed
     }
 

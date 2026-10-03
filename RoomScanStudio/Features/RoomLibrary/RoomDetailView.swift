@@ -1305,17 +1305,19 @@ struct RoomDetailView: View {
         ) {
             if canRemoveBackup {
                 Button("Delete now and remove iCloud backup", role: .destructive) {
-                    Task { await deletePackage() }
+                    Task { await deletePackage(backup: .requestDeletion) }
                 }
                 .accessibilityIdentifier("delete.confirmWithBackup")
             }
             Button(canRemoveBackup ? "Delete now, keep iCloud backup" : "Delete now", role: .destructive) {
-                Task { await deletePackage() }
+                Task { await deletePackage(backup: .keep) }
             }
             .accessibilityIdentifier("delete.confirm")
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deletes the local package, its revision history and project companions before the 30 days in Trash end. Any iCloud backup is separate.")
+            Text(canRemoveBackup
+                ? "This deletes the local package, its revision history and project companions before the 30 days in Trash end.\n\nRemove iCloud backup: Deletes the backup records from your private iCloud database. Apple completes erasure on its servers later; this app cannot verify physical erasure."
+                : "This deletes the local package, its revision history and project companions before the 30 days in Trash end. Any iCloud backup is separate.")
         }
         .alert(
             "Move this room to Trash?",
@@ -1331,14 +1333,12 @@ struct RoomDetailView: View {
         }
     }
 
+    /// Offered only when backup is enabled with a resolved container; the
+    /// purge then journals a request before the package is removed.
     private var canRemoveBackup: Bool {
         guard case .ready = cloudBackupCoordinator.availability else { return false }
-        return backupDeletionAvailable
+        return true
     }
-
-    // Milestone 2 wires the durable deletion journal and explicit cloud action.
-    // Never offer a backup-deletion choice before that operation is available.
-    private var backupDeletionAvailable: Bool { false }
 
     @ViewBuilder
     private func detailContent(_ package: RoomProjectPackage) -> some View {
@@ -2102,15 +2102,22 @@ struct RoomDetailView: View {
         }
     }
 
-    private func deletePackage() async {
+    private func deletePackage(backup: RoomProjectBackupDisposition) async {
         guard !changingTrashState else { return }
         changingTrashState = true
-        defer { changingTrashState = false }
         do {
-            try await controller.deleteNow(projectID: projectID)
+            try await controller.deleteNow(projectID: projectID, backup: backup)
+            changingTrashState = false
             dismiss()
         } catch {
+            changingTrashState = false
             errorMessage = "The room package could not be deleted."
+            return
+        }
+        if backup == .requestDeletion {
+            // Explicit user action. The request was journaled before the
+            // package was removed, so a failure here stays pending.
+            await cloudBackupCoordinator.attemptRequestedDeletion(projectID: projectID)
         }
     }
 

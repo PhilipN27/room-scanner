@@ -54,7 +54,9 @@ final class RoomTrashReaper: RoomTrashReaping {
             let expiredIDs = retentionPolicy.expiredProjectIDs(summaries: listing.summaries, now: clock.now())
             var reports: [RoomProjectPurgeReport] = []
             for projectID in expiredIDs {
-                reports.append(await purgeCoordinator.purge(projectID: projectID, mode: .automatic))
+                reports.append(await purgeCoordinator.purge(
+                    projectID: projectID, mode: .automatic, backup: .requestDeletion
+                ))
             }
             return .init(purgeReports: reports)
         } catch {

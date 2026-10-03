@@ -80,6 +80,32 @@ final class AppEnvironment: ObservableObject {
         )
         let syncJournalRoot = localExtensionRoots.redesign.deletingLastPathComponent()
             .appendingPathComponent("ProfessionalSyncJournal", isDirectory: true)
+        let usesFakeCloudBackup = CloudBackupFakeTransportFactory.isFakeRun(arguments: arguments)
+        let cloudContainer = CloudBackupContainerArgument.resolve(
+            arguments: arguments,
+            buildContainerIdentifier: Bundle.main.object(
+                forInfoDictionaryKey: "RoomScanStudioCloudBackupContainerIdentifier"
+            ) as? String
+        )
+        let explicitCloudEnabled: Bool? = usesFakeCloudBackup || arguments.contains("--cloud-backup-enabled")
+            ? true
+            : (arguments.contains("--cloud-backup-disabled") ? false : nil)
+        let cloudPreferences = RoomCloudBackupPreferences(
+            isEnabled: explicitCloudEnabled,
+            containerIdentifier: cloudContainer,
+            // Isolated UI runs must not inherit or persist a prior device
+            // consent value. Production uses the local UserDefaults default.
+            defaults: arguments.contains("--ui-testing") ? nil : .standard
+        )
+        // Journals only. The provider is bound after the library controller
+        // exists; reaper and Delete now never call CloudKit through this hook.
+        let backupDeletionRequester = RoomCloudBackupPurgeDeletionRequester(
+            preferences: cloudPreferences,
+            displayName: { projectID in
+                let name = (try? await store.load(projectID: projectID))?.metadata.customName ?? ""
+                return name.isEmpty ? projectID : name
+            }
+        )
         let purgeCoordinator = RoomProjectPurgeCoordinator(
             store: store,
             redesignStore: redesignStore,
@@ -90,7 +116,10 @@ final class AppEnvironment: ObservableObject {
             propertyStore: propertyStore,
             syncJournalRootURL: syncJournalRoot,
             modelContainer: indexBootstrap.container,
-            clock: resolvedTrashClock
+            clock: resolvedTrashClock,
+            deletionRequest: { projectID in
+                try await backupDeletionRequester.requestDeletion(projectID: projectID)
+            }
         )
         trashReaper = RoomTrashReaper(
             store: store, purgeCoordinator: purgeCoordinator, clock: resolvedTrashClock
@@ -267,27 +296,10 @@ final class AppEnvironment: ObservableObject {
                     .appendingPathComponent("PublicationOperationJournal", isDirectory: true)
             )
         )
-        let usesFakeCloudBackup = arguments.contains("--use-fake-cloud-backup")
         privacyPolicyURL = PrivacyPolicyURLResolver.resolve(
             rawValue: Bundle.main.object(
                 forInfoDictionaryKey: "RoomScanStudioPrivacyPolicyURL"
             ) as? String
-        )
-        let cloudContainer = CloudBackupContainerArgument.resolve(
-            arguments: arguments,
-            buildContainerIdentifier: Bundle.main.object(
-                forInfoDictionaryKey: "RoomScanStudioCloudBackupContainerIdentifier"
-            ) as? String
-        )
-        let explicitCloudEnabled: Bool? = usesFakeCloudBackup || arguments.contains("--cloud-backup-enabled")
-            ? true
-            : (arguments.contains("--cloud-backup-disabled") ? false : nil)
-        let cloudPreferences = RoomCloudBackupPreferences(
-            isEnabled: explicitCloudEnabled,
-            containerIdentifier: cloudContainer,
-            // Isolated UI runs must not inherit or persist a prior device
-            // consent value. Production uses the local UserDefaults default.
-            defaults: arguments.contains("--ui-testing") ? nil : .standard
         )
         let cloudWorkspaceFactory = RoomCloudBackupWorkspaceFactory(
             rootURL: RoomCloudBackupScratchRootResolver.resolve(
@@ -304,19 +316,25 @@ final class AppEnvironment: ObservableObject {
         } catch {
             cloudRecoveryMessage = "Cloud backup scratch recovery needs attention. No CloudKit call was made."
         }
-        let cloudTransport: any RoomCloudBackupTransport = usesFakeCloudBackup
-            ? DeterministicCloudBackupTransport(
-                accountStatus: arguments.contains("--fake-cloud-account-unavailable")
-                    ? .noAccount
-                    : .available
-            )
-            : AppleCloudBackupTransport()
-        cloudBackupCoordinator = RoomCloudBackupCoordinator(
-            provider: RoomCloudBackupService(
-                controller: libraryController,
-                workspaceFactory: cloudWorkspaceFactory,
-                transport: cloudTransport
+        let cloudTransport: any RoomCloudBackupTransport = CloudBackupFakeTransportFactory.make(
+            arguments: arguments, fileManager: .default
+        ) ?? AppleCloudBackupTransport()
+        // Constructing the journal touches no disk; it is created on the first
+        // durable deletion request and only read for pending UI state.
+        let cloudBackupService = RoomCloudBackupService(
+            controller: libraryController,
+            workspaceFactory: cloudWorkspaceFactory,
+            transport: cloudTransport,
+            deletionJournal: RoomCloudBackupDeletionJournal(
+                rootURL: RoomCloudBackupDeletionJournalRootResolver.resolve(
+                    arguments: arguments, fileManager: .default
+                )
             ),
+            clock: resolvedTrashClock
+        )
+        backupDeletionRequester.provider = cloudBackupService
+        cloudBackupCoordinator = RoomCloudBackupCoordinator(
+            provider: cloudBackupService,
             preferences: cloudPreferences
         )
         let bootstrapMessages = [
@@ -340,9 +358,12 @@ final class AppEnvironment: ObservableObject {
 
     @discardableResult
     func purgeExpiredTrashAndRefreshLibrary() async -> RoomTrashReaperReport {
-        await Self.purgeExpiredTrashAndRefreshLibrary(
+        let report = await Self.purgeExpiredTrashAndRefreshLibrary(
             reaper: trashReaper, libraryController: libraryController
         )
+        // Journal read only: surface any request the sweep recorded.
+        cloudBackupCoordinator.refreshPendingDeletions()
+        return report
     }
 
     /// Shared scene-activation orchestration; the injected seam proves that
@@ -404,6 +425,29 @@ enum TrashClockArgument {
     }
 }
 
+/// The deterministic fake and its seams exist only for isolated UI-test
+/// launches; any missing gate leaves the production CloudKit composition.
+enum CloudBackupFakeTransportFactory {
+    static func isFakeRun(arguments: [String]) -> Bool {
+        arguments.contains("--ui-testing") && arguments.contains("--use-fake-cloud-backup")
+    }
+
+    @MainActor
+    static func make(arguments: [String], fileManager: FileManager) -> DeterministicCloudBackupTransport? {
+        guard isFakeRun(arguments: arguments) else { return nil }
+        let persistenceRoot = IsolatedRootSuffix.token(arguments: arguments) == nil
+            ? nil
+            : IsolatedTestRoots.resolve(.fakeCloudBackup, arguments: arguments, fileManager: fileManager)
+        return DeterministicCloudBackupTransport(
+            accountStatus: arguments.contains("--fake-cloud-account-unavailable") ? .noAccount : .available,
+            deleteErrors: arguments.contains("--fake-cloud-delete-fails-once")
+                ? [.networkUnavailable(retryAfterSeconds: nil)]
+                : [],
+            persistenceRootURL: persistenceRoot
+        )
+    }
+}
+
 enum CloudBackupContainerArgument {
     static let deterministicFakeContainerIdentifier = "iCloud.org.roomscanstudio.ui-test"
 
@@ -421,7 +465,7 @@ enum CloudBackupContainerArgument {
         if let resolved = normalized(buildContainerIdentifier) {
             return resolved
         }
-        if arguments.contains("--use-fake-cloud-backup") {
+        if CloudBackupFakeTransportFactory.isFakeRun(arguments: arguments) {
             return deterministicFakeContainerIdentifier
         }
         return ""

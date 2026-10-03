@@ -297,7 +297,7 @@ final class RoomLibraryController: ObservableObject {
     }
 
     func delete(projectID: String) async throws {
-        _ = try await deleteNow(projectID: projectID)
+        _ = try await deleteNow(projectID: projectID, backup: .keep)
     }
 
     func moveToTrash(projectID: String) async throws {
@@ -311,8 +311,11 @@ final class RoomLibraryController: ObservableObject {
     }
 
     @discardableResult
-    func deleteNow(projectID: String) async throws -> RoomProjectPurgeReport {
-        let report = await purgeCoordinator.purge(projectID: projectID, mode: .manual)
+    func deleteNow(
+        projectID: String,
+        backup: RoomProjectBackupDisposition
+    ) async throws -> RoomProjectPurgeReport {
+        let report = await purgeCoordinator.purge(projectID: projectID, mode: .manual, backup: backup)
         recordPurgeReports([report])
         await refreshLibrary()
         if case .failed(let message) = report.package {

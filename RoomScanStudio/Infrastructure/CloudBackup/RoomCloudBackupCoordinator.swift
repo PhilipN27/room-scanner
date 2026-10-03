@@ -9,8 +9,43 @@ enum RoomCloudBackupCoordinatorState: Equatable {
     case backingUp
     case preparingRecovery
     case recovering
+    case deletingBackup
     case failed
     case cleanupFailed
+}
+
+/// The purge coordinator is composed before the backup service, so its
+/// pre-delete hook binds the provider late. Journals only; never a network call.
+@MainActor
+final class RoomCloudBackupPurgeDeletionRequester {
+    private let preferences: RoomCloudBackupPreferences
+    private let displayName: @MainActor (String) async -> String
+    var provider: (any RoomCloudBackupProviding)?
+
+    init(
+        preferences: RoomCloudBackupPreferences,
+        provider: (any RoomCloudBackupProviding)? = nil,
+        displayName: @escaping @MainActor (String) async -> String = { $0 }
+    ) {
+        self.preferences = preferences
+        self.provider = provider
+        self.displayName = displayName
+    }
+
+    /// Disabled or unconfigured backup journals nothing and lets the local
+    /// purge proceed. Otherwise a failed journal write must stop the purge.
+    func requestDeletion(projectID: String) async throws {
+        guard preferences.isEnabled,
+              let containerIdentifier = preferences.resolvedContainerIdentifier()
+        else { return }
+        guard let provider else { throw RoomCloudBackupDeletionServiceError.journalUnavailable }
+        let name = await displayName(projectID)
+        try provider.requestBackupDeletion(
+            projectID: projectID,
+            displayName: name,
+            containerIdentifier: containerIdentifier
+        )
+    }
 }
 
 /// Serializes explicit user operations. It has no launch work and never calls
@@ -26,6 +61,11 @@ final class RoomCloudBackupCoordinator: ObservableObject {
     @Published private(set) var preparedRecovery: RoomCloudBackupPreparedRecovery?
     @Published private(set) var lastRecoveryResult: RoomBackupRecoveryResult?
     @Published private(set) var errorMessage: String?
+    @Published private(set) var pendingDeletions: [RoomCloudBackupDeletionRequest] = []
+    @Published private(set) var deletionOutcomeMessage: String?
+    @Published private(set) var pendingDeletionsErrorMessage: String?
+
+    static let deletionDisclosure = "Deletes the backup records from your private iCloud database. Apple completes erasure on its servers later; this app cannot verify physical erasure."
 
     let preferences: RoomCloudBackupPreferences
     private let provider: any RoomCloudBackupProviding
@@ -46,6 +86,148 @@ final class RoomCloudBackupCoordinator: ObservableObject {
         self.provider = provider
         self.preferences = preferences ?? RoomCloudBackupPreferences()
         self.sleeper = sleeper ?? SystemRoomCloudBackupSleeper()
+        refreshPendingDeletions()
+    }
+
+    /// Reads only the local journal, so launch and sheet presentation can
+    /// show pending deletions without any CloudKit call.
+    func refreshPendingDeletions() {
+        do {
+            pendingDeletions = try provider.pendingBackupDeletions()
+            pendingDeletionsErrorMessage = nil
+        } catch {
+            pendingDeletionsErrorMessage = "Pending backup deletions could not be read. No iCloud call was made."
+        }
+    }
+
+    /// Journals a request for `projectID`, then deletes its backup records
+    /// using the shared retry policy.
+    func deleteBackups(projectID: String, displayName: String? = nil) async {
+        guard let context = beginDeletion() else { return }
+        defer { finishIfCurrent(.deletingBackup) }
+        deletionOutcomeMessage = nil
+        do {
+            try provider.requestBackupDeletion(
+                projectID: projectID,
+                displayName: displayName ?? projectID,
+                containerIdentifier: context.containerIdentifier
+            )
+            refreshPendingDeletions()
+            let outcome = try await retrying {
+                try await self.provider.performBackupDeletion(projectID: projectID)
+            }
+            finishDeletion(outcomes: [outcome])
+        } catch {
+            refreshPendingDeletions()
+            fail(error)
+        }
+    }
+
+    /// The local package is already gone and the request is journaled before
+    /// this runs, so the immediate follow-up is one attempt. A failure stays
+    /// visible as a pending deletion with explicit Retry and Run actions.
+    func attemptRequestedDeletion(projectID: String) async {
+        refreshPendingDeletions()
+        guard pendingDeletions.contains(where: { $0.projectID == projectID }),
+              let _ = beginDeletion()
+        else { return }
+        defer { finishIfCurrent(.deletingBackup) }
+        deletionOutcomeMessage = nil
+        do {
+            let outcome = try await provider.performBackupDeletion(projectID: projectID)
+            finishDeletion(outcomes: [outcome])
+        } catch {
+            refreshPendingDeletions()
+            fail(error)
+        }
+    }
+
+    func retryPendingDeletion(projectID: String) async {
+        guard let _ = beginDeletion() else { return }
+        defer { finishIfCurrent(.deletingBackup) }
+        deletionOutcomeMessage = nil
+        do {
+            let outcome = try await retrying {
+                try await self.provider.performBackupDeletion(projectID: projectID)
+            }
+            finishDeletion(outcomes: [outcome])
+        } catch {
+            refreshPendingDeletions()
+            fail(error)
+        }
+    }
+
+    func runPendingDeletions() async {
+        refreshPendingDeletions()
+        let projectIDs = pendingDeletions.map(\.projectID)
+        guard !projectIDs.isEmpty, let _ = beginDeletion() else { return }
+        defer { finishIfCurrent(.deletingBackup) }
+        deletionOutcomeMessage = nil
+        var outcomes: [RoomCloudBackupDeletionOutcome] = []
+        var firstError: Error?
+        for projectID in projectIDs {
+            do {
+                outcomes.append(try await retrying {
+                    try await self.provider.performBackupDeletion(projectID: projectID)
+                })
+            } catch is CancellationError {
+                firstError = firstError ?? CancellationError()
+                break
+            } catch {
+                // One project's failure does not block the others; each
+                // request keeps its own attempts and last error.
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError {
+            refreshPendingDeletions()
+            if !outcomes.isEmpty { deletionOutcomeMessage = Self.outcomeMessage(outcomes) }
+            fail(firstError)
+        } else {
+            finishDeletion(outcomes: outcomes)
+        }
+    }
+
+    /// Deletes exactly this listed record; other records stay.
+    func deleteBackupRecord(_ record: RoomCloudBackupRemoteRecord) async {
+        guard let context = beginDeletion() else { return }
+        defer { finishIfCurrent(.deletingBackup) }
+        deletionOutcomeMessage = nil
+        do {
+            let outcome = try await retrying {
+                try await self.provider.deleteBackupRecord(record, containerIdentifier: context.containerIdentifier)
+            }
+            guard isCurrentConsent(context) else { return }
+            let deleted = Set(outcome.deletedRecordNames)
+            backups.removeAll { deleted.contains($0.descriptor.recordName) }
+            refreshListStatusMessage()
+            deletionOutcomeMessage = Self.outcomeMessage([outcome])
+            errorMessage = nil
+        } catch {
+            fail(error)
+        }
+    }
+
+    private func finishDeletion(outcomes: [RoomCloudBackupDeletionOutcome]) {
+        refreshPendingDeletions()
+        let deleted = Set(outcomes.flatMap(\.deletedRecordNames))
+        if !deleted.isEmpty {
+            backups.removeAll { deleted.contains($0.descriptor.recordName) }
+            if listStatusMessage != nil { refreshListStatusMessage() }
+        }
+        deletionOutcomeMessage = Self.outcomeMessage(outcomes)
+        errorMessage = nil
+    }
+
+    static func outcomeMessage(_ outcomes: [RoomCloudBackupDeletionOutcome]) -> String {
+        let deleted = Set(outcomes.flatMap(\.deletedRecordNames)).count
+        let remaining = Set(outcomes.flatMap(\.remainingRecordNames)).count
+        let noun = deleted == 1 ? "record" : "records"
+        var message = "Deleted \(deleted) backup \(noun) from your private iCloud database."
+        if remaining > 0 {
+            message += " \(remaining) \(remaining == 1 ? "record is" : "records are") still in iCloud."
+        }
+        return message + " Apple completes erasure on its servers later; this app cannot verify physical erasure."
     }
 
     var availability: RoomCloudBackupAvailability {
@@ -67,6 +249,7 @@ final class RoomCloudBackupCoordinator: ObservableObject {
             skippedMalformedBackupRecordCount = 0
             listStatusMessage = nil
             errorMessage = nil
+            deletionOutcomeMessage = nil
         }
     }
 
@@ -243,6 +426,16 @@ final class RoomCloudBackupCoordinator: ObservableObject {
         return OperationContext(containerIdentifier: identifier, consentGeneration: consentGeneration)
     }
 
+    /// A deletion is an explicit user action that supersedes an earlier
+    /// acknowledged-or-not failure; it never starts while other work runs.
+    private func beginDeletion() -> OperationContext? {
+        if state == .failed {
+            state = .idle
+            errorMessage = nil
+        }
+        return begin(.deletingBackup)
+    }
+
     private func finishIfCurrent(_ active: RoomCloudBackupCoordinatorState) {
         if state == active { state = .idle }
     }
@@ -287,8 +480,21 @@ final class RoomCloudBackupCoordinator: ObservableObject {
             state = .cleanupFailed
             return
         }
-        errorMessage = message(for: error)
+        errorMessage = state == .deletingBackup ? deletionMessage(for: error) : message(for: error)
         state = .failed
+    }
+
+    private func deletionMessage(for error: Error) -> String {
+        switch error {
+        case RoomCloudBackupTransportError.accountUnavailable:
+            return "The iCloud account is unavailable. Backup records not reported deleted are still in iCloud."
+        case let transportError as RoomCloudBackupTransportError where transportError.isRetryable:
+            return "iCloud could not be reached. Backup records not reported deleted are still in iCloud."
+        case is RoomCloudBackupDeletionJournalError, RoomCloudBackupDeletionServiceError.journalUnavailable:
+            return "The local deletion request could not be recorded or updated. No backup record was reported deleted."
+        default:
+            return "The iCloud backup deletion did not finish. Any records not reported deleted are still in iCloud."
+        }
     }
 
     private func isCurrentConsent(_ context: OperationContext) -> Bool {
